@@ -70,16 +70,29 @@ pins and hashes `setup.sh`; remote `setup.sh` pins one versioned bundle and
 checks the size and SHA-256 of `secure-coding-baseline.md`,
 `scripts/install.py`, and `scripts/show_baseline_version.py` before executing
 anything from it. Remote setup must install that checked bundle without
-substituting content fetched from `main` or a release at runtime. An installed
-copy may report a newer release, but verified updates run through the current
-Quick start rather than applying network-fetched instructions itself.
+substituting content fetched from `main` or a release at runtime.
 
-Whenever any of the three bundled files changes, create a new bundle tag; never
-move or reuse a published bundle tag. Recompute every bundle hash in `setup.sh`
-from the exact commit the tag names, retain download size limits, and update the
-tests that identify the bundle. The release sequence is: commit and check the
-bundle files, create the bundle tag on that commit, then change `setup.sh` to
-the new tag and hashes. A documentation-only commit does not need a new bundle.
+An installed copy updates itself only through the signed bundle manifest.
+`bundle.json` pins the size and SHA-256 of the three bundled files;
+`bundle.json.sig` is an OpenSSH signature over it by a release key whose
+public half is listed in `ALLOWED_SIGNERS` in `scripts/install.py`.
+`install.py --update` fetches both from the latest release tag, verifies the
+signature with `ssh-keygen`, requires the manifest version to match the tag and
+to exceed the installed version, checks every file against the manifest, and
+only then runs the guided setup of the staged bundle. It never installs a file
+the manifest does not pin, and a refusal points at the current Quick start.
+The private key never enters the repository, CI, or an assistant's context.
+
+Whenever any of the three bundled files changes, run
+`make sign-bundle KEY=<release key>` so `bundle.json` and `bundle.json.sig`
+describe the committed files, then create a new bundle tag; never move or reuse
+a published bundle tag. Recompute every bundle hash in `setup.sh` from the exact
+commit the tag names, retain download size limits, and update the tests that
+identify the bundle. The release sequence is: sign, commit and check the bundle
+files with the manifest and signature, create the bundle tag on that commit,
+then change `setup.sh` to the new tag and hashes. A documentation-only commit
+does not need a new bundle, and the release tag may point at one as long as its
+tree carries the signed manifest for the bundled files it contains.
 
 Every published baseline release must update the complete Quick start command
 block in `README.md`, even though its command structure stays the same. It must

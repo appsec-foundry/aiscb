@@ -9,7 +9,9 @@ import os
 import re
 import secrets
 import shlex
+import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -48,6 +50,7 @@ KNOWN_HOOK_DIGESTS = (
     "9ab4a0107dec2cac076c75a0eedb0c768a18846b60a33851550544a656b249ba",
     "768746c35676ebf701e7c43fce26ff000dd1f4754e7e060f6f280510e1cd0033",
     "f0475757fec0495b0558f0988751338169d1047e7ddbc27d59678d9c0f1ff91e",
+    "3b2d262ebb99d27b6cf02da2b31ca2a41b24d5ac744d5cd79755d06bebfd688c",
 )
 COPILOT_VERSION_HOOK_NAME = "aiscb-baseline-version.json"
 PREVIOUS_COPILOT_VERSION_HOOK_NAME = "aisec-baseline-version.json"
@@ -63,9 +66,7 @@ GITHUB_REPOSITORY = "appsec-foundry/aiscb"
 LATEST_RELEASE_URL = (
     f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/latest"
 )
-CONTENTS_URL = (
-    f"https://api.github.com/repos/{GITHUB_REPOSITORY}/contents/{BASELINE}"
-)
+CONTENTS_ROOT_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/contents"
 API_VERSION = "2026-03-10"
 ONLINE_TIMEOUT = 4
 MAX_BASELINE_BYTES = 256 * 1024
@@ -78,6 +79,29 @@ MAX_PROJECTS = 200
 MAX_COLUMN = 40
 REGISTRY_SCHEMA = 1
 UPDATE_CHECK_KEY = "update_check"
+QUICK_START_URL = f"https://github.com/{GITHUB_REPOSITORY}#quick-start"
+
+# A signed manifest lets an installed copy verify a later bundle without the
+# Quick start: the release tag names the version, the manifest pins every file,
+# and the signature binds the manifest to a release key this installer carries.
+MANIFEST_NAME = "bundle.json"
+SIGNATURE_NAME = "bundle.json.sig"
+MANIFEST_SCHEMA = 1
+SIGNATURE_NAMESPACE = "aiscb-bundle"
+SIGNER_PRINCIPAL = "aiscb-release"
+# OpenSSH allowed_signers lines for the keys that may sign a bundle manifest.
+# A rotated key ships here in a new bundle; a copy that predates it verifies
+# nothing signed by the new key and needs the current Quick start once.
+ALLOWED_SIGNERS: tuple[str, ...] = ()
+BUNDLE_FILES = {
+    BASELINE: MAX_BASELINE_BYTES,
+    "scripts/install.py": MAX_INSTALLER_BYTES,
+    "scripts/show_baseline_version.py": MAX_BASELINE_BYTES,
+}
+MAX_MANIFEST_BYTES = 16 * 1024
+MAX_SIGNATURE_BYTES = 8 * 1024
+SIGNATURE_HEADER = b"-----BEGIN SSH SIGNATURE-----"
+SSH_KEYGEN_TIMEOUT = 20
 
 SEMVER_TEXT = (
     r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
@@ -294,9 +318,10 @@ def _read_json_url(url: str) -> object:
     return json.loads(payload.decode("utf-8"))
 
 
-def fetch_release_baseline(
+def fetch_release_tag(
     fetch_json: Callable[[str], object] = _read_json_url,
-) -> Baseline:
+) -> tuple[str, SemVer]:
+    """Name the latest stable release and the version its tag carries."""
     release = fetch_json(LATEST_RELEASE_URL)
     if not isinstance(release, dict):
         raise ValueError("invalid release response")
@@ -308,21 +333,34 @@ def fetch_release_baseline(
     tag_match = RELEASE_TAG_RE.fullmatch(tag)
     if not tag_match:
         raise ValueError("release tag does not contain a supported version")
-    tag_version = SemVer.parse(tag_match.group("version"))
+    return tag, SemVer.parse(tag_match.group("version"))
 
-    query = urllib.parse.urlencode({"ref": tag})
-    payload = fetch_json(f"{CONTENTS_URL}?{query}")
+
+def fetch_release_file(
+    fetch_json: Callable[[str], object], path: str, ref: str, limit: int
+) -> bytes:
+    """Read one file of the release tree through the contents API."""
+    query = urllib.parse.urlencode({"ref": ref})
+    payload = fetch_json(f"{CONTENTS_ROOT_URL}/{path}?{query}")
     if not isinstance(payload, dict) or payload.get("type") != "file":
-        raise ValueError("release baseline is not a file")
+        raise ValueError(f"release {path} is not a file")
     if payload.get("encoding") != "base64" or not isinstance(payload.get("content"), str):
-        raise ValueError("release baseline has an unsupported encoding")
+        raise ValueError(f"release {path} has an unsupported encoding")
     try:
         encoded = "".join(payload["content"].splitlines())
         content = base64.b64decode(encoded, validate=True)
     except (ValueError, base64.binascii.Error) as error:
-        raise ValueError("release baseline is not valid base64") from error
-    if len(content) > MAX_BASELINE_BYTES:
-        raise ValueError("release baseline is too large")
+        raise ValueError(f"release {path} is not valid base64") from error
+    if len(content) > limit:
+        raise ValueError(f"release {path} is too large")
+    return content
+
+
+def fetch_release_baseline(
+    fetch_json: Callable[[str], object] = _read_json_url,
+) -> Baseline:
+    tag, tag_version = fetch_release_tag(fetch_json)
+    content = fetch_release_file(fetch_json, BASELINE, tag, MAX_BASELINE_BYTES)
     baseline = parse_baseline(content, f"GitHub release {tag}")
     if not baseline.content.startswith(b"# AI Secure Coding Baseline\n"):
         raise ValueError("release baseline has an unexpected format")
@@ -1113,6 +1151,203 @@ def refresh_update_cache(*, home: Path, state_path: Path | None = None) -> int:
     except (urllib.error.HTTPError, OSError, ValueError, json.JSONDecodeError):
         return 1
     return 0 if cache_release_check(state_path, registry, released) else 1
+
+
+@dataclass(frozen=True)
+class Manifest:
+    name: str
+    version: SemVer
+    files: dict[str, tuple[int, str]]
+
+    @property
+    def baseline_id(self) -> str:
+        return f"{self.name}-{self.version}"
+
+
+def manifest_document(files: dict[str, bytes]) -> bytes:
+    """The canonical manifest for one bundle, so signing and checking agree."""
+    if set(files) != set(BUNDLE_FILES):
+        raise ValueError("a bundle manifest needs exactly the bundled files")
+    baseline = parse_baseline(files[BASELINE], "bundle")
+    if not baseline.is_official:
+        raise ValueError("only the official baseline is released as a bundle")
+    document = {
+        "schema": MANIFEST_SCHEMA,
+        "baseline_id": baseline.baseline_id,
+        "files": {
+            name: {
+                "size": len(files[name]),
+                "sha256": hashlib.sha256(files[name]).hexdigest(),
+            }
+            for name in sorted(BUNDLE_FILES)
+        },
+    }
+    return (json.dumps(document, indent=2, sort_keys=True) + "\n").encode()
+
+
+def parse_manifest(content: bytes) -> Manifest:
+    """Accept only the exact manifest shape; an unknown field is a refusal."""
+    if not content or len(content) > MAX_MANIFEST_BYTES:
+        raise ValueError("the manifest has an invalid size")
+    document = json.loads(content.decode("utf-8"))
+    if not isinstance(document, dict) or set(document) != {
+        "schema", "baseline_id", "files"
+    }:
+        raise ValueError("the manifest has an unexpected shape")
+    if document["schema"] != MANIFEST_SCHEMA:
+        raise ValueError("the manifest schema is not supported")
+    baseline_id = document["baseline_id"]
+    if not isinstance(baseline_id, str):
+        raise ValueError("the manifest names no baseline")
+    match = re.fullmatch(rf"(?P<name>[a-z][a-z0-9-]*)-(?P<version>{SEMVER_TEXT})", baseline_id)
+    if match is None or match.group("name") != OFFICIAL_NAME:
+        raise ValueError("the manifest names no official baseline")
+    version = SemVer.parse(match.group("version"))
+    if version.metadata:
+        raise ValueError("the manifest names no official baseline")
+    entries = document["files"]
+    if not isinstance(entries, dict) or set(entries) != set(BUNDLE_FILES):
+        raise ValueError("the manifest does not list exactly the bundled files")
+    files: dict[str, tuple[int, str]] = {}
+    for name, entry in entries.items():
+        if not isinstance(entry, dict) or set(entry) != {"size", "sha256"}:
+            raise ValueError(f"the manifest entry for {name} has an unexpected shape")
+        size, digest = entry["size"], entry["sha256"]
+        if isinstance(size, bool) or not isinstance(size, int):
+            raise ValueError(f"the manifest entry for {name} has no valid size")
+        if not 0 < size <= BUNDLE_FILES[name]:
+            raise ValueError(f"the manifest entry for {name} exceeds its size limit")
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError(f"the manifest entry for {name} has no valid digest")
+        files[name] = (size, digest)
+    return Manifest(OFFICIAL_NAME, version, files)
+
+
+def verify_manifest_signature(
+    manifest: bytes,
+    signature: bytes,
+    allowed_signers: tuple[str, ...] | None = None,
+) -> None:
+    """Let OpenSSH check the signature against the release keys carried here."""
+    if allowed_signers is None:
+        allowed_signers = ALLOWED_SIGNERS
+    if not allowed_signers:
+        raise ValueError("this installer carries no release signing key")
+    ssh_keygen = shutil.which("ssh-keygen")
+    if ssh_keygen is None:
+        raise ValueError("ssh-keygen (OpenSSH) is required to verify a signed bundle")
+    if not manifest or len(manifest) > MAX_MANIFEST_BYTES:
+        raise ValueError("the manifest has an invalid size")
+    if (
+        not signature.startswith(SIGNATURE_HEADER)
+        or len(signature) > MAX_SIGNATURE_BYTES
+    ):
+        raise ValueError("the manifest signature has an unexpected format")
+    with tempfile.TemporaryDirectory(prefix="aiscb-verify.") as directory:
+        signers_path = Path(directory) / "allowed_signers"
+        signature_path = Path(directory) / SIGNATURE_NAME
+        signers_path.write_text("".join(f"{line}\n" for line in allowed_signers))
+        signature_path.write_bytes(signature)
+        completed = subprocess.run(
+            [
+                ssh_keygen, "-Y", "verify",
+                "-f", str(signers_path),
+                "-I", SIGNER_PRINCIPAL,
+                "-n", SIGNATURE_NAMESPACE,
+                "-s", str(signature_path),
+            ],
+            input=manifest,
+            capture_output=True,
+            timeout=SSH_KEYGEN_TIMEOUT,
+            check=False,
+        )
+    if completed.returncode != 0:
+        raise ValueError("the manifest signature is not from a trusted release key")
+
+
+def fetch_verified_bundle(
+    fetch_json: Callable[[str], object],
+    tag: str,
+    version: SemVer,
+    verify: Callable[[bytes, bytes], None] = verify_manifest_signature,
+) -> dict[str, bytes]:
+    """Download one release bundle, accepting nothing the signed manifest does not pin."""
+    manifest_content = fetch_release_file(
+        fetch_json, MANIFEST_NAME, tag, MAX_MANIFEST_BYTES
+    )
+    signature = fetch_release_file(fetch_json, SIGNATURE_NAME, tag, MAX_SIGNATURE_BYTES)
+    verify(manifest_content, signature)
+    manifest = parse_manifest(manifest_content)
+    if manifest.version != version:
+        raise ValueError("the manifest does not describe the release it was fetched from")
+    files: dict[str, bytes] = {}
+    for name, (size, digest) in manifest.files.items():
+        content = fetch_release_file(fetch_json, name, tag, size)
+        if len(content) != size or hashlib.sha256(content).hexdigest() != digest:
+            raise ValueError(f"release {name} does not match the signed manifest")
+        files[name] = content
+    baseline = parse_baseline(files[BASELINE], f"GitHub release {tag}")
+    if baseline.baseline_id != manifest.baseline_id:
+        raise ValueError("the release baseline and the signed manifest disagree")
+    return files
+
+
+def release_update(
+    *,
+    output: Callable[[str], None] = print,
+    current: Baseline | None = None,
+    fetch_json: Callable[[str], object] = _read_json_url,
+    verify: Callable[[bytes, bytes], None] = verify_manifest_signature,
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> int:
+    """Fetch the signed release bundle and hand over to its own guided setup.
+
+    Nothing downloaded is executed or written outside a temporary directory
+    before the signature and every digest have been checked.
+    """
+    current = current or bundled_baseline()
+    if not current.is_official:
+        output(
+            f"{current.baseline_id} is a derived baseline; its updates come from "
+            "the organization that derived it."
+        )
+        return 2
+    try:
+        tag, version = fetch_release_tag(fetch_json)
+    except urllib.error.HTTPError as error:
+        output("No published release found." if error.code == 404
+               else "The release lookup failed.")
+        return 1
+    except (OSError, ValueError, json.JSONDecodeError):
+        output("The release lookup failed.")
+        return 1
+    if version <= current.version:
+        output(f"{current.baseline_id} is current.")
+        return 0
+    output(f"Release {OFFICIAL_NAME}-{version} is published; verifying its bundle...")
+    try:
+        files = fetch_verified_bundle(fetch_json, tag, version, verify)
+    except ValueError as error:
+        output(f"Update refused: {error}.")
+        output(f"Run the current Quick start instead: {QUICK_START_URL}")
+        return 2
+    except (urllib.error.HTTPError, OSError, json.JSONDecodeError,
+            subprocess.TimeoutExpired):
+        output("The bundle download failed; nothing was changed.")
+        return 1
+    with tempfile.TemporaryDirectory(prefix="aiscb-update.") as directory:
+        staged = Path(directory)
+        for name, content in files.items():
+            target = staged / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _write_new(target, content)
+        output(f"Verified bundle {OFFICIAL_NAME}-{version}; starting its guided setup.\n")
+        completed = run(
+            [sys.executable, str(staged / "scripts" / INSTALLER_NAME),
+             "--interactive", "--offline"],
+            check=False,
+        )
+    return int(completed.returncode)
 
 
 def _entry_digest(entry: object) -> str | None:
@@ -2626,18 +2861,34 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="look up the published release for the startup hook, if setup allowed it",
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="fetch the signed release bundle, verify it, and run its guided setup",
+    )
     args = parser.parse_args(argv)
 
     if args.uninstall:
-        if args.tools or args.status or args.interactive or args.offline:
+        if args.tools or args.status or args.interactive or args.offline or args.update:
             parser.error("--uninstall takes only --user or --into")
         return uninstall(home=Path.home(), root=args.into, user=args.user)
 
     if args.refresh_update_cache:
         if (args.tools or args.user or args.status or args.interactive
-                or args.offline or args.uninstall):
+                or args.offline or args.uninstall or args.update):
             parser.error("--refresh-update-cache takes no other arguments")
         return refresh_update_cache(home=Path.home())
+
+    if args.update:
+        if args.tools or args.user or args.status or args.interactive or args.offline:
+            parser.error("--update takes no other arguments")
+        if not sys.stdin.isatty():
+            parser.error("the update runs the guided setup and needs a terminal")
+        try:
+            return release_update()
+        except (OSError, ValueError):
+            print("Update stopped after an error; nothing was changed.", file=sys.stderr)
+            return 1
 
     if args.interactive:
         if args.tools or args.user or args.status:
@@ -2654,7 +2905,8 @@ def main(argv: list[str] | None = None) -> int:
             if not args.offline and not check_online:
                 print(
                     "This installed copy manages its verified bundle only. "
-                    "Use the current Quick start for a verified update."
+                    "Run it with --update for a signed release update, or use "
+                    "the current Quick start."
                 )
             return interactive_setup(home=Path.home(), check_online=check_online)
         except (EOFError, KeyboardInterrupt):

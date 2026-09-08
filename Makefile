@@ -2,7 +2,7 @@
 # so the expensive targets run the free self-check before spending anything.
 
 .DEFAULT_GOAL := check
-.PHONY: check coverage setup update status install uninstall install-claude \
+.PHONY: check coverage setup update status sign-bundle install uninstall install-claude \
         install-codex install-copilot dry-run test-smoke test-quick test-rule \
         test test-all clean-results help
 
@@ -35,6 +35,12 @@ update: setup
 ## status      show installed baseline status; ARGS=--offline skips release check
 status:
 	python3 scripts/install.py --status $(ARGS)
+
+## sign-bundle write bundle.json for the bundled files and sign it before the
+##             bundle commit: make sign-bundle KEY=~/.ssh/aiscb-release
+sign-bundle:
+	@test -n "$(KEY)" || { echo "usage: make sign-bundle KEY=~/.ssh/aiscb-release"; exit 1; }
+	python3 scripts/bundle_manifest.py --sign $(KEY)
 
 ## uninstall   remove what the installer placed; ARGS=--user for the user level
 uninstall:

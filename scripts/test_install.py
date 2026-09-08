@@ -1963,5 +1963,344 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a write interrupted midway leaves no partial file behind",
           not target.exists(), str(target))
 
+
+# The signed release bundle: an installed copy may apply a later release only
+# when a key it carries signed the manifest and every file matches it.
+def generate_key(path: Path) -> str:
+    subprocess.run(
+        ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", path.name, "-f", str(path)],
+        check=True,
+        capture_output=True,
+    )
+    fields = path.with_name(path.name + ".pub").read_text().split()
+    return f"{install.SIGNER_PRINCIPAL} {fields[0]} {fields[1]}"
+
+
+def sign(sandbox: Path, key: Path, manifest: bytes, namespace: str | None = None) -> bytes:
+    document = sandbox / f"manifest-{len(list(sandbox.iterdir()))}.json"
+    document.write_bytes(manifest)
+    subprocess.run(
+        ["ssh-keygen", "-Y", "sign", "-f", str(key),
+         "-n", namespace or install.SIGNATURE_NAMESPACE, str(document)],
+        check=True,
+        capture_output=True,
+    )
+    return document.with_name(document.name + ".sig").read_bytes()
+
+
+def verification_error(
+    manifest: bytes, signature: bytes, signers: tuple[str, ...]
+) -> str | None:
+    try:
+        install.verify_manifest_signature(manifest, signature, signers)
+    except ValueError as error:
+        return str(error)
+    return None
+
+
+def contents_payload(content: bytes) -> dict[str, object]:
+    return {
+        "type": "file",
+        "encoding": "base64",
+        "content": base64.b64encode(content).decode(),
+    }
+
+
+def release_tree_fetcher(
+    release: object, tag: str, tree: dict[str, bytes], calls: list[str]
+):
+    def fetch_json(url: str) -> object:
+        calls.append(url)
+        if url == install.LATEST_RELEASE_URL:
+            return release
+        prefix = install.CONTENTS_ROOT_URL + "/"
+        if not url.startswith(prefix):
+            raise AssertionError(f"unexpected update URL {url}")
+        path, _, query = url[len(prefix):].partition("?")
+        if query != f"ref={tag}":
+            raise AssertionError(f"unexpected ref in {url}")
+        if path not in tree:
+            raise urllib.error.HTTPError(url, 404, "missing", None, None)  # type: ignore[arg-type]
+        return contents_payload(tree[path])
+    return fetch_json
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    sandbox = Path(tmp)
+    release_key = sandbox / "release-key"
+    release_signer = generate_key(release_key)
+    other_key = sandbox / "other-key"
+    other_signer = generate_key(other_key)
+    trusted = (release_signer,)
+
+    current_files = {
+        name: (install.REPO / name).read_bytes() for name in install.BUNDLE_FILES
+    }
+    current_manifest = install.manifest_document(current_files)
+    parsed = install.parse_manifest(current_manifest)
+    check("the manifest names the bundled baseline and pins every bundled file",
+          parsed.baseline_id == bundled.baseline_id
+          and set(parsed.files) == set(install.BUNDLE_FILES)
+          and all(
+              parsed.files[name]
+              == (len(content), hashlib.sha256(content).hexdigest())
+              for name, content in current_files.items()
+          ))
+    check("the manifest is canonical, so signing and checking see the same bytes",
+          current_manifest == install.manifest_document(dict(reversed(
+              list(current_files.items()))))
+          and current_manifest.endswith(b"}\n"))
+
+    signature = sign(sandbox, release_key, current_manifest)
+    check("a manifest signed by the release key verifies",
+          verification_error(current_manifest, signature, trusted) is None)
+    check("a manifest changed after signing is refused",
+          verification_error(current_manifest + b"\n", signature, trusted) is not None)
+    check("a signature from a key the installer does not carry is refused",
+          verification_error(current_manifest, signature, (other_signer,)) is not None)
+    check("a signature made for another purpose is refused",
+          verification_error(
+              current_manifest, sign(sandbox, release_key, current_manifest, "file"),
+              trusted,
+          ) is not None)
+    check("an installer without a release key verifies nothing",
+          "no release signing key"
+          in (verification_error(current_manifest, signature, ()) or ""))
+    check("a signature that is not an OpenSSH signature is refused before ssh-keygen runs",
+          "unexpected format"
+          in (verification_error(current_manifest, b"garbage", trusted) or ""))
+    original_which = install.shutil.which
+    try:
+        install.shutil.which = lambda _name: None
+        without_tool = verification_error(current_manifest, signature, trusted)
+    finally:
+        install.shutil.which = original_which
+    check("a missing ssh-keygen is a refusal, not a pass",
+          "ssh-keygen" in (without_tool or ""))
+
+    document = json.loads(current_manifest)
+    helper_name = "scripts/show_baseline_version.py"
+    rejected_manifests = {
+        "an unknown top-level field": {**document, "note": "x"},
+        "a missing field": {key: value for key, value in document.items()
+                            if key != "files"},
+        "another schema": {**document, "schema": 2},
+        "another baseline's name": {**document, "baseline_id": "acme-1.0.0"},
+        "a derived baseline": {**document, "baseline_id": "aiscb-1.0.0+acme"},
+        "a baseline id that is not a string": {**document, "baseline_id": 1},
+        "a missing bundled file": {**document, "files": {
+            name: entry for name, entry in document["files"].items()
+            if name != helper_name}},
+        "an extra file": {**document, "files": {
+            **document["files"], "scripts/extra.py": document["files"][helper_name]}},
+        "an entry with an unknown field": {**document, "files": {
+            **document["files"],
+            helper_name: {**document["files"][helper_name], "mode": "755"}}},
+        "a size of zero": {**document, "files": {
+            **document["files"],
+            helper_name: {**document["files"][helper_name], "size": 0}}},
+        "a size over the file's limit": {**document, "files": {
+            **document["files"],
+            helper_name: {**document["files"][helper_name],
+                          "size": install.MAX_BASELINE_BYTES + 1}}},
+        "a boolean size": {**document, "files": {
+            **document["files"],
+            helper_name: {**document["files"][helper_name], "size": True}}},
+        "a digest that is not SHA-256 hex": {**document, "files": {
+            **document["files"],
+            helper_name: {**document["files"][helper_name], "sha256": "abc"}}},
+    }
+    for label, variant in rejected_manifests.items():
+        try:
+            install.parse_manifest(json.dumps(variant).encode())
+        except ValueError:
+            continue
+        check(f"a manifest with {label} is refused", False)
+    try:
+        install.parse_manifest(b"[]")
+        install.parse_manifest(b"")
+    except ValueError:
+        shape_refused = True
+    else:
+        shape_refused = False
+    check("a manifest that is not an object is refused", shape_refused)
+
+    newer_baseline = bundled.content.replace(
+        bundled.baseline_id.encode(), b"aiscb-9.8.7", 1
+    )
+    newer_files = {**current_files, install.BASELINE: newer_baseline}
+    newer_manifest = install.manifest_document(newer_files)
+    newer_signature = sign(sandbox, release_key, newer_manifest)
+    tag = "aiscb-9.8.7"
+    stable = {"tag_name": tag, "draft": False, "prerelease": False}
+    good_tree = {
+        install.MANIFEST_NAME: newer_manifest,
+        install.SIGNATURE_NAME: newer_signature,
+        **newer_files,
+    }
+
+    def trusted_verify(manifest: bytes, signature_bytes: bytes) -> None:
+        install.verify_manifest_signature(manifest, signature_bytes, trusted)
+
+    def run_update(release, tree, verify=trusted_verify, current=bundled):
+        calls: list[str] = []
+        lines: list[str] = []
+        runs: list[tuple[list[str], dict[str, bytes], Path]] = []
+
+        def fake_run(command, check):
+            staged = Path(command[1]).parent.parent
+            files = {
+                str(path.relative_to(staged)): path.read_bytes()
+                for path in staged.rglob("*") if path.is_file()
+            }
+            runs.append((list(command), files, staged))
+            return subprocess.CompletedProcess(command, 0)
+
+        code = install.release_update(
+            output=lines.append,
+            current=current,
+            fetch_json=release_tree_fetcher(release, tag, tree, calls),
+            verify=verify,
+            run=fake_run,
+        )
+        return code, calls, lines, runs
+
+    code, calls, lines, runs = run_update(stable, good_tree)
+    command, staged_files, staged_dir = runs[0] if runs else ([], {}, sandbox)
+    check("a newer signed release is staged and its own guided setup runs",
+          code == 0 and len(runs) == 1
+          and command[0] == sys.executable
+          and command[1].endswith(os.path.join("scripts", "install.py"))
+          and command[2:] == ["--interactive", "--offline"]
+          and staged_files == newer_files,
+          f"code={code} lines={lines!r} command={command!r}")
+    check("the staged bundle is removed once its setup has finished",
+          not staged_dir.exists())
+    fetched = [url.split("/contents/", 1)[1].split("?", 1)[0]
+               for url in calls if "/contents/" in url]
+    check("the manifest and its signature are fetched before any bundled file",
+          fetched[:2] == [install.MANIFEST_NAME, install.SIGNATURE_NAME]
+          and set(fetched[2:]) == set(install.BUNDLE_FILES), str(fetched))
+
+    code, calls, lines, runs = run_update(stable, good_tree, current=install.parse_baseline(
+        newer_baseline, "installed"))
+    check("a release that is not newer changes nothing and fetches no file",
+          code == 0 and not runs and calls == [install.LATEST_RELEASE_URL]
+          and any("is current" in line for line in lines), str(lines))
+    code, calls, lines, runs = run_update(
+        {**stable, "tag_name": "aiscb-0.0.1"}, good_tree)
+    check("an older release is never applied",
+          code == 0 and not runs and calls == [install.LATEST_RELEASE_URL])
+    code, calls, lines, runs = run_update({**stable, "prerelease": True}, good_tree)
+    check("a prerelease is not an update", code == 1 and not runs and len(calls) == 1)
+
+    refusals = {
+        "a signature from a key the installer does not carry": {
+            **good_tree, install.SIGNATURE_NAME: sign(sandbox, other_key, newer_manifest)},
+        "a manifest signed for the installed version, served under the new tag": {
+            **good_tree, install.MANIFEST_NAME: current_manifest,
+            install.SIGNATURE_NAME: signature},
+        "a bundled file changed after signing": {
+            **good_tree, "scripts/install.py":
+                current_files["scripts/install.py"] + b"\n# changed\n"},
+        "a bundled file longer than the manifest says": {
+            **good_tree, install.BASELINE: newer_baseline + b"\n"},
+        "a bundled file shorter than the manifest says": {
+            **good_tree, install.BASELINE: newer_baseline[:-1]},
+    }
+    for label, tree in refusals.items():
+        code, calls, lines, runs = run_update(stable, tree)
+        check(f"{label} is refused without running anything",
+              code == 2 and not runs
+              and any("Update refused" in line for line in lines)
+              and any(install.QUICK_START_URL in line for line in lines),
+              f"code={code} lines={lines!r}")
+    code, calls, lines, runs = run_update(stable, refusals[
+        "a signature from a key the installer does not carry"])
+    check("a refused signature stops the download before any bundled file",
+          not any(name in url for url in calls for name in install.BUNDLE_FILES
+                  if name != install.BASELINE)
+          and not any(url.endswith(f"{install.BASELINE}?ref={tag}") for url in calls),
+          str(calls))
+    code, calls, lines, runs = run_update(
+        stable, good_tree,
+        verify=lambda manifest, signature_bytes: install.verify_manifest_signature(
+            manifest, signature_bytes, ()))
+    check("an installer without a release key refuses and names the Quick start",
+          code == 2 and not runs and any("no release signing key" in line for line in lines)
+          and any(install.QUICK_START_URL in line for line in lines), str(lines))
+    code, calls, lines, runs = run_update(
+        stable, {key: value for key, value in good_tree.items()
+                 if key != install.MANIFEST_NAME})
+    check("a release without a manifest is a failed download, not an update",
+          code == 1 and not runs and any("download failed" in line for line in lines),
+          str(lines))
+    derived = install.parse_baseline(
+        bundled.content.replace(bundled.baseline_id.encode(), b"aiscb-0.1.0+acme", 1),
+        "installed",
+    )
+    code, calls, lines, runs = run_update(stable, good_tree, current=derived)
+    check("a derived baseline is not replaced by the official release",
+          code == 2 and not calls and not runs, str(lines))
+
+    committed_manifest = install.REPO / install.MANIFEST_NAME
+    committed_signature = install.REPO / install.SIGNATURE_NAME
+    check("the committed manifest describes the bundled files",
+          committed_manifest.is_file()
+          and committed_manifest.read_bytes() == current_manifest,
+          "run: make sign-bundle KEY=<release key>")
+    committed_error = (
+        verification_error(current_manifest, committed_signature.read_bytes(),
+                           install.ALLOWED_SIGNERS)
+        if committed_signature.is_file() else "no signature file"
+    )
+    check("the committed manifest carries a signature from a key install.py trusts",
+          committed_error is None, committed_error or "")
+
+    import bundle_manifest  # noqa: E402
+
+    repo_copy = sandbox / "repo"
+    for name, content in current_files.items():
+        (repo_copy / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo_copy / name).write_bytes(content)
+    try:
+        bundle_manifest.sign_manifest(repo_copy, release_key)
+    except ValueError as error:
+        not_carried = str(error)
+    else:
+        not_carried = ""
+    check("signing with a key install.py does not carry is refused and names the line",
+          release_signer in not_carried, not_carried)
+    original_signers = install.ALLOWED_SIGNERS
+    try:
+        install.ALLOWED_SIGNERS = trusted
+        bundle_manifest.sign_manifest(repo_copy, release_key)
+        bundle_manifest.verify_bundle(repo_copy)
+        signed_ok = True
+        (repo_copy / helper_name).write_bytes(current_files[helper_name] + b"\n")
+        try:
+            bundle_manifest.verify_bundle(repo_copy)
+        except ValueError as error:
+            stale = str(error)
+        else:
+            stale = ""
+    finally:
+        install.ALLOWED_SIGNERS = original_signers
+    check("the release tool writes a manifest and signature the installer verifies",
+          signed_ok and (repo_copy / install.MANIFEST_NAME).read_bytes()
+          == current_manifest)
+    check("a manifest that no longer matches the bundled files fails verification",
+          "does not describe" in stale, stale)
+
+    for argv, reason in ((["--update", "--offline"], "combined with other arguments"),
+                         (["--update"], "run without a terminal")):
+        completed = subprocess.run(
+            [sys.executable, str(install.INSTALLER_SOURCE), *argv],
+            capture_output=True, text=True, stdin=subprocess.DEVNULL,
+        )
+        check(f"--update refuses to run {reason}",
+              completed.returncode == 2 and "usage" in completed.stderr,
+              completed.stderr[-200:])
+
 print(f"\ninstall: {'ok' if not failures else f'{failures} failures'}")
 sys.exit(1 if failures else 0)

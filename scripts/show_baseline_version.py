@@ -4,6 +4,7 @@
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -11,7 +12,7 @@ from pathlib import Path
 
 BASELINE = "secure-coding-baseline.md"
 INSTALLER = "install.py"
-QUICK_START = "github.com/appsec-foundry/aiscb#quick-start"
+QUICK_START = "https://github.com/appsec-foundry/aiscb#quick-start"
 REGISTRY = Path(".config") / "aiscb" / "installations.json"
 USER_DATA = Path(".local") / "share" / "aiscb"
 MAX_BASELINE_BYTES = 256 * 1024
@@ -94,7 +95,11 @@ def refresh_in_background(checked: object, installer: Path) -> None:
 
 
 def update_note(installed: str, helper_dir: Path, home: Path) -> str:
-    """Report the newer release the installer cached, and keep that cache fresh."""
+    """Name the newer release the installer cached and the command that applies it.
+
+    The hook only reports; the tool may already have loaded the old file, so
+    the update itself runs from a terminal and takes effect in the next session.
+    """
     section = read_update_check(home / REGISTRY)
     if section is None:
         return ""
@@ -110,7 +115,13 @@ def update_note(installed: str, helper_dir: Path, home: Path) -> str:
         return ""
     if published[0] != current[0] or published[1] <= current[1]:
         return ""
-    return f"Update {latest[len(published[0]) + 1:]} → {QUICK_START}"
+    version = latest[len(published[0]) + 1:]
+    if installer is None:
+        return f"Update {version} available: {QUICK_START}"
+    return (
+        f"Update {version} available: "
+        f"python3 {shlex.quote(str(installer))} --update"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -85,14 +85,17 @@ Use the pinned and verified command in the [Quick start](#quick-start). It requi
 
 ### Later updates without a checkout
 
-A user-level install keeps a runnable installer beside the managed baseline for status checks and changes to the selected tools:
+A user-level install keeps a runnable installer beside the managed baseline for signed updates, status checks, and changes to the selected tools:
 
 ```bash
+python3 ~/.local/share/aiscb/install.py --update
 python3 ~/.local/share/aiscb/install.py --status
 python3 ~/.local/share/aiscb/install.py --interactive
 ```
 
-For a verified baseline, installer, or startup-hook update, run the current [Quick start](#quick-start) again or install from a reviewed clone with `ARGS=--offline`. The installed copy does not replace the baseline with content fetched at runtime.
+`--update` looks up the latest release, downloads its bundle manifest and signature, and checks the signature with `ssh-keygen` against the release key the installed copy carries. Only then does it download the baseline, installer, and startup hook, compare each file's size and SHA-256 with the manifest, and start the guided setup of the verified bundle. Nothing is written outside a temporary directory before these checks pass, and a release that is not newer than the installed baseline changes nothing. The startup hook names this command when the release check finds a newer release; the update takes effect in the next session.
+
+If the update is refused, for example after the release key was rotated, run the current [Quick start](#quick-start) again or install from a reviewed clone with `ARGS=--offline`.
 
 ### From a repository clone
 
@@ -116,7 +119,7 @@ Optional session-start hooks show the active `baseline-id` and load the managed 
 
 Release checks are off by default. If enabled, a separate background process contacts `api.github.com` at most once a day without delaying a session; the hook itself makes no request. `ARGS=--offline` skips the check.
 
-From a checkout, the installer uses the latest published release when available and otherwise uses the checkout copy. Remote setup and installed user copies remain on their verified bundle until the current Quick start is run again.
+From a checkout, the installer uses the latest published release when available and otherwise uses the checkout copy. Remote setup and installed user copies remain on their verified bundle until `--update` applies a signed release or the current Quick start is run again.
 
 ### Claude Code
 
