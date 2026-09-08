@@ -232,6 +232,7 @@ Research on AI-assisted coding supports making security expectations explicit, c
 - The [OWASP Top 10:2025](https://owasp.org/Top10/2025/), [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/), and [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) provide background for the covered risks.
 - The OWASP [Secure Coding with AI Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html) and OpenSSF [Security-Focused Guide for AI Code Assistant Instructions](https://best.openssf.org/Security-Focused-Guide-for-AI-Code-Assistant-Instructions) provide more operational guidance and comparison points.
 - The optional [`Claude Code gate`](examples/claude-code-gate/) blocks a small set of unsafe code patterns; issues that require context, such as missing authorization, still belong in review or CI.
+- The [organization bundle example](examples/organization-bundle/) shows an overlay, a pack, a blueprint, a verified release build and installer, and a LiteLLM gateway hook, as described in [Adapting the baseline in an organization](docs/adapting-in-an-organization.md).
 - The [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) Claude Code plugin supports broader application-security work and can manage aiscb installations.
 
 These resources are background, not claims of certification, conformance, or complete coverage. Check time-sensitive advice against current authoritative sources.

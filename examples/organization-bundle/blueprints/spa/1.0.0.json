@@ -1,0 +1,33 @@
+{
+  "version": "1.0.0",
+  "sso": {
+    "issuer": "https://sso.acme.example",
+    "audience": "acme-spa",
+    "groups_claim": "acme_groups",
+    "approved_groups": {
+      "acme-app-user": "user",
+      "acme-app-admin": "administrator"
+    }
+  },
+  "session_cookie": {
+    "name": "__Host-acme_session",
+    "secure": true,
+    "http_only": true,
+    "same_site": "Lax",
+    "idle_timeout_minutes": 30,
+    "absolute_timeout_hours": 12
+  },
+  "headers": {
+    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+  },
+  "audit_events": [
+    "auth.login.success",
+    "auth.login.failure",
+    "auth.logout",
+    "auth.group.unknown"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "packs": [
+    {
+      "id": "acme-authentication",
+      "file": "packs/authentication.md",
+      "owner": "Application Security",
+      "source": "policy/IAM-7",
+      "trigger": "Login, SSO, sessions, tokens, or anything that decides who the user is",
+      "paths": ["**/auth/**", "**/login/**"],
+      "blueprints": ["blueprints/spa/1.0.0.json"],
+      "requirements": {
+        "ACME-SSO-001": {"narrows": ["aiscb-MECHANISMS-001", "aiscb-AUTH-001"]},
+        "ACME-IAM-AUDIT-001": {"narrows": ["aiscb-ERRORS-001"]}
+      }
+    }
+  ]
+}

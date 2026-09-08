@@ -1,0 +1,12 @@
+# LiteLLM proxy configuration for the gateway example.
+# Start with:
+#   AISCB_GATEWAY_BLOCK=/etc/aiscb/releases/acme-sec-1.0.0/adapters/gateway/system-block.md \
+#   AISCB_GATEWAY_SHA256=<sha256 from manifest.json> \
+#   litellm --config config.yaml
+model_list:
+  - model_name: claude
+    litellm_params:
+      model: anthropic/claude-sonnet-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+litellm_settings:
+  callbacks: custom_callbacks.proxy_handler_instance
