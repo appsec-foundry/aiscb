@@ -11,6 +11,7 @@ from pathlib import Path
 
 BASELINE = "secure-coding-baseline.md"
 INSTALLER = "install.py"
+QUICK_START = "github.com/appsec-foundry/aiscb#quick-start"
 REGISTRY = Path(".config") / "aiscb" / "installations.json"
 USER_DATA = Path(".local") / "share" / "aiscb"
 MAX_BASELINE_BYTES = 256 * 1024
@@ -109,7 +110,7 @@ def update_note(installed: str, helper_dir: Path, home: Path) -> str:
         return ""
     if published[0] != current[0] or published[1] <= current[1]:
         return ""
-    return f"Update {latest} available. Use the current verified Quick start."
+    return f"Update {latest[len(published[0]) + 1:]} → {QUICK_START}"
 
 
 def main(argv: list[str] | None = None) -> int:

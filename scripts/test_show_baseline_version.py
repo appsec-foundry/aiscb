@@ -190,16 +190,18 @@ def check_update_note(failures: list[str]) -> None:
             failures.append(f"{label}: expected no note, got {out[:160]!r}")
 
     code, out, _ = call(registry_layout({"latest": "aiscb-0.2.0"}))
-    if code != 0 or "Update aiscb-0.2.0 available" not in out:
+    if code != 0 or "Update 0.2.0" not in out:
         failures.append(f"a newer release must be announced: {out[:160]!r}")
-    if "python3" in out:
+    if "python3" in out or "curl" in out:
         failures.append(f"no installer means no command: {out[:160]!r}")
 
     root = build({**registry_layout({"latest": "aiscb-0.2.0"}),
                   "scripts/install.py": "raise SystemExit(0)\n"})
     _code, out, _err = call_in(root)
-    if "current verified Quick start" not in out or "python3" in out:
+    if "github.com/appsec-foundry/aiscb#quick-start" not in out:
         failures.append(f"the note must name the verified update path: {out[:200]!r}")
+    if "python3" in out or "curl" in out:
+        failures.append(f"the note points at the Quick start, never runs it: {out[:200]!r}")
 
     for label, payload in (
         ("invalid registry JSON", "not json"),
