@@ -28,7 +28,7 @@ echo 'e2d5c889a561d91184b424722e198c5da13b7da7564e177cd1cbe6e2f0e35a2e  aiscb-se
 bash aiscb-setup.sh
 ```
 
-The installer asks which tools to set up and verifies each one. Installing from a clone or by hand is described under [Using it](#using-it).
+The installer asks which tools to set up and verifies each one. Installing from a clone or by hand is described under [Using it](#using-it). Claude Code users can also install, update, and verify the baseline with the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin, which covers broader application-security work.
 
 ## Update
 
@@ -225,6 +225,8 @@ The tool sections above name each tool's managed instruction location: a managed
 
 To deliver the baseline centrally for all tools, or to add organization rules without editing it, see [adapting aiscb inside an organization](docs/adapting-in-an-organization.md). It describes three deliveries: an LLM gateway that appends the baseline and organization rules to every request, a versioned local bundle installed on machines or checked into repositories, and gateway injection with policy loaded over HTTPS on demand. The [organization bundle example](examples/organization-bundle/) implements the bundle build and a LiteLLM gateway hook.
 
+For Claude Code, an [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) organization profile can ship an adapted baseline from an internal URL or repository; the plugin installs, updates, and verifies it with its own commands.
+
 ### Verify it loaded
 
 Ask the tool `baseline?`. The answer should include `aiscb-0.1.14` and the file it came from. This confirms that the assistant can see the baseline, not that it will always follow it.
@@ -253,7 +255,6 @@ Research on AI-assisted coding finds that security expectations work best when t
 - The [OWASP Top 10:2025](https://owasp.org/Top10/2025/), [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/), and [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) give background on the risks the rules cover.
 - The OWASP [Secure Coding with AI Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html) and the OpenSSF [Security-Focused Guide for AI Code Assistant Instructions](https://best.openssf.org/Security-Focused-Guide-for-AI-Code-Assistant-Instructions) give further guidance and are useful for comparison.
 - The optional [Claude Code gate](examples/claude-code-gate/) blocks a small set of unsafe code patterns. Issues that need context, such as missing authorization, still belong in review or CI.
-- The [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) Claude Code plugin covers broader application-security work and can manage aiscb installations.
 
 These resources are background. They do not certify aiscb, and aiscb does not claim to cover them completely. Check time-sensitive advice against current sources.
 
