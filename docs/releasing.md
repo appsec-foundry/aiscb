@@ -1,36 +1,50 @@
 # Releasing aiscb
 
-How a baseline release reaches users, and what the maintainer does in which
-order. AGENTS.md carries the rules that bind every edit; this page is the
-sequence with the commands.
+This page describes how to publish a new release of aiscb, step by step. It is
+written for the maintainer. AGENTS.md states the rules; this page gives the
+order and the commands.
 
-Three files form the bundle that every install path ships together:
-`secure-coding-baseline.md`, `scripts/install.py`, and
-`scripts/show_baseline_version.py`. Two things pin them:
+## What a release consists of
 
-- `setup.sh` names one bundle tag and the SHA-256 of each file. The Quick start
-  in `README.md` names one commit of `setup.sh` and its SHA-256. This is the
-  path for new installs.
-- `bundle.json` lists the size and SHA-256 of each file, and `bundle.json.sig`
-  is an OpenSSH signature over it by the release key. `install.py --update`
-  fetches both from the latest release tag, verifies them against the public
-  keys in `ALLOWED_SIGNERS` in `scripts/install.py`, and only then installs.
-  This is the path for existing user-level installs.
+Three files are shipped together. They are called the bundle:
 
-`make check` fails while any of these no longer matches the working tree. That
-is intended: the failure names the step still missing.
+- `secure-coding-baseline.md`
+- `scripts/install.py`
+- `scripts/show_baseline_version.py`
 
-## One-time setup: the release key
+Users receive the bundle in two ways:
 
-Generate an Ed25519 key that never enters the repository, CI, or an
-assistant's context. With a FIDO token the private half cannot be copied:
+1. **Quick start** (new installs). `setup.sh` contains the name of a bundle tag
+   and the SHA-256 of each of the three files. The Quick start block in
+   `README.md` contains the commit of `setup.sh` and its SHA-256.
+2. **`install.py --update`** (existing user-level installs). The installed
+   copy downloads `bundle.json` and `bundle.json.sig` from the latest release,
+   checks the signature against the public keys in `ALLOWED_SIGNERS` in
+   `scripts/install.py`, and then downloads and checks the three files.
+
+Both paths depend on hashes and a signature that match the released files. As
+long as one of them does not match the working tree, `make check` fails and
+names the missing step.
+
+## One-time setup: create the release key
+
+You need an SSH key of type Ed25519. Its private half must never be committed,
+uploaded to CI, or shown to an assistant.
+
+With a FIDO security key (recommended, the private half cannot be copied):
 
 ```bash
 ssh-keygen -t ed25519-sk -C aiscb-release -f ~/.ssh/aiscb-release
 ```
 
-Without a token, use `-t ed25519` and a passphrase. Then add the public half to
-`ALLOWED_SIGNERS` in `scripts/install.py` as one allowed-signers line:
+Without a security key:
+
+```bash
+ssh-keygen -t ed25519 -C aiscb-release -f ~/.ssh/aiscb-release
+```
+
+Choose a passphrase. Then add the public key to `ALLOWED_SIGNERS` in
+`scripts/install.py`:
 
 ```python
 ALLOWED_SIGNERS: tuple[str, ...] = (
@@ -38,89 +52,150 @@ ALLOWED_SIGNERS: tuple[str, ...] = (
 )
 ```
 
-`make sign-bundle KEY=~/.ssh/aiscb-release` prints the exact line when it is
-missing. Commit the change; it is part of the next bundle.
+The line is `aiscb-release`, a space, and the first two fields of
+`~/.ssh/aiscb-release.pub`. If you run `make sign-bundle` before the line
+exists, it prints the exact line to add. Commit the change; it ships with the
+next bundle.
 
-## Release sequence
+## Publishing a release
 
-Every step that changes a bundled file invalidates the manifest and the
-`setup.sh` hashes, so the order below runs from content to distribution.
+Follow the steps in this order. Each step that changes one of the three
+bundle files invalidates the signature and the hashes from the steps after it.
 
-1. **Finish the content.** Merge the baseline change through its specification
-   under `specs/`. Set the new `baseline-id` in `secure-coding-baseline.md`
-   only when the user approved the exact value. Recompute the file size and the
-   `o200k_base` token count and update both in `README.md`.
-2. **Update the version references.** The IDs in `README.md` (the `baseline?`
-   answer and the ID examples), the derived-ID example in
-   `docs/adapting-in-an-organization.md`, `VALID_ID` and the invalid-UTF-8 case
-   in `scripts/test_show_baseline_version.py`, and the migration question in
-   `scripts/test_install.py`.
-3. **Sign the bundle.** Run `make sign-bundle KEY=~/.ssh/aiscb-release`. It
-   writes `bundle.json` for the current bundled files, signs it, and verifies
-   the signature against `ALLOWED_SIGNERS`. Repeat after any later change to a
-   bundled file.
-4. **Commit the bundle** with the manifest and signature, for example
-   `release: identify the baseline as aiscb-X.Y.Z`. `make check` still fails
-   on the `setup.sh` hashes at this point.
-5. **Tag the bundle.** Tags are never moved or reused; the number after the
-   version counts bundles of the same baseline version:
+### 1. Finish the content
 
-   ```bash
-   git tag aiscb-bundle-X.Y.Z-1
-   ```
+- Merge the baseline change through its specification under `specs/`.
+- Set the new `baseline-id` in `secure-coding-baseline.md`. Only change the
+  version when it has been approved explicitly.
+- Recompute the file size and the `o200k_base` token count of the baseline and
+  update both numbers in `README.md`.
 
-6. **Pin the bundle in `setup.sh`.** Set `bundle_ref` to the new tag and the
-   three `*_sha` values to the SHA-256 of the files in that exact commit, for
-   example `git show aiscb-bundle-X.Y.Z-1:scripts/install.py | sha256sum`.
-   Keep the download size limits. Update the two `aiscb-bundle-` strings in
-   `scripts/test_install.py`. Commit: `build: pin the aiscb-X.Y.Z bundle`.
-   `make check` passes again.
-7. **Pin the bootstrap in `README.md`.** The Quick start block needs the commit
-   from step 6 and the SHA-256 of `setup.sh` in it:
+### 2. Update the version in the other files
 
-   ```bash
-   git rev-parse HEAD
-   git show HEAD:setup.sh | sha256sum
-   ```
+Replace the previous version number in:
 
-   Put both into the command block and commit:
-   `docs: pin the aiscb-X.Y.Z bootstrap`. Never publish or merge the state
-   between steps 6 and 7; the README would install the previous bundle.
-8. **Tag and publish the release** on the commit from step 7, as a stable
-   release, not a prerelease or draft. `install.py --update` and the startup
-   hook read `releases/latest`, so the release tag must contain the version
-   and point at a tree whose `bundle.json` matches its bundled files, which
-   the docs commit does:
+- `README.md`: the `baseline?` example answer and the ID examples
+- `docs/adapting-in-an-organization.md`: the derived-ID example
+- `scripts/test_show_baseline_version.py`: `VALID_ID` and the invalid-UTF-8
+  test case
+- `scripts/test_install.py`: the "Switch to a managed copy of ..." question
 
-   ```bash
-   git tag aiscb-X.Y.Z
-   git push origin main aiscb-bundle-X.Y.Z-1 aiscb-X.Y.Z
-   gh release create aiscb-X.Y.Z --title aiscb-X.Y.Z --notes-file <notes>
-   ```
+### 3. Sign the bundle
 
-A change to `install.py` or the hook helper without a baseline change needs
-steps 3 to 7 with the next bundle number, for example `aiscb-bundle-X.Y.Z-2`,
-and reaches `--update` users with the next baseline release; the Quick start
-delivers it immediately. A documentation-only commit needs no bundle.
+```bash
+make sign-bundle KEY=~/.ssh/aiscb-release
+```
 
-## Checking a release
+This writes `bundle.json` with the size and SHA-256 of the three files, signs
+it into `bundle.json.sig`, and checks the signature against
+`ALLOWED_SIGNERS`. If you change one of the three files after this step, run
+it again.
 
-- `make check` is green on the published commit.
-- `python3 scripts/bundle_manifest.py --verify` reports the manifest verified.
-- From a machine with the previous release installed at user level,
-  `python3 ~/.local/share/aiscb/install.py --update` names the new version,
-  verifies, and starts the guided setup; a fresh session's banner shows the new
-  ID.
-- The Quick start block from the README installs the new bundle on a clean
-  machine, and `baseline?` in a new session names the new ID.
+### 4. Commit the bundle
+
+Commit the changed files together with `bundle.json` and `bundle.json.sig`,
+for example:
+
+```
+release: identify the baseline as aiscb-X.Y.Z
+```
+
+`make check` still fails at this point, because `setup.sh` has the old
+hashes. That is expected.
+
+### 5. Tag the bundle
+
+```bash
+git tag aiscb-bundle-X.Y.Z-1
+```
+
+The last number counts the bundles of one baseline version. A second bundle
+for the same version, for example after an installer fix, gets `-2`. Never
+move or reuse a published tag.
+
+### 6. Pin the bundle in `setup.sh`
+
+Set `bundle_ref` to the new tag. Set `baseline_sha`, `installer_sha`, and
+`helper_sha` to the SHA-256 of the files in that tagged commit:
+
+```bash
+git show aiscb-bundle-X.Y.Z-1:secure-coding-baseline.md | sha256sum
+git show aiscb-bundle-X.Y.Z-1:scripts/install.py | sha256sum
+git show aiscb-bundle-X.Y.Z-1:scripts/show_baseline_version.py | sha256sum
+```
+
+Leave the download size limits as they are. Replace the two occurrences of the
+old bundle tag in `scripts/test_install.py`. Commit:
+
+```
+build: pin the aiscb-X.Y.Z bundle
+```
+
+`make check` passes again.
+
+### 7. Pin the bootstrap in `README.md`
+
+The Quick start block needs the commit from step 6 and the SHA-256 of
+`setup.sh` in that commit:
+
+```bash
+git rev-parse HEAD
+git show HEAD:setup.sh | sha256sum
+```
+
+Put the commit into the URL and the hash into the `echo` line. Commit:
+
+```
+docs: pin the aiscb-X.Y.Z bootstrap
+```
+
+Do not push or merge the state between step 6 and step 7. In that state the
+README still installs the previous bundle.
+
+### 8. Tag and publish
+
+Create the release tag on the commit from step 7, push everything, and publish
+a GitHub release for it. It must be a normal release, not a prerelease or a
+draft, because `install.py --update` and the startup hook read the latest
+release.
+
+```bash
+git tag aiscb-X.Y.Z
+git push origin main aiscb-bundle-X.Y.Z-1 aiscb-X.Y.Z
+gh release create aiscb-X.Y.Z --title aiscb-X.Y.Z --notes-file <notes>
+```
+
+The release can also be created in the GitHub web interface.
+
+## Special cases
+
+**Installer or hook changed, baseline unchanged.** Run steps 3 to 7 with the
+next bundle number, for example `aiscb-bundle-X.Y.Z-2`. New installs get the
+change through the Quick start right away. Existing installs get it with the
+next baseline release, because `--update` only acts on a higher baseline
+version.
+
+**Documentation only.** No bundle, no tag, no hashes. Commit and push.
+
+## Checking a published release
+
+- `make check` passes on the published commit.
+- `python3 scripts/bundle_manifest.py --verify` prints
+  `bundle manifest verified`.
+- On a machine with the previous release installed for the user, run
+  `python3 ~/.local/share/aiscb/install.py --update`. It should name the new
+  version, verify it, and start the guided setup. A new session then shows the
+  new ID in the banner.
+- On a clean machine, the Quick start block from the README installs the new
+  bundle, and `baseline?` in a new session names the new ID.
 
 ## Rotating the release key
 
-Planned rotation, old key still trusted: add the new public line to
-`ALLOWED_SIGNERS`, keep the old one, and sign the next bundle with the old key.
-Existing installs verify that bundle and now carry both keys. Sign the bundle
-after that with the new key and drop the old line.
+**Planned rotation, old key still trusted.** Add the new public key to
+`ALLOWED_SIGNERS` and keep the old one. Sign the next bundle with the old key.
+Existing installs can verify that bundle, and after the update they carry both
+keys. Sign the bundle after that with the new key and remove the old line.
 
-Compromise: drop the old line at once, sign with the new key, and say in the
-release notes that installs from before this release refuse `--update` and must
-run the Quick start once. The refusal message already points there.
+**Old key compromised.** Remove the old line immediately and sign with the new
+key. Installs from before this release cannot verify it; `--update` refuses and
+points them to the Quick start. Say so in the release notes.
