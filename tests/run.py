@@ -338,6 +338,39 @@ def diff_against_fixture(before: dict[str, str], workdir: Path) -> dict:
     }
 
 
+def run_oracle(workdir: Path, name: str, timeout: int) -> dict:
+    """Execute a harness-owned check, never an agent-supplied test command."""
+    if not re.fullmatch(r"[a-z][a-z-]*", name):
+        raise ValueError("invalid oracle name")
+    script = HERE / "oracles" / f"{name}.cjs"
+    if not script.is_file():
+        raise ValueError("unknown oracle")
+    rc, _, _ = run_capture(["node", str(script)], workdir, timeout)
+    # Do not include arbitrary application output in diagnostics.
+    return {"id": f"oracle:{name}", "kind": "oracle", "violated": rc != 0,
+            "note": "timed out" if rc == -1 else f"exit {rc}", "hits": []}
+
+
+def inspect_turn(workdir: Path, before: dict, checks: dict, turn: int,
+                 timeout: int) -> tuple[dict, list[dict]]:
+    diff = diff_against_fixture(before, workdir)
+    findings = []
+    contract = next((c for c in checks.get("conversation", [])
+                     if c["turn"] == turn), {})
+    changed = sum(diff.values(), [])
+    for pattern in contract.get("must_not_change", []):
+        hits = [f for f in changed if fnmatch.fnmatch(f, pattern)]
+        findings.append({"id": f"turn-{turn}:must-not-change:{pattern}",
+                         "kind": "turn-scope", "violated": bool(hits),
+                         "note": "file changed before permitted turn",
+                         "hits": [{"file": f} for f in hits[:8]]})
+    if checks.get("oracle"):
+        finding = run_oracle(workdir, checks["oracle"], timeout)
+        finding["id"] = f"turn-{turn}:" + finding["id"]
+        findings.append(finding)
+    return diff, findings
+
+
 def apply_regex_checks(files: dict[str, str], reply: str, checks: dict) -> list[dict]:
     findings = []
 
@@ -624,8 +657,11 @@ def run_one(case: dict, tool: str, arm: str, rep: int, args) -> dict:
     if arm == "baseline":
         ADAPTERS[tool]["install"](workdir)
 
+    initial = snapshot(workdir)
     replies, turn_codes, log = [], [], ""
+    turn_states, turn_findings = [], []
     for turn, prompt in enumerate(case["turns"], start=1):
+        turn_started = time.time()
         cmd = ADAPTERS[tool]["cmd"](workdir, prompt, model_for(tool, args), turn)
         rc, stdout, stderr = run_capture(cmd, workdir, args.timeout)
         log += (f"\n===== turn {turn} "
@@ -645,6 +681,14 @@ def run_one(case: dict, tool: str, arm: str, rep: int, args) -> dict:
             replies.append(path.read_text(encoding="utf-8") if path.is_file() else "")
         else:
             replies.append(stdout)
+        # Capture before verification commands can change files. Hashes retain
+        # evidence even when a later turn restores an earlier implementation.
+        hashes = snapshot(workdir)
+        diff, findings = inspect_turn(workdir, initial, case["checks"], turn,
+                                      args.verify_timeout)
+        turn_states.append({"turn": turn, "hashes": hashes, "diff": diff,
+                            "seconds": round(time.time() - turn_started, 1)})
+        turn_findings.extend(findings)
         if rc == -1:
             break  # timed out mid-turn; the session state is unknown
         # A non-zero exit is usually a transient API error, not a dead session,
@@ -656,7 +700,9 @@ def run_one(case: dict, tool: str, arm: str, rep: int, args) -> dict:
 
     files = collect_files(workdir)
     diff = diff_against_fixture(before, workdir) if before else {}
-    findings = apply_regex_checks(files, all_replies, case["checks"])
+    findings = turn_findings + apply_regex_checks(files, all_replies, case["checks"])
+    findings += apply_regex_checks({}, log + all_replies, {
+        "reply_forbidden_regex": case["checks"].get("transcript_forbidden_regex", [])})
     findings += apply_conversation_checks(replies, case["checks"])
     if before:
         findings += apply_scope_checks(diff, case["checks"])
@@ -687,6 +733,10 @@ def run_one(case: dict, tool: str, arm: str, rep: int, args) -> dict:
         "security_notes_expected": (sum(c["security_note_count"] for c in contracts)
                                     if contracts else None),
         "turn_exit_codes": turn_codes, "complete": complete,
+        "turn_states": turn_states,
+        "baseline_sha256": (hashlib.sha256(BASELINE.read_bytes()).hexdigest()
+                            if arm == "baseline" else None),
+        "semantic_checks_skipped": len(judge_questions) if args.no_judge else 0,
         "seconds": round(time.time() - started, 1),
         "files_written": len(files), "diff": diff, "workdir": str(workdir),
         "regex": findings, "judge": verdicts,
@@ -782,9 +832,15 @@ def write_report(runs: list[dict], agg: dict, outdir: Path, args) -> Path:
              f"- Judge: {'off' if args.no_judge else (args.judge_model or 'claude default')}",
              ""]
     if args.repeats < 3:
-        lines += ["> **Not evidence.** Fewer than three repeats per arm cannot "
-                  "separate a difference from model variance. Read this as a "
-                  "check that the machinery ran, not as a result.", ""]
+        lines += ["> **Screening only.** A single run can flag a defect, but "
+                  "few repeats cannot separate an effect from model variance. "
+                  "This is not a reliable efficacy comparison.", ""]
+    if getattr(args, "arms", "control,baseline") != "control,baseline":
+        lines += ["> Selected arms: " + args.arms +
+                  ". Without both arms this does not measure baseline effect.", ""]
+    if args.no_judge:
+        lines += ["> Semantic checks were skipped, not passed. File checks and "
+                  "executable checks do not establish all conversational behavior.", ""]
     probes = getattr(args, "probes", None)
     if probes:
         lines += ["Preflight: what each arm reported carrying when asked "

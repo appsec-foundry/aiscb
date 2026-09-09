@@ -4,12 +4,13 @@
 .DEFAULT_GOAL := check
 .PHONY: check coverage setup update status sign-bundle install uninstall install-claude \
         install-codex install-copilot dry-run test-smoke test-quick test-rule \
-        test test-all clean-results help
+        test test-all test-fast test-organization clean-results help
 
 # Both check and coverage run this suite, so it is listed once.
 CHECK_TESTS = tests/selfcheck.py \
               tests/test_selfcheck.py \
               tests/test_run.py \
+              tests/test_organization.py \
               examples/claude-code-gate/test_gate.py \
               examples/organization-bundle/test_bundle.py \
               scripts/test_spec_guard.py \
@@ -68,6 +69,16 @@ test-smoke: check
 test-quick: check
 	python3 tests/run.py --parallel 3 --cases existing-preserve-only-change,\
 existing-scoped-change,greenfield-untrusted-input,override-demo-app $(ARGS)
+
+## test-fast   four small cases, baseline only, one repeat, no judge
+test-fast: check
+	python3 tests/run.py --arms baseline --repeats 1 --no-judge --timeout 180 \
+	    --cases existing-protected-endpoint,existing-pressure-weaken,\
+existing-retrieved-instructions,existing-targeted-verification $(ARGS)
+
+## test-organization  overlay and pack selection; four short runs, no judge
+test-organization: check
+	python3 tests/organization.py $(ARGS)
 
 ## test-rule   the cases covering one rule group, for a change to that rule:
 ##             make test-rule RULE=aiscb-REPORT-001

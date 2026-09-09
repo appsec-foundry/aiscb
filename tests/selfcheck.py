@@ -50,17 +50,17 @@ README_VERIFY_ID = re.compile(r"answer should include `([^`]+)`")
 README_CURRENT_ID = re.compile(r"^- `([^`]+)`: this baseline\.$", re.MULTILINE)
 
 REGEX_KEYS = ["forbidden_regex", "required_regex",
-              "reply_forbidden_regex", "reply_required_regex"]
+              "reply_forbidden_regex", "reply_required_regex", "transcript_forbidden_regex"]
 KNOWN_KEYS = set(REGEX_KEYS) | {
     "mode", "why", "turns", "requirements", "reads_inverted", "scope_note",
     "verify_note", "note_on_the_key", "note_on_the_package", "judge", "must_modify",
-    "must_not_modify", "verify", "fixture_precondition", "conversation",
+    "must_not_modify", "verify", "fixture_precondition", "conversation", "oracle",
 }
 MODES = {"greenfield", "existing"}
 TARGETS = {"code", "reply"}
 CONVERSATION_KEYS = {
     "turn", "reaction", "security_note_count", "required_regex",
-    "forbidden_regex", "judge",
+    "forbidden_regex", "judge", "must_not_change",
 }
 
 problems: list[str] = []
@@ -463,6 +463,11 @@ def check_case(d: Path, baseline_ids: set[str]) -> None:
 
         if not isinstance(contract.get("reaction"), str) or not contract["reaction"].strip():
             fail(name, f"{where} needs a non-empty reaction")
+        if "must_not_change" in contract:
+            paths = contract["must_not_change"]
+            if (not isinstance(paths, list) or not paths
+                    or not all(isinstance(p, str) and p for p in paths)):
+                fail(name, f"{where} must_not_change needs a non-empty list of globs")
         note_count = contract.get("security_note_count")
         if (not isinstance(note_count, int) or isinstance(note_count, bool)
                 or note_count < 0):
@@ -545,6 +550,12 @@ def check_case(d: Path, baseline_ids: set[str]) -> None:
                 notes.append(f"{name}: must_modify names {path!r}, "
                              f"which the fixture does not contain yet")
 
+    if "oracle" in checks:
+        oracle = checks["oracle"]
+        if (not isinstance(oracle, str) or not re.fullmatch(r"[a-z][a-z-]*", oracle)
+                or not (ROOT / "tests" / "oracles" / f"{oracle}.cjs").is_file()):
+            fail(name, "oracle must name an existing harness-owned checker")
+
     for key in ("verify", "fixture_precondition"):
         command = checks.get(key)
         if command is None:
@@ -562,7 +573,8 @@ def check_case(d: Path, baseline_ids: set[str]) -> None:
 
     has_check = (bool(judge) or any(checks.get(k) for k in REGEX_KEYS)
                  or any(checks.get(k) for k in ("must_modify", "must_not_modify"))
-                 or bool(checks.get("verify")) or bool(conversation))
+                 or bool(checks.get("verify")) or bool(checks.get("oracle"))
+                 or bool(conversation))
     if not has_check:
         fail(name, "no checks at all")
 
