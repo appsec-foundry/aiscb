@@ -27,6 +27,8 @@ Build one release containing the unchanged baseline, overlay, catalog, packs, bl
 
 Choose the supported operating systems and installation paths before generating adapters. Use a stable managed path per platform, or generate and verify the adapters for each target location. Do not ship absolute paths containing the build machine's username. The example takes `--install-root` at build time and requires that same path at installation.
 
+Validate structured content (YAML or JSON blueprints and the catalog) during the build with a maintained safe parser and a versioned schema: check nested fields, types, allowed values, and cross-field constraints, not just top-level keys. Reject duplicate keys, unknown fields, incompatible schema versions, custom object construction, and excessive nesting or alias expansion. Keep schemas in the verified release; do not resolve schema URLs from a document. See the [YAML specification](https://yaml.org/spec/1.2.2/) for its data model.
+
 Publish the immutable release to the internal artifact or package service your organization already uses. Include an inventory of installed paths so updates and uninstall leave unrelated configuration alone. Authenticate the installer before executing it; its later checks cannot authenticate itself.
 
 ## Distribute and connect it
