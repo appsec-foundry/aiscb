@@ -87,7 +87,7 @@ See [`specs/requirements.md`](specs/requirements.md) for detailed applicability,
 
 ## Using it
 
-The guided installer covers project-level and user-level installation and updates. The manual instructions below are for existing instruction files, custom layouts, and organization-wide setup. Keep `secure-coding-baseline.md` as the single source: import or symlink it where possible, and copy it only when necessary.
+The guided installer covers project-level and user-level installation and updates; the next three sections describe its entry points. The tool sections after them are for manual setup with existing instruction files or custom layouts, and [Organization-wide](#organization-wide) covers rollout across an organization. Keep `secure-coding-baseline.md` as the single source: import or symlink it where possible, and copy it only when necessary.
 
 ### Remote setup (no checkout)
 
@@ -109,6 +109,8 @@ The update is refused when the installed copy cannot verify the release, for exa
 
 ### From a repository clone
 
+The `make` targets wrap the installer; `./setup.sh` runs the same guided setup without `make`:
+
 ```bash
 ./setup.sh                             # guided setup and updates, without make
 make setup                             # guided setup and updates
@@ -121,15 +123,15 @@ make uninstall                         # remove what the installer placed here
 make help                              # list available commands
 ```
 
-`install-codex` and `install-copilot` work like `install-claude`. In a project, the installer supports Claude Code, Codex, and GitHub Copilot. At user level, it supports Claude Code, Codex, and Copilot CLI.
+`install-codex` and `install-copilot` work like `install-claude`. In a project, the installer supports Claude Code, Codex, and GitHub Copilot; at user level, Claude Code, Codex, and Copilot CLI.
 
-The installer keeps existing instruction files and unrelated symlinks. Uninstall removes only the links, import lines, hook entries, and managed files that the installer placed. Anything else is reported and left alone. Replacing a locally edited managed baseline requires confirmation and creates a backup.
+The installer keeps existing instruction files, and uninstall removes only what the installer placed. Replacing a locally edited managed baseline requires confirmation and creates a backup.
 
-Optional session-start hooks show the active `baseline-id` and load the managed baseline. Setup merges them into valid hook settings, leaves ambiguous settings unchanged, and lets you skip hooks. Codex skips a new or changed hook until you review and trust it with `/hooks`; it prints a warning at startup while a hook awaits review.
+Optional session-start hooks show the active `baseline-id` and load the managed baseline; setup lets you skip them. Codex runs a new or changed hook only after you trust it with `/hooks` and warns at startup until then.
 
-Release checks are off by default. If you enable them, a separate background process contacts `api.github.com` at most once a day and never delays a session. The hook itself makes no request. `ARGS=--offline` skips the check during setup and status.
+Release checks are off by default. If you enable them, a background process contacts `api.github.com` at most once a day; `ARGS=--offline` skips the check during setup and status.
 
-From a checkout, the installer installs the latest published release when it can reach it and otherwise the checkout copy. Remote setup and installed user copies stay on their verified bundle until `--update` applies a signed release or the current Quick start is run again.
+From a checkout, the installer installs the latest published release when it can reach it and otherwise the checkout copy.
 
 ### Claude Code
 
@@ -217,6 +219,12 @@ Before making any code changes, read `secure-coding-baseline.md` in this reposit
 
 This is a reference, not an automatic import.
 
+### Organization-wide
+
+The tool sections above name each tool's managed instruction location: a managed-policy `CLAUDE.md` for Claude Code, organization custom instructions for Copilot on GitHub.com, and the Codex admin setup. Each puts the baseline in front of every developer of one tool.
+
+To deliver the baseline centrally for all tools, or to add organization rules without editing it, see [adapting aiscb inside an organization](docs/adapting-in-an-organization.md). It describes three deliveries: an LLM gateway that appends the baseline and organization rules to every request, a versioned local bundle installed on machines or checked into repositories, and gateway injection with policy loaded over HTTPS on demand. The [organization bundle example](examples/organization-bundle/) implements the bundle build and a LiteLLM gateway hook.
+
 ### Verify it loaded
 
 Ask the tool `baseline?`. The answer should include `aiscb-0.1.14` and the file it came from. This confirms that the assistant can see the baseline, not that it will always follow it.
@@ -245,7 +253,6 @@ Research on AI-assisted coding finds that security expectations work best when t
 - The [OWASP Top 10:2025](https://owasp.org/Top10/2025/), [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/), and [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) give background on the risks the rules cover.
 - The OWASP [Secure Coding with AI Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html) and the OpenSSF [Security-Focused Guide for AI Code Assistant Instructions](https://best.openssf.org/Security-Focused-Guide-for-AI-Code-Assistant-Instructions) give further guidance and are useful for comparison.
 - The optional [Claude Code gate](examples/claude-code-gate/) blocks a small set of unsafe code patterns. Issues that need context, such as missing authorization, still belong in review or CI.
-- The [organization bundle example](examples/organization-bundle/) shows an overlay, a pack, a blueprint, a verified release build and installer, and a LiteLLM gateway hook, as described in [Adapting the baseline in an organization](docs/adapting-in-an-organization.md).
 - The [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) Claude Code plugin covers broader application-security work and can manage aiscb installations.
 
 These resources are background. They do not certify aiscb, and aiscb does not claim to cover them completely. Check time-sensitive advice against current sources.
