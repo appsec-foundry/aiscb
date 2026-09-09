@@ -93,6 +93,9 @@ files with the manifest and signature, create the bundle tag on that commit,
 then change `setup.sh` to the new tag and hashes. A documentation-only commit
 does not need a new bundle, and the release tag may point at one as long as its
 tree carries the signed manifest for the bundled files it contains.
+[`docs/releasing.md`](docs/releasing.md) spells the sequence out with its
+commands, the key setup, and the rotation; signing needs the maintainer's key,
+so an assistant prepares a release up to that step and reports it.
 
 Every published baseline release must update the complete Quick start command
 block in `README.md`, even though its command structure stays the same. It must

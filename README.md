@@ -258,6 +258,8 @@ These resources are background, not claims of certification, conformance, or com
 
 Run `make check` after changing the baseline, specifications, test metadata, or harness. It takes seconds and makes no model calls. Model runs can take hours, so start with `make test-smoke` to see that the harness works, and run only the cases a change affects — `make test-rule RULE=<rule group>` — unless a full matrix is specifically needed. See [tests/README.md](tests/README.md) for commands, cases, and scoring.
 
+Publishing a release, from signing the bundle to the Quick start block, is described in [docs/releasing.md](docs/releasing.md).
+
 ## License
 
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). You may use, share, and adapt the material with attribution. See [LICENSE](LICENSE).
