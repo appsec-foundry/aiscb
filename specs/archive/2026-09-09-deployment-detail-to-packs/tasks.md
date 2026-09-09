@@ -12,4 +12,4 @@
       checks in `scripts/test_install.py`, which fail until the maintainer
       re-signs the bundle for the changed baseline and pins it in `setup.sh`.
 - [x] Run the affected model cases, or note why not. Not run: no check keys on the moved sentences, and the retained core is what the TLS and first-credential cases grade.
-- [ ] Archive this directory.
+- [x] Archive this directory.

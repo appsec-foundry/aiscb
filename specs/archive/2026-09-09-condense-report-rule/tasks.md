@@ -10,4 +10,4 @@
       checks in `scripts/test_install.py`, which fail until the maintainer
       re-signs the bundle for the changed baseline and pins it in `setup.sh`.
 - [x] Run the affected model cases, or note why not. Not run: the wording change keeps every graded behavior; a rerun would measure run-to-run variance, not the change.
-- [ ] Archive this directory.
+- [x] Archive this directory.
