@@ -149,6 +149,15 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a catalog requirement the pack does not define is refused",
           fails_build(broken, work, "does not define ACME-IAM-AUDIT-001") is None)
 
+    organization = copy_source(work, "src-organization")
+    edit(organization / "catalog.json", '{"narrows": ["aiscb-ERRORS-001"]}', '{"organization": true}')
+    try:
+        build.build(organization, AISCB, work / "out-organization", root)
+        organization_built = True
+    except build.BuildError:
+        organization_built = False
+    check("a requirement marked as organization-only builds", organization_built)
+
     try:
         build.build(HERE, AISCB, work / "out-digest", root, "0" * 64)
         digest_refused = False

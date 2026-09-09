@@ -31,7 +31,7 @@ RULES: tuple[Rule, ...] = (
             | NODE_TLS_REJECT_UNAUTHORIZED \s* [=:] \s* ["']? 0 \b
             | ssl \s* \. \s* _create_unverified_context
             | CURLOPT_SSL_VERIFYPEER \s* , \s* (?: 0 | false )
-            | \b curl \b [^\n]* \s (?: -k | --insecure ) \b
+            | \b curl \b [^\n]* \s (?: -[A-Za-z]*k | --insecure ) \b
             """
         ),
         guidance=(
@@ -47,8 +47,9 @@ RULES: tuple[Rule, ...] = (
               \b (?: DISABLE | SKIP | BYPASS | NO ) _
                 (?: AUTH | AUTHZ | AUTHENTICATION | AUTHORIZATION
                   | CSRF | XSRF | SECURITY | LOGIN | PERMISSION S? ) \b
-            | \b (?: AUTH | AUTHENTICATION | AUTHORIZATION | CSRF | XSRF | SECURITY )
-                _ (?: ENABLED | REQUIRED | CHECK S? ) \s* [=:] \s* ["']? (?: false | 0 ) \b
+            | \b (?: [A-Z0-9]+ _ )*
+                (?: AUTH | AUTHENTICATION | AUTHORIZATION | CSRF | XSRF | SECURITY )
+                _ (?: ENABLED | REQUIRED | CHECK S? ) ["']? \s* \]? \s* [=:] \s* ["']? (?: false | 0 ) \b
             """,
             ignore_case=True,
         ),

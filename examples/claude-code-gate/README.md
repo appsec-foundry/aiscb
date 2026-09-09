@@ -13,8 +13,8 @@ surrounding application.
 
 | Baseline rule | Blocked edit |
 | --- | --- |
-| `aiscb-PRESERVE-001` | Disabling TLS certificate verification, for example `verify=False` or `curl -k` |
-| `aiscb-PRESERVE-001` | Adding a switch that disables authentication, authorization, or CSRF protection |
+| [`aiscb-PRESERVE-001`](../../secure-coding-baseline.md#non-negotiable) | Disabling TLS certificate verification, for example `verify=False`, `rejectUnauthorized: false`, or `curl -k` |
+| [`aiscb-PRESERVE-001`](../../secure-coding-baseline.md#non-negotiable) | Adding a switch that disables authentication, authorization, or CSRF protection, for example `SKIP_AUTH` or `WTF_CSRF_ENABLED = False` |
 
 Only text added through Claude Code's `Write`, `Edit`, and `NotebookEdit` tools
 is checked. The example directory itself is excluded so its patterns and tests
@@ -36,7 +36,10 @@ rule ID.
 ## Limits
 
 The gate uses regular expressions and deliberately covers only these two
-constructs. File changes made through `Bash`, changes to the gate itself, and
+constructs, in the spellings listed in `rules.py`. It matches text, not
+meaning: a comment or test that quotes `verify=False` is blocked, while a
+configuration key the rules do not list, such as `verify: false` in YAML,
+passes. File changes made through `Bash`, changes to the gate itself, and
 existing code are outside its scope. Malformed hook input is blocked, but
 Claude Code treats a hook that cannot start or times out as non-blocking; test
 the installation after changing it. Use review, tests, SAST, dependency and

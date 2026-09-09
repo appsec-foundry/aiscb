@@ -66,9 +66,19 @@ SAMPLES: tuple[tuple[str, str, str], ...] = (
         "curl --cacert company-ca.pem https://example.com",
     ),
     (
+        "TLS certificate verification",
+        "curl -sSk https://example.com",
+        "curl -sS https://example.com",
+    ),
+    (
         "off switch",
         'SKIP_AUTH = os.environ.get("SKIP_AUTH") == "1"',
         "AUTH_ENABLED = True",
+    ),
+    (
+        "off switch",
+        "app.config['WTF_CSRF_ENABLED'] = False",
+        "app.config['WTF_CSRF_ENABLED'] = True",
     ),
     (
         "off switch",

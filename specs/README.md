@@ -95,8 +95,10 @@ It fails on:
 
 It also runs `examples/claude-code-gate/test_gate.py`, which keeps the example
 gate honest: every rule denies its sample and allows an ordinary one, and every
-rule id it cites still names a rule group in the baseline. The example is not
-normative and nothing else depends on it.
+rule id it cites still names a rule group in the baseline. It also runs
+`examples/organization-bundle/test_bundle.py`, which builds the bundle example
+against the current baseline and fails when its overlay names another aiscb
+release. Neither example is normative and nothing else depends on them.
 
 It also runs `scripts/test_spec_guard.py`, which holds the spec guard to its
 contract and verifies its project registration: an identifiable write that

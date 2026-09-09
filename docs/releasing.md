@@ -75,7 +75,10 @@ bundle files invalidates the signature and the hashes from the steps after it.
 Replace the previous version number in:
 
 - `README.md`: the `baseline?` example answer and the ID examples
-- `docs/adapting-in-an-organization.md`: the derived-ID example
+- `docs/adapting-in-an-organization.md`: the derived-ID example and the
+  `Extends aiscb` line in the overlay block
+- `examples/organization-bundle/overlay.md`: the `Extends aiscb` line;
+  `make check` fails until it names the new release
 - `scripts/test_show_baseline_version.py`: `VALID_ID` and the invalid-UTF-8
   test case
 - `scripts/test_install.py`: the "Switch to a managed copy of ..." question

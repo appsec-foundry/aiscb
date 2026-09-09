@@ -19,7 +19,7 @@ implement.
 | File | Role |
 | --- | --- |
 | `overlay.md` | The organization's always-loaded rules; imports aiscb, names its own ID |
-| `catalog.json` | One entry per pack: trigger, owner, source, blueprints, mapping to aiscb rules |
+| `catalog.json` | One entry per pack: trigger, owner, source, blueprints, and per requirement either `{"narrows": [...]}` naming aiscb rules or `{"organization": true}` |
 | `packs/authentication.md` | Rules loaded only for authentication work |
 | `blueprints/spa/1.0.0.json` | Approved values the pack refers to, versioned in the path |
 | `build.py` | Validates the sources and writes one release with `manifest.json` |
@@ -124,6 +124,9 @@ absolute paths so references resolve in any fresh checkout; copying only
   managed settings, import lines, or skill links are the deployment job's
   work, as described under
   [Adapters per tool](../../docs/rollout-paths/local-bundle.md#adapters-per-tool).
+- Windows. The installer switches `current` with a symlink and is tested on
+  Linux and macOS only; a Windows rollout needs its own switch mechanism and
+  tests.
 - Staleness policy for offline machines and a session-aware switch for tools
   that pick up skill changes live; both are decisions, not code.
 - A gateway-only remote adapter. The generated `system-block.md` still refers
