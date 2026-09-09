@@ -219,9 +219,9 @@ This is a reference, not an automatic import.
 
 ### Verify it loaded
 
-Ask the tool `baseline?`. The answer should include `aiscb-0.1.13` and the file it came from. This confirms that the assistant can see the baseline, not that it was loaded before the question or will always be followed.
+Ask the tool `baseline?`. The answer should include `aiscb-0.1.14` and the file it came from. This confirms that the assistant can see the baseline, not that it was loaded before the question or will always be followed.
 
-- `aiscb-0.1.13`: this baseline.
+- `aiscb-0.1.14`: this baseline.
 
 The assistant reports every loaded ID. Claude Code users can also inspect loaded files with `/context` or `/memory`.
 
@@ -231,7 +231,7 @@ The license allows organizations to derive their own baseline with internal secu
 
 Add stack-specific details such as approved libraries or framework patterns. Keep existing rule-group IDs so individual rules remain traceable, but give the derived baseline its own ID using [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html):
 
-- `aiscb-0.1.13+acme`: a version derived from aiscb.
+- `aiscb-0.1.14+acme`: a version derived from aiscb.
 - `acme-sec-1.0.0`: an independent baseline.
 
 To leave the baseline file unchanged and put your rules in a second one beside it, see [adapting aiscb inside an organization](docs/adapting-in-an-organization.md).

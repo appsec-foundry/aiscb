@@ -10,6 +10,7 @@
 - [x] Run the affected model cases. Not run: the change alters only the
       heading text the harness matches, not the behavior the cases grade, and
       the user deferred the release these runs would accompany.
-- [ ] Sign the bundle, tag it, pin it in `setup.sh`, and update the Quick
-      start (release; deferred by the user).
-- [ ] Archive this directory.
+- [x] Sign the bundle, tag it, pin it in `setup.sh`, and update the Quick
+      start. Superseded: `aiscb-0.1.13` was never published; its content
+      ships with the `aiscb-0.1.14` release.
+- [x] Archive this directory.

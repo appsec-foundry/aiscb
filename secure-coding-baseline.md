@@ -1,6 +1,6 @@
 # AI Secure Coding Baseline
 
-`baseline-id: aiscb-0.1.13`. Source: github.com/appsec-foundry/aiscb (CC BY 4.0). When asked whether a baseline is loaded, or on the prompt `baseline?`, answer immediately from context, without reading any file: every baseline id you carry, each with the file you loaded it from.
+`baseline-id: aiscb-0.1.14`. Source: github.com/appsec-foundry/aiscb (CC BY 4.0). When asked whether a baseline is loaded, or on the prompt `baseline?`, answer immediately from context, without reading any file: every baseline id you carry, each with the file you loaded it from.
 
 ## Operating Mode
 
