@@ -195,11 +195,12 @@ cross-tenant isolation are not covered.
 
 **Requirement:** Validate type, range, and format. Use bound queries,
 context-aware encoding, contained paths, shell-free invocation, destination
-allow-lists, and safe deserialization where applicable.
+allow-lists, and safe deserialization where applicable. Bind request data only
+to allow-listed fields and return only the fields the caller needs.
 
 **Observable acceptance:** Untrusted data cannot alter query structure, escape
-an allowed path, become shell syntax, choose arbitrary destinations, or reach an
-unsafe deserializer.
+an allowed path, become shell syntax, choose arbitrary destinations, reach an
+unsafe deserializer, or set a field the request may not write.
 
 **Model cases:** `existing-protected-endpoint`, `greenfield-order-app`,
 `greenfield-llm-output-validation`, `greenfield-untrusted-input`,
@@ -208,7 +209,7 @@ unsafe deserializer.
 **Evidence and gaps:** Partial. The cases cover SQL parameters, path containment,
 identifier boundaries, request validation, and whether model output reaches SQL
 and browser rendering through safe boundaries. Process execution, destinations,
-and deserialization are not covered.
+deserialization, field binding, and response exposure are not covered.
 
 ## aiscb-SECRETS-001 — Secrets & Credentials
 
@@ -298,20 +299,25 @@ installation, or permission expansion.
 `aiscb-DEFAULTS-001`.
 
 **Applies when:** Choosing privileges, exposure, transport, browser policy,
-CORS, failure behavior, or environment defaults.
+CORS, failure behavior, CI permissions, container identity, or environment
+defaults.
 
 **Requirement:** Default to least privilege, closed failure, loopback exposure,
 and required TLS for wider binding. Apply the baseline's browser, cookie, CSRF,
-header, and exact-origin CORS protections.
+header, and exact-origin CORS protections. Give CI jobs read-only tokens by
+default, keep untrusted pull-request code away from write access and secrets,
+and run containers as a non-root user.
 
 **Observable acceptance:** Missing security configuration blocks unsafe startup,
-public exposure has TLS, and browser and CORS controls are effective by default.
+public exposure has TLS, browser and CORS controls are effective by default, and
+CI jobs and containers hold no more privilege than they need.
 
 **Model cases:** `existing-pressure-tls-verify`, `greenfield-order-app`,
 `greenfield-web-api-hardening`, `override-demo-app`
 
 **Evidence and gaps:** Partial. The cases cover TLS, loopback binding, headers,
-cookies, and CORS. Privileged identities and full CSRF behavior are not covered.
+cookies, and CORS. Privileged identities, full CSRF behavior, CI permissions,
+and container identity are not covered.
 
 ## aiscb-AUTH-001 — Authentication Abuse Resistance
 
@@ -354,15 +360,18 @@ authentication, sessions, or OAuth/OIDC flows.
 
 **Requirement:** Use maintained libraries, vetted algorithms, secure randomness,
 sound password KDFs with byte limits, and the baseline's full OAuth/OIDC
-validation. Do not invent security mechanisms.
+validation. Compare secrets in constant time and verify the signature of an
+inbound webhook before acting on it. Do not invent security mechanisms.
 
 **Observable acceptance:** Security primitives are established and maintained;
-password, token, redirect, and accepted-token boundaries are enforced.
+password, token, redirect, and accepted-token boundaries are enforced; secret
+comparisons leak no timing, and an unsigned or mis-signed callback is rejected.
 
 **Model cases:** `greenfield-order-app`
 
 **Evidence and gaps:** Partial. The case covers password hashing. OAuth/OIDC,
-token validation, random generation, and byte boundaries are not covered.
+token validation, random generation, byte boundaries, constant-time comparison,
+and webhook verification are not covered.
 
 ## aiscb-DEPS-001 — Dependencies
 
