@@ -69,9 +69,9 @@ The rules name mechanisms an assistant can apply. "Authorize on the server" is a
 
 ### Apply where relevant
 
-- **Secure defaults** (`aiscb-DEFAULTS-001`): Use least privilege, deny by default, and fail closed when security context is missing or ambiguous. Use TLS outside localhost and appropriate cookie, browser-header, and CSRF protections for web applications, with an exact origin allow-list for CORS. Give CI jobs read-only tokens and run containers as non-root by default.
+- **Secure defaults** (`aiscb-DEFAULTS-001`): Use least privilege, deny by default, and fail closed when security context is missing or ambiguous. Use TLS outside localhost; for web applications use `__Host-` cookies, a nonce- or hash-based CSP, cross-origin isolation headers, `no-store` on authenticated responses, and CSRF protection, with an exact origin allow-list for CORS. Give CI jobs read-only tokens and run containers as non-root by default.
 - **Authentication abuse resistance** (`aiscb-AUTH-001`): Rate-limit login, reset, verification, and similar flows by both account and client source using shared state; avoid account enumeration; keep verification secrets out of responses and logs; and manage session rotation, invalidation, and expiry on the server.
-- **Proven mechanisms** (`aiscb-MECHANISMS-001`): Use maintained libraries and vetted algorithms for cryptography, authentication, and sessions rather than creating custom security mechanisms; compare secrets in constant time and verify inbound webhook signatures.
+- **Proven mechanisms** (`aiscb-MECHANISMS-001`): Use maintained libraries and vetted algorithms for cryptography, authentication, and sessions rather than creating custom security mechanisms; follow OAuth 2.1 (authorization code with PKCE, no password grant, tokens only in the `Authorization` header and never in browser storage); compare secrets in constant time and verify inbound webhook signatures.
 - **Dependencies** (`aiscb-DEPS-001`): Verify a dependency's exact identity, version, source, and known vulnerabilities before adding or updating it. Pin executable external references such as CI actions and container images.
 - **Errors and logging** (`aiscb-ERRORS-001`): Keep stack traces, internal details, and raw exceptions out of responses, and keep credentials, tokens, and personal data out of logs.
 - **Resource limits** (`aiscb-LIMITS-001`): Bound input-driven work with request size, pagination, and time limits.
@@ -252,7 +252,7 @@ These resources are background, not claims of certification, conformance, or com
 
 ## Development
 
-`secure-coding-baseline.md` is the normative product. At 18.9 KB, or 3,872 tokens, it stays within its approximate 4,100-token budget. It has been shaped through practical AI-assisted coding tasks but has not undergone formal certification.
+`secure-coding-baseline.md` is the normative product. At 19.9 KB, or 4,003 tokens, it stays within its approximate 4,100-token budget. It has been shaped through practical AI-assisted coding tasks but has not undergone formal certification.
 
 [`specs/requirements.md`](specs/requirements.md) explains the rule groups and their test coverage. Behavior changes need a proposal, sourced requirements, and a task list under [`specs/changes/`](specs/changes/); editorial and repository-only changes do not. See [`specs/README.md`](specs/README.md) for the workflow.
 

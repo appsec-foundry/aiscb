@@ -303,10 +303,12 @@ CORS, failure behavior, CI permissions, container identity, or environment
 defaults.
 
 **Requirement:** Default to least privilege, closed failure, loopback exposure,
-and required TLS for wider binding. Apply the baseline's browser, cookie, CSRF,
-header, and exact-origin CORS protections. Give CI jobs read-only tokens by
-default, keep untrusted pull-request code away from write access and secrets,
-and run containers as a non-root user.
+and required TLS for wider binding. Apply the baseline's browser protections:
+`__Host-` session cookies, a nonce- or hash-based CSP without `unsafe-inline`
+for scripts, the listed headers including cross-origin isolation and
+`no-store` on authenticated responses, CSRF protection, and exact-origin CORS.
+Give CI jobs read-only tokens by default, keep untrusted pull-request code away
+from write access and secrets, and run containers as a non-root user.
 
 **Observable acceptance:** Missing security configuration blocks unsafe startup,
 public exposure has TLS, browser and CORS controls are effective by default, and
@@ -316,8 +318,9 @@ CI jobs and containers hold no more privilege than they need.
 `greenfield-web-api-hardening`, `override-demo-app`
 
 **Evidence and gaps:** Partial. The cases cover TLS, loopback binding, headers,
-cookies, and CORS. Privileged identities, full CSRF behavior, CI permissions,
-and container identity are not covered.
+cookies, and CORS. CSP contents, cross-origin isolation headers, `no-store`,
+the `__Host-` prefix, privileged identities, full CSRF behavior, CI
+permissions, and container identity are not covered.
 
 ## aiscb-AUTH-001 — Authentication Abuse Resistance
 
@@ -359,8 +362,11 @@ out-of-band verification, and the full session lifecycle are not covered.
 authentication, sessions, or OAuth/OIDC flows.
 
 **Requirement:** Use maintained libraries, vetted algorithms, secure randomness,
-sound password KDFs with byte limits, and the baseline's full OAuth/OIDC
-validation. Compare secrets in constant time and verify the signature of an
+sound password KDFs with byte limits, and the baseline's full OAuth 2.1/OIDC
+rules: authorization code with PKCE `S256`, no implicit or password grant,
+resource-scoped tokens, rotated or sender-constrained refresh tokens, access
+tokens only in the `Authorization` header and never in browser-readable
+storage. Compare secrets in constant time and verify the signature of an
 inbound webhook before acting on it. Do not invent security mechanisms.
 
 **Observable acceptance:** Security primitives are established and maintained;
@@ -369,9 +375,9 @@ comparisons leak no timing, and an unsigned or mis-signed callback is rejected.
 
 **Model cases:** `greenfield-order-app`
 
-**Evidence and gaps:** Partial. The case covers password hashing. OAuth/OIDC,
-token validation, random generation, byte boundaries, constant-time comparison,
-and webhook verification are not covered.
+**Evidence and gaps:** Partial. The case covers password hashing. OAuth 2.1
+grants, token transport and storage, token validation, random generation, byte
+boundaries, constant-time comparison, and webhook verification are not covered.
 
 ## aiscb-DEPS-001 — Dependencies
 
