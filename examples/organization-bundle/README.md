@@ -21,6 +21,7 @@ implement.
 | `overlay.md` | The organization's always-loaded rules; imports aiscb, names its own ID |
 | `catalog.json` | One entry per pack: trigger, owner, source, blueprints, and per requirement either `{"narrows": [...]}` naming aiscb rules or `{"organization": true}` |
 | `packs/authentication.md` | Rules loaded only for authentication work |
+| `packs/deployment.md` | Rules loaded only for exposure, proxy, container, and first-start work; carries the deployment detail aiscb itself leaves to organizations |
 | `blueprints/spa/1.0.0.json` | Approved values the pack refers to, versioned in the path |
 | `build.py` | Validates the sources and writes one release with `manifest.json` |
 | `install.py` | Installs a release, switches `current`, rolls back, reports drift, uninstalls |
@@ -73,14 +74,18 @@ acme-sec-1.0.0/
 ├── overlay.md
 ├── catalog.json
 ├── packs/authentication.md
+├── packs/deployment.md
 ├── blueprints/spa/1.0.0.json
 └── adapters/
     ├── claude-code/CLAUDE.md          import line pointing at the versioned aiscb file, then the overlay
     ├── claude-code/skills/acme-authentication/SKILL.md
+    ├── claude-code/skills/acme-deployment/SKILL.md
     ├── codex/AGENTS.md                aiscb followed by the overlay, marker removed
     ├── codex/skills/acme-authentication/SKILL.md
+    ├── codex/skills/acme-deployment/SKILL.md
     ├── copilot/copilot-instructions.md
     ├── copilot/skills/acme-authentication/SKILL.md
+    ├── copilot/skills/acme-deployment/SKILL.md
     └── gateway/system-block.md        the text the gateway appends
 ```
 

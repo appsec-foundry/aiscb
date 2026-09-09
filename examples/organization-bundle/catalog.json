@@ -12,6 +12,19 @@
         "ACME-SSO-001": {"narrows": ["aiscb-MECHANISMS-001", "aiscb-AUTH-001"]},
         "ACME-IAM-AUDIT-001": {"narrows": ["aiscb-ERRORS-001"]}
       }
+    },
+    {
+      "id": "acme-deployment",
+      "file": "packs/deployment.md",
+      "owner": "Platform Engineering",
+      "source": "policy/OPS-3",
+      "trigger": "Exposure, TLS termination, reverse proxies, containers, or first-start setup",
+      "paths": ["**/deploy/**", "**/Dockerfile", "**/compose*.y*ml"],
+      "blueprints": [],
+      "requirements": {
+        "ACME-EXPOSE-001": {"narrows": ["aiscb-DEFAULTS-001"]},
+        "ACME-BOOTSTRAP-001": {"narrows": ["aiscb-SECRETS-001"]}
+      }
     }
   ]
 }

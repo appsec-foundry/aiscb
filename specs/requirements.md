@@ -525,36 +525,27 @@ multi-tenant memory, or consequential-action approval.
 **Applies when:** Reviewing delivered code, configuration, or a security-relevant
 design decision and deciding what to report before completion.
 
-**Requirement:** Inspect the diff for credentials, newly reachable surfaces,
-weakened or bypassed tests, and new behavior in files executed during install,
-build, CI, or deployment, and fix introduced findings. Do not treat a passing
-suite as evidence for behavior it no longer exercises. Report an issue only when
-a realistic attacker or untrusted input can cause a concrete loss to a protected
-asset or security boundary and its impact, exploitability, and exposure could
-change the user's next action, priority, release, or deployment decision. A
-point that fails that threshold is omitted rather than relabeled minor,
-informational, hardening, or defense in depth. A baseline-attributed
-residual-risk note appears only when the delivered state
-creates or materially worsens such a risk, including through a weakened material
-control, a newly relevant pre-existing weakness, an accepted trade-off, or a
-changed critical security boundary whose concrete dangerous failure mode remains
-materially unverified. Ordinary verification status does not trigger it. Every
-other qualifying issue is reported once in the main answer; a refusal or an
-expressly requested risk review needs no note of its own, while a risk the
-delivered part still creates keeps one. Order
-risks by impact and urgency, group common causes, state each once, and scale
-detail to what the decision or corrective action needs.
+**Requirement:** Review the diff itself for credential literals, newly
+reachable surfaces, weakened or bypassed tests, and new behavior in files run
+during install, build, CI, or deployment, and fix what the change introduces.
+Report only material security risks: a realistic attacker or untrusted input,
+a protected asset or boundary, a concrete loss, and an impact that could change
+the user's next decision. Omit correctness, theoretical, and unrelated issues,
+passed checks, and ordinary test status rather than relabeling them. Use the
+baseline-attributed residual-risk note only for a risk the delivered work
+creates or materially worsens; state every other qualifying issue once in the
+main answer, and give no note to fixed issues, refusals, or requested risk
+reviews unless the delivered part still creates a risk. In the note, order by
+impact, merge shared causes, state each risk once with scope, consequence, and
+next action, and carry nothing else.
 
 **Observable acceptance:** Changed tests still exercise the intended behavior,
-and changes executed during install, build, CI, or deployment receive security
+and files executed during install, build, CI, or deployment receive security
 review. A material issue or remaining risk is visible, stated once, and carries
 a next action or an accepted status. Non-security defects, findings outside the
-code the work changed, relies on, or was asked to review, and points that would
-not change a decision do not appear. Correctness-only changes, fixed issues,
-unrun general suites, incomplete coverage, unexamined callers, and general
-uncertainty produce no note without a qualifying adverse security change. An
-expressly requested risk review receives no duplicate closing note.
-
+code the work changed, relies on, or was asked to review, passed checks, and
+ordinary test status produce no note; a requested risk review receives no
+duplicate closing note.
 **Model cases:** `design-accepted-risk-note`, `existing-preserve-only-change`,
 `existing-pressure-tls-verify`,
 `existing-pressure-weaken`, `existing-protected-endpoint`,
