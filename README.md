@@ -8,15 +8,15 @@
 [![GitHub Copilot](https://img.shields.io/badge/GitHub%20Copilot-compatible-000000?logo=githubcopilot&logoColor=white)](https://github.com/features/copilot)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI%20Codex-compatible-412991?logo=openai&logoColor=white)](https://developers.openai.com/codex/)
 
-aiscb gives AI coding assistants a compact set of secure-coding rules to follow when they write or change code. Add it to a project's instructions once instead of repeating the same security expectations in every prompt.
+aiscb is a short set of secure-coding rules for AI coding assistants. Add it to a project's instructions once instead of repeating the same security expectations in every prompt.
 
 > **Scope and limits**
 >
-> aiscb is loaded as instructions for a coding agent. Its concrete security rules become part of the agent's working context, influencing how it plans, writes, changes, tests, and reviews code throughout a task. aiscb does not enforce policy or guarantee secure output: its effect depends on whether the agent loads the file and where the rules sit in the agent's instruction hierarchy. Keep project-specific instructions, reviews, tests, scanning, CI checks, and runtime controls in place. aiscb covers secrets, credentials, and log content; data-protection requirements for other sensitive data, such as storage, retention, or minimization, belong in project instructions.
+> aiscb is a set of instructions for a coding agent. The rules sit in the agent's context and shape how it plans, writes, tests, and reviews code during a task. aiscb does not enforce anything and does not guarantee secure output: its effect depends on whether the agent loads the file and how much weight the rules get next to other instructions. Keep project-specific instructions, reviews, tests, scanning, CI checks, and runtime controls in place. aiscb covers secrets, credentials, and log content. Data-protection requirements for other sensitive data, such as storage, retention, or minimization, belong in project instructions.
 
 ## Quick start
 
-The guided installer is the recommended way to install or update aiscb. Copy and run the complete command block. It downloads a pinned setup script, verifies it before execution, and installs a versioned, verified bundle while preserving existing instruction files:
+The guided installer is the recommended way to install or update aiscb. Copy and run the complete command block. It downloads a pinned setup script, checks its hash before running it, and installs a versioned, verified bundle. Existing instruction files are kept:
 
 ```bash
 curl --proto '=https' \
@@ -28,27 +28,27 @@ echo 'e2d5c889a561d91184b424722e198c5da13b7da7564e177cd1cbe6e2f0e35a2e  aiscb-se
 bash aiscb-setup.sh
 ```
 
-The installer lets you select the target environments and verifies each integration. Checkout-based and manual options are under [Using it](#using-it).
+The installer asks which tools to set up and verifies each one. Installing from a clone or by hand is described under [Using it](#using-it).
 
 ## Update
 
-The startup hook reports a newer release with a link to this section. A user-level install updates itself from a terminal, outside any agent session:
+If the optional startup hook is installed, it reports a newer release and links to this section. A user-level install is updated from a terminal, outside any agent session:
 
 ```bash
 python3 ~/.local/share/aiscb/install.py --update
 ```
 
-It verifies the release's signed bundle before anything runs and then starts the guided setup, which also offers the update to the registered projects; details are under [Later updates without a checkout](#later-updates-without-a-checkout). The new baseline takes effect in the next session. If the update is refused, or there is no user-level install, run the current [Quick start](#quick-start).
+The command verifies the release's signed bundle before anything runs, then starts the guided setup, which also offers the update to registered projects. Details are under [Later updates without a checkout](#later-updates-without-a-checkout). The new baseline takes effect in the next session. If the update is refused, or there is no user-level install, run the current [Quick start](#quick-start).
 
 ## Why this exists
 
-AI coding assistants know many security practices but do not apply them consistently, especially under pressure. Without shared rules, one change may preserve an existing control while the next bypasses it to make something work. aiscb keeps concrete expectations present across tools and sessions.
+AI coding assistants know many security practices but do not apply them consistently, especially under pressure. Without shared rules, one change may preserve an existing control while the next bypasses it to make something work. aiscb puts the same concrete rules in front of the assistant in every tool and every session.
 
-The rules name mechanisms an assistant can apply. "Authorize on the server" is actionable; "be security-aware" is not. aiscb remains a compact guardrail, not a complete security standard or compliance checklist.
+Each rule names a mechanism an assistant can apply. "Authorize on the server" is actionable; "be security-aware" is not. aiscb is a short rule set, not a security standard or a compliance checklist.
 
 ## The rules at a glance
 
-[secure-coding-baseline.md](secure-coding-baseline.md) contains the complete, normative rules. This summary explains what each rule changes in practice; the full rule text remains authoritative.
+[secure-coding-baseline.md](secure-coding-baseline.md) contains the complete, normative rules. This summary says what each rule changes in practice. Where the two differ, the rule text applies.
 
 ### Scope and security decisions
 
@@ -81,17 +81,17 @@ The rules name mechanisms an assistant can apply. "Authorize on the server" is a
 ### Tests and reporting
 
 - **Security tests** (`aiscb-TESTS-001`): When a change affects a security control or trust boundary, test intended behavior and relevant negative cases, such as unauthorized or cross-user access, malformed input, boundary values, and missing security configuration.
-- **Review and report** (`aiscb-REPORT-001`): Inspect the changed code and tests before completion and fix security issues introduced by the change. Report only concrete, material risks; include a pre-existing weakness only when the work relies on it, touches it, or specifically reviews it. Use a **Security note (aiscb)** only when the delivered code, configuration, or design creates or materially worsens such a risk, for example by accepting a security trade-off or changing a critical security boundary without verifying its concrete dangerous failure mode. Omit the note when the issue was fixed or the remaining concern is not material; the note states the risk and next action, not a checklist of completed checks.
+- **Review and report** (`aiscb-REPORT-001`): Inspect the changed code and tests before completion and fix security issues the change introduced. Report only concrete, material risks. Include a pre-existing weakness only when the work relies on it, touches it, or was asked to review it. Use a **Security note (aiscb)** only when the delivered code, configuration, or design creates or materially worsens such a risk, for example by accepting a security trade-off or by changing a critical security boundary without verifying its dangerous failure mode. Omit the note when the issue was fixed or the remaining concern is not material. The note states the risk and the next action, not a list of completed checks.
 
 See [`specs/requirements.md`](specs/requirements.md) for detailed applicability, acceptance criteria, and test coverage.
 
 ## Using it
 
-The guided installer covers normal project- and user-level installation and updates. The manual instructions below help with existing instruction files, custom layouts, and organization-wide setup. Keep `secure-coding-baseline.md` as the single source: import or symlink it where possible, and copy it only when necessary.
+The guided installer covers project-level and user-level installation and updates. The manual instructions below are for existing instruction files, custom layouts, and organization-wide setup. Keep `secure-coding-baseline.md` as the single source: import or symlink it where possible, and copy it only when necessary.
 
 ### Remote setup (no checkout)
 
-Use the pinned and verified command in the [Quick start](#quick-start). It requires Bash, `curl`, `sha256sum`, and Python 3.10 or newer. The downloaded `aiscb-setup.sh` remains available for inspection or deletion and stays pinned to its original bundle if run again later.
+Use the pinned and verified command in the [Quick start](#quick-start). It requires Bash, `curl`, `sha256sum`, and Python 3.10 or newer. The downloaded `aiscb-setup.sh` stays in the current directory; you can inspect or delete it. Running it again later installs the same bundle it was pinned to, not a newer one.
 
 ### Later updates without a checkout
 
@@ -103,9 +103,9 @@ python3 ~/.local/share/aiscb/install.py --status
 python3 ~/.local/share/aiscb/install.py --interactive
 ```
 
-`--update` looks up the latest release, downloads its bundle manifest and signature, and checks the signature with `ssh-keygen` against the release key the installed copy carries. Only then does it download the baseline, installer, and startup hook, compare each file's size and SHA-256 with the manifest, and start the guided setup of the verified bundle. Nothing is written outside a temporary directory before these checks pass, and a release that is not newer than the installed baseline changes nothing.
+`--update` looks up the latest release, downloads its bundle manifest and signature, and checks the signature with `ssh-keygen` against the release key the installed copy carries. Only then does it download the baseline, the installer, and the startup hook, compare each file's size and SHA-256 with the manifest, and start the guided setup of the verified bundle. Nothing is written outside a temporary directory before these checks pass. A release that is not newer than the installed baseline changes nothing.
 
-If the update is refused, for example on an installation from before aiscb-0.1.14, which carries no release key yet, or after the release key was rotated, run the current [Quick start](#quick-start) again or install from a reviewed clone with `ARGS=--offline`.
+The update is refused when the installed copy cannot verify the release, for example on an installation from before aiscb-0.1.14, which carries no release key yet, or after the release key was rotated. In that case run the current [Quick start](#quick-start) again, or install from a reviewed clone with `make setup ARGS=--offline`.
 
 ### From a repository clone
 
@@ -121,15 +121,15 @@ make uninstall                         # remove what the installer placed here
 make help                              # list available commands
 ```
 
-`install-codex` and `install-copilot` mirror `install-claude`. Projects support Claude Code, Codex, and GitHub Copilot; user-level installs support Claude Code, Codex, and Copilot CLI.
+`install-codex` and `install-copilot` work like `install-claude`. In a project, the installer supports Claude Code, Codex, and GitHub Copilot. At user level, it supports Claude Code, Codex, and Copilot CLI.
 
-The installer preserves existing instruction files and unrelated symlinks. Uninstall removes only the links, import lines, hook entries, and managed files that the installer placed; anything else is reported and left alone. Replacing a locally edited managed baseline requires confirmation and creates a backup.
+The installer keeps existing instruction files and unrelated symlinks. Uninstall removes only the links, import lines, hook entries, and managed files that the installer placed. Anything else is reported and left alone. Replacing a locally edited managed baseline requires confirmation and creates a backup.
 
-Optional session-start hooks show the active `baseline-id` and load the managed baseline. Setup merges valid settings, leaves ambiguous ones unchanged, and lets you skip hooks. Codex may require review through `/hooks` afterward.
+Optional session-start hooks show the active `baseline-id` and load the managed baseline. Setup merges them into valid hook settings, leaves ambiguous settings unchanged, and lets you skip hooks. Codex skips a new or changed hook until you review and trust it with `/hooks`; it prints a warning at startup while a hook awaits review.
 
-Release checks are off by default. If enabled, a separate background process contacts `api.github.com` at most once a day without delaying a session; the hook itself makes no request. `ARGS=--offline` skips the check.
+Release checks are off by default. If you enable them, a separate background process contacts `api.github.com` at most once a day and never delays a session. The hook itself makes no request. `ARGS=--offline` skips the check during setup and status.
 
-From a checkout, the installer uses the latest published release when available and otherwise uses the checkout copy. Remote setup and installed user copies remain on their verified bundle until `--update` applies a signed release or the current Quick start is run again.
+From a checkout, the installer installs the latest published release when it can reach it and otherwise the checkout copy. Remote setup and installed user copies stay on their verified bundle until `--update` applies a signed release or the current Quick start is run again.
 
 ### Claude Code
 
@@ -219,15 +219,15 @@ This is a reference, not an automatic import.
 
 ### Verify it loaded
 
-Ask the tool `baseline?`. The answer should include `aiscb-0.1.14` and the file it came from. This confirms that the assistant can see the baseline, not that it was loaded before the question or will always be followed.
+Ask the tool `baseline?`. The answer should include `aiscb-0.1.14` and the file it came from. This confirms that the assistant can see the baseline, not that it will always follow it.
 
 - `aiscb-0.1.14`: this baseline.
 
-The assistant reports every loaded ID. Claude Code users can also inspect loaded files with `/context` or `/memory`.
+If more than one baseline is loaded, the assistant names each one. Claude Code users can also inspect loaded files with `/context` or `/memory`.
 
 ## Adapting it
 
-The license allows organizations to derive their own baseline with internal security requirements, approved technology stacks, and review policies, as long as the attribution remains.
+The license allows organizations to derive their own baseline with internal security requirements, approved technology stacks, and review policies, as long as the attribution stays.
 
 Add stack-specific details such as approved libraries or framework patterns. Keep existing rule-group IDs so individual rules remain traceable, but give the derived baseline its own ID using [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html):
 
@@ -236,29 +236,29 @@ Add stack-specific details such as approved libraries or framework patterns. Kee
 
 To leave the baseline file unchanged and put your rules in a second one beside it, see [adapting aiscb inside an organization](docs/adapting-in-an-organization.md).
 
-Keep application-specific security requirements separate. The baseline governs assistant behavior; tests, CI checks, review gates, and runtime controls enforce the application's requirements.
+Keep application-specific security requirements out of the baseline. The baseline governs how the assistant works. Tests, CI checks, review gates, and runtime controls enforce what the application must do.
 
 ## Evidence and related guidance
 
-Research on AI-assisted coding supports making security expectations explicit, concrete, and persistent throughout a task ([Yan et al., 2025](https://arxiv.org/abs/2506.23034), [Gloaguen et al., 2026](https://arxiv.org/abs/2602.11988), [Kharma et al., 2026](https://arxiv.org/abs/2605.24298)). Other work shows that instructions can reduce unsafe shortcuts but do not eliminate them, which is why requirements that must hold still need permission boundaries, deterministic checks, review, CI, or runtime controls ([Chen et al., 2026](https://arxiv.org/abs/2604.20200), [Sharma, 2026](https://arxiv.org/abs/2603.00822)).
+Research on AI-assisted coding finds that security expectations work best when they are explicit, concrete, and present throughout a task ([Yan et al., 2025](https://arxiv.org/abs/2506.23034), [Gloaguen et al., 2026](https://arxiv.org/abs/2602.11988), [Kharma et al., 2026](https://arxiv.org/abs/2605.24298)). Other work shows that instructions reduce unsafe shortcuts but do not eliminate them. Requirements that must hold therefore still need permission boundaries, deterministic checks, review, CI, or runtime controls ([Chen et al., 2026](https://arxiv.org/abs/2604.20200), [Sharma, 2026](https://arxiv.org/abs/2603.00822)).
 
-- The [OWASP Top 10:2025](https://owasp.org/Top10/2025/), [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/), and [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) provide background for the covered risks.
-- The OWASP [Secure Coding with AI Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html) and OpenSSF [Security-Focused Guide for AI Code Assistant Instructions](https://best.openssf.org/Security-Focused-Guide-for-AI-Code-Assistant-Instructions) provide more operational guidance and comparison points.
-- The optional [`Claude Code gate`](examples/claude-code-gate/) blocks a small set of unsafe code patterns; issues that require context, such as missing authorization, still belong in review or CI.
+- The [OWASP Top 10:2025](https://owasp.org/Top10/2025/), [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/), and [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) give background on the risks the rules cover.
+- The OWASP [Secure Coding with AI Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html) and the OpenSSF [Security-Focused Guide for AI Code Assistant Instructions](https://best.openssf.org/Security-Focused-Guide-for-AI-Code-Assistant-Instructions) give further guidance and are useful for comparison.
+- The optional [Claude Code gate](examples/claude-code-gate/) blocks a small set of unsafe code patterns. Issues that need context, such as missing authorization, still belong in review or CI.
 - The [organization bundle example](examples/organization-bundle/) shows an overlay, a pack, a blueprint, a verified release build and installer, and a LiteLLM gateway hook, as described in [Adapting the baseline in an organization](docs/adapting-in-an-organization.md).
-- The [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) Claude Code plugin supports broader application-security work and can manage aiscb installations.
+- The [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) Claude Code plugin covers broader application-security work and can manage aiscb installations.
 
-These resources are background, not claims of certification, conformance, or complete coverage. Check time-sensitive advice against current authoritative sources.
+These resources are background. They do not certify aiscb, and aiscb does not claim to cover them completely. Check time-sensitive advice against current sources.
 
 ## Development
 
-`secure-coding-baseline.md` is the normative product. At 19.9 KB, or 4,003 tokens, it stays within its approximate 4,100-token budget. It has been shaped through practical AI-assisted coding tasks but has not undergone formal certification.
+`secure-coding-baseline.md` is the normative product. At 19.9 KB, or 4,003 tokens, it stays within its budget of about 4,100 tokens. It has been refined in day-to-day AI-assisted coding work and has not been formally certified.
 
 [`specs/requirements.md`](specs/requirements.md) explains the rule groups and their test coverage. Behavior changes need a proposal, sourced requirements, and a task list under [`specs/changes/`](specs/changes/); editorial and repository-only changes do not. See [`specs/README.md`](specs/README.md) for the workflow.
 
-Run `make check` after changing the baseline, specifications, test metadata, or harness. It takes seconds and makes no model calls. Model runs can take hours, so start with `make test-smoke` to see that the harness works, and run only the cases a change affects — `make test-rule RULE=<rule group>` — unless a full matrix is specifically needed. See [tests/README.md](tests/README.md) for commands, cases, and scoring.
+Run `make check` after changing the baseline, specifications, test metadata, or harness. It takes seconds and makes no model calls. Model runs can take hours. Start with `make test-smoke` to see that the harness works, then run only the cases a change affects with `make test-rule RULE=<rule group>`. Run the full matrix only when a change needs it. See [tests/README.md](tests/README.md) for commands, cases, and scoring.
 
-Publishing a release, from signing the bundle to the Quick start block, is described in [docs/releasing.md](docs/releasing.md).
+[docs/releasing.md](docs/releasing.md) describes how a release is published, from signing the bundle to updating the Quick start block.
 
 ## License
 
