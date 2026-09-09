@@ -105,7 +105,7 @@ python3 ~/.local/share/aiscb/install.py --interactive
 
 `--update` looks up the latest release, downloads its bundle manifest and signature, and checks the signature with `ssh-keygen` against the release key the installed copy carries. Only then does it download the baseline, installer, and startup hook, compare each file's size and SHA-256 with the manifest, and start the guided setup of the verified bundle. Nothing is written outside a temporary directory before these checks pass, and a release that is not newer than the installed baseline changes nothing.
 
-If the update is refused, for example after the release key was rotated, run the current [Quick start](#quick-start) again or install from a reviewed clone with `ARGS=--offline`.
+If the update is refused, for example on an installation from before aiscb-0.1.14, which carries no release key yet, or after the release key was rotated, run the current [Quick start](#quick-start) again or install from a reviewed clone with `ARGS=--offline`.
 
 ### From a repository clone
 
