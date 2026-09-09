@@ -1,6 +1,6 @@
-# Integration blueprint: gateway injection with HTTPS loading
+# Rollout path: gateway injection with HTTPS loading
 
-Use this blueprint when the gateway should supply the initial instructions centrally and the assistant should retrieve detailed policy only for matching work. Read the [shared content and overlay rules](../adapting-in-an-organization.md#define-the-shared-content) first. This is an implementation plan; the repository does not yet contain the remote adapter or policy loader.
+Use this rollout path when the gateway should supply the initial instructions centrally and the assistant should retrieve detailed policy only for matching work. Read the [shared content and overlay rules](../adapting-in-an-organization.md#define-the-shared-content) first. This is an implementation plan; the repository does not yet contain the remote adapter or policy loader.
 
 ## Deployment inputs
 

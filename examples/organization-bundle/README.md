@@ -9,8 +9,8 @@ installer, and standalone tests use the Python standard library; running the
 gateway hook requires LiteLLM.
 
 It is an example for "Acme", not a product. Copy it, replace the Acme content,
-and keep the checks. Follow the [local integration blueprint](../../docs/integration-blueprints/local-bundle.md)
-to complete distribution and tool setup. The [gateway integration blueprint](../../docs/integration-blueprints/gateway-https.md)
+and keep the checks. Follow the [local bundle rollout path](../../docs/rollout-paths/local-bundle.md)
+to complete distribution and tool setup. The [gateway rollout path](../../docs/rollout-paths/gateway-https.md)
 describes the remote adapter and HTTPS loader that this example does not yet
 implement.
 
@@ -123,7 +123,7 @@ absolute paths so references resolve in any fresh checkout; copying only
 - Wiring the adapters into each tool. The release only places the files; the
   managed settings, import lines, or skill links are the deployment job's
   work, as described under
-  [Adapters per tool](../../docs/integration-blueprints/local-bundle.md#adapters-per-tool).
+  [Adapters per tool](../../docs/rollout-paths/local-bundle.md#adapters-per-tool).
 - Staleness policy for offline machines and a session-aware switch for tools
   that pick up skill changes live; both are decisions, not code.
 - A gateway-only remote adapter. The generated `system-block.md` still refers

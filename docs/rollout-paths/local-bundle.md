@@ -1,6 +1,6 @@
-# Integration blueprint: local bundle
+# Rollout path: local bundle
 
-Use this blueprint to distribute the baseline and organization policy files to developer machines or project repositories. Read the [shared content and overlay rules](../adapting-in-an-organization.md#define-the-shared-content) first. This is an implementation plan, not a ready-to-install package.
+Use this rollout path to distribute the baseline and organization policy files to developer machines or project repositories. Read the [shared content and overlay rules](../adapting-in-an-organization.md#define-the-shared-content) first. This is an implementation plan, not a ready-to-install package.
 
 ## Deployment inputs
 
@@ -46,11 +46,11 @@ Generate adapters from the reviewed content. Load the baseline, overlay, and dis
 
 | Tool | Initial instructions | Packs in a project | Path-specific option |
 | --- | --- | --- | --- |
-| Claude Code | `CLAUDE.md` with verified local imports, or a managed-policy `CLAUDE.md` | `.claude/skills/<pack>/SKILL.md` | `.claude/rules/*.md` with `paths` |
+| Claude Code | `CLAUDE.md` with verified local imports, or a managed-policy `CLAUDE.md` | `.claude/skills/<pack>/SKILL.md` in the project, or in the managed settings directory for every user of a managed machine | `.claude/rules/*.md` with `paths` |
 | Codex | Combined baseline and overlay in `AGENTS.md` | `.agents/skills/<pack>/SKILL.md` | Nested `AGENTS.md` on the startup directory chain |
 | Copilot | Combined `.github/copilot-instructions.md` | `.github/skills/<pack>/SKILL.md` on supported surfaces | `.github/instructions/*.instructions.md` with `applyTo` |
 
-Claude Code expands local `@` imports at startup; importing every pack there defeats lazy loading. Its managed-policy location differs by operating system. See [Claude Code memory](https://code.claude.com/docs/en/memory) and [skills](https://code.claude.com/docs/en/skills).
+Claude Code expands local `@` imports at startup; importing every pack there defeats lazy loading. Its managed-policy location and managed skills directory differ by operating system. Claude Code asks before loading a project-level import that resolves outside the working directory; confirm on each supported version whether a managed entry point importing the release directory triggers that dialog, because a declined import silently drops the policy. See [Claude Code memory](https://code.claude.com/docs/en/memory) and [skills](https://code.claude.com/docs/en/skills).
 
 Codex builds its project instruction chain from the repository root to the working directory at startup. A session started at the root does not gain a child's startup instructions merely by later editing that child. Make its pack discoverable from the root and use the overlay's routing rule. Generate combined text rather than assuming an `@` import. See the official OpenAI documentation for [AGENTS.md](https://developers.openai.com/codex/guides/agents-md/) and [skills](https://developers.openai.com/codex/skills/).
 
@@ -74,4 +74,4 @@ For repository distribution, include the packs and blueprints as well as adapter
 
 ## Acceptance checks
 
-Run the common [verification cases](../adapting-in-an-organization.md#verify-before-rollout), plus clean installation, interrupted installation, tampered manifest and files, unresolved paths, missing skill discovery, preservation of existing instructions, update during a session, rollback, drift, and uninstall. Test each supported operating system and client. Package verification and real assistant loading are separate checks.
+Run the common [verification cases](../adapting-in-an-organization.md#verify-before-rollout), plus clean installation, interrupted installation, tampered manifest and files, unresolved paths, entry-point imports that resolve outside the working directory, missing skill discovery, preservation of existing instructions, update during a session, rollback, drift, and uninstall. Test each supported operating system and client. Package verification and real assistant loading are separate checks.
