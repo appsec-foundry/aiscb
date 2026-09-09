@@ -1,17 +1,17 @@
 {
-  "baseline_id": "aiscb-0.1.13",
+  "baseline_id": "aiscb-0.1.14",
   "files": {
     "scripts/install.py": {
-      "sha256": "1285a9e7842235ad78270e238bec1b1982f6dfee6013045bfe181e50b0e2c8d4",
-      "size": 108580
+      "sha256": "f8b9a1314e2c99c02cb2d191dfb2fad04170ba29f9c75075ad65058ba47f5423",
+      "size": 108683
     },
     "scripts/show_baseline_version.py": {
       "sha256": "7f957e239e7397587781c1498b85db20dad608c5ba1caebfa1d8696673370a9e",
       "size": 5414
     },
     "secure-coding-baseline.md": {
-      "sha256": "70d450229ea152a679332041fa862400aad6164f97cdf0172b2534f70c7f5dca",
-      "size": 20200
+      "sha256": "a6fc88833aaae7f9e5e1ff9ebe4ba152e56660e743c75094b56b8b25968bfeb2",
+      "size": 19877
     }
   },
   "schema": 1
