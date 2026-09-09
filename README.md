@@ -81,7 +81,7 @@ The rules name mechanisms an assistant can apply. "Authorize on the server" is a
 ### Tests and reporting
 
 - **Security tests** (`aiscb-TESTS-001`): When a change affects a security control or trust boundary, test intended behavior and relevant negative cases, such as unauthorized or cross-user access, malformed input, boundary values, and missing security configuration.
-- **Review and report** (`aiscb-REPORT-001`): Inspect the changed code and tests before completion and fix security issues introduced by the change. Report only concrete, material risks; include a pre-existing weakness only when the work relies on it, touches it, or specifically reviews it. Use a **Security note (aiscb baseline)** only when the delivered code, configuration, or design creates or materially worsens such a risk, for example by accepting a security trade-off or changing a critical security boundary without verifying its concrete dangerous failure mode. Omit the note when the issue was fixed or the remaining concern is not material; the note states the risk and next action, not a checklist of completed checks.
+- **Review and report** (`aiscb-REPORT-001`): Inspect the changed code and tests before completion and fix security issues introduced by the change. Report only concrete, material risks; include a pre-existing weakness only when the work relies on it, touches it, or specifically reviews it. Use a **Security note (aiscb)** only when the delivered code, configuration, or design creates or materially worsens such a risk, for example by accepting a security trade-off or changing a critical security boundary without verifying its concrete dangerous failure mode. Omit the note when the issue was fixed or the remaining concern is not material; the note states the risk and next action, not a checklist of completed checks.
 
 See [`specs/requirements.md`](specs/requirements.md) for detailed applicability, acceptance criteria, and test coverage.
 
@@ -219,9 +219,9 @@ This is a reference, not an automatic import.
 
 ### Verify it loaded
 
-Ask the tool `baseline?`. The answer should include `aiscb-0.1.12` and the file it came from. This confirms that the assistant can see the baseline, not that it was loaded before the question or will always be followed.
+Ask the tool `baseline?`. The answer should include `aiscb-0.1.13` and the file it came from. This confirms that the assistant can see the baseline, not that it was loaded before the question or will always be followed.
 
-- `aiscb-0.1.12`: this baseline.
+- `aiscb-0.1.13`: this baseline.
 
 The assistant reports every loaded ID. Claude Code users can also inspect loaded files with `/context` or `/memory`.
 
@@ -231,7 +231,7 @@ The license allows organizations to derive their own baseline with internal secu
 
 Add stack-specific details such as approved libraries or framework patterns. Keep existing rule-group IDs so individual rules remain traceable, but give the derived baseline its own ID using [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html):
 
-- `aiscb-0.1.12+acme`: a version derived from aiscb.
+- `aiscb-0.1.13+acme`: a version derived from aiscb.
 - `acme-sec-1.0.0`: an independent baseline.
 
 To leave the baseline file unchanged and put your rules in a second one beside it, see [adapting aiscb inside an organization](docs/adapting-in-an-organization.md).
@@ -252,7 +252,7 @@ These resources are background, not claims of certification, conformance, or com
 
 ## Development
 
-`secure-coding-baseline.md` is the normative product. At 20.2 KB, or 4,029 tokens, it stays within its approximate 4,100-token budget. It has been shaped through practical AI-assisted coding tasks but has not undergone formal certification.
+`secure-coding-baseline.md` is the normative product. At 20.2 KB, or 4,025 tokens, it stays within its approximate 4,100-token budget. It has been shaped through practical AI-assisted coding tasks but has not undergone formal certification.
 
 [`specs/requirements.md`](specs/requirements.md) explains the rule groups and their test coverage. Behavior changes need a proposal, sourced requirements, and a task list under [`specs/changes/`](specs/changes/); editorial and repository-only changes do not. See [`specs/README.md`](specs/README.md) for the workflow.
 

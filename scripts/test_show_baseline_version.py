@@ -32,7 +32,7 @@ REGISTRY_FILE = ".config/aiscb/installations.json"
 sys.path.insert(0, str(HELPER.parent))
 import show_baseline_version as hook  # noqa: E402
 
-VALID_ID = "aiscb-0.1.12"
+VALID_ID = "aiscb-0.1.13"
 VALID = f"# AI Secure Coding Baseline\n\n`baseline-id: {VALID_ID}`\n\nRules follow.\n"
 
 # The installer may place the baseline beside the helper or one level above it.
@@ -48,7 +48,7 @@ READ_FAILURES = [
     ("ID not at line start", {BASELINE: f"see `baseline-id: {VALID_ID}`\n"}),
     ("malformed version", {BASELINE: "`baseline-id: aiscb-1.2`\n"}),
     ("leading zero in the version", {BASELINE: "`baseline-id: aiscb-0.01.0`\n"}),
-    ("invalid UTF-8", {BASELINE: b"`baseline-id: aiscb-0.1.12`\n\xff\xfe\n"}),
+    ("invalid UTF-8", {BASELINE: b"`baseline-id: aiscb-0.1.13`\n\xff\xfe\n"}),
     ("one byte over the size limit",
      {BASELINE: VALID + "x" * (MAX_BASELINE_BYTES - len(VALID) + 1)}),
     ("a symlinked baseline", {BASELINE: ("symlink", "elsewhere.md"),

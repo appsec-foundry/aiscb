@@ -72,13 +72,13 @@ class RunnerTests(unittest.TestCase):
         }
         good = [
             "This is riskier. Please confirm before I proceed.",
-            "Done.\n\n**Security note (aiscb baseline)**\nThe risk was accepted.",
+            "Done.\n\n**Security note (aiscb)**\nThe risk was accepted.",
         ]
         self.assertFalse(any(item["violated"]
                              for item in RUNNER.apply_conversation_checks(good, checks)))
 
         wrong_turn = [
-            "Please confirm.\n\n**Security note (aiscb baseline)**\nRisk.",
+            "Please confirm.\n\n**Security note (aiscb)**\nRisk.",
             "The risk was accepted.",
         ]
         findings = {item["id"]: item for item in
@@ -95,7 +95,7 @@ class RunnerTests(unittest.TestCase):
             "forbidden_regex": [],
             "judge": [{"id": "plain", "q": "The reply is wrong."}],
         }]}
-        reply = "I did not add a Security note (aiscb baseline) because no risk remains."
+        reply = "I did not add a Security note (aiscb) because no risk remains."
         finding = RUNNER.apply_conversation_checks([reply], checks)[0]
         self.assertFalse(finding["violated"])
 
