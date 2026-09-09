@@ -192,21 +192,20 @@ def check_update_note(failures: list[str]) -> None:
     code, out, _ = call(registry_layout({"latest": "aiscb-0.2.0"}))
     if code != 0 or "Update 0.2.0" not in out:
         failures.append(f"a newer release must be announced: {out[:160]!r}")
-    if "https://github.com/appsec-foundry/aiscb#quick-start" not in out:
-        failures.append(f"without an installer the note names the Quick start: {out[:160]!r}")
+    if "https://github.com/appsec-foundry/aiscb#update" not in out:
+        failures.append(f"the note must link the update guide: {out[:160]!r}")
     if "python3" in out or "curl" in out:
         failures.append(f"no installer means no command: {out[:160]!r}")
 
     root = build({**registry_layout({"latest": "aiscb-0.2.0"}),
                   "scripts/install.py": "raise SystemExit(0)\n"})
     _code, out, _err = call_in(root)
-    expected = f"python3 {root / 'scripts' / 'install.py'} --update"
-    if expected not in out:
-        failures.append(f"the note must name the signed update command: {out[:200]!r}")
-    if "quick-start" in out or "curl" in out:
-        failures.append(f"with an installer the note names only its command: {out[:200]!r}")
-    if (root / "scripts" / "updated").exists():
-        failures.append("the hook must never run the update itself")
+    if "https://github.com/appsec-foundry/aiscb#update" not in out:
+        failures.append(f"the note must link the update guide: {out[:200]!r}")
+    if "python3" in out or "curl" in out or "--update" in out:
+        failures.append(
+            f"the note is a pointer into an agent session, never a command: {out[:200]!r}"
+        )
 
     for label, payload in (
         ("invalid registry JSON", "not json"),

@@ -30,6 +30,16 @@ bash aiscb-setup.sh
 
 The installer lets you select the target environments and verifies each integration. Checkout-based and manual options are under [Using it](#using-it).
 
+## Update
+
+The startup hook reports a newer release with a link to this section. A user-level install updates itself from a terminal, outside any agent session:
+
+```bash
+python3 ~/.local/share/aiscb/install.py --update
+```
+
+It verifies the release's signed bundle before anything runs and then starts the guided setup, which also offers the update to the registered projects; details are under [Later updates without a checkout](#later-updates-without-a-checkout). The new baseline takes effect in the next session. If the update is refused, or there is no user-level install, run the current [Quick start](#quick-start).
+
 ## Why this exists
 
 AI coding assistants know many security practices but do not apply them consistently, especially under pressure. Without shared rules, one change may preserve an existing control while the next bypasses it to make something work. aiscb keeps concrete expectations present across tools and sessions.
@@ -93,7 +103,7 @@ python3 ~/.local/share/aiscb/install.py --status
 python3 ~/.local/share/aiscb/install.py --interactive
 ```
 
-`--update` looks up the latest release, downloads its bundle manifest and signature, and checks the signature with `ssh-keygen` against the release key the installed copy carries. Only then does it download the baseline, installer, and startup hook, compare each file's size and SHA-256 with the manifest, and start the guided setup of the verified bundle. Nothing is written outside a temporary directory before these checks pass, and a release that is not newer than the installed baseline changes nothing. The startup hook names this command when the release check finds a newer release; the update takes effect in the next session.
+`--update` looks up the latest release, downloads its bundle manifest and signature, and checks the signature with `ssh-keygen` against the release key the installed copy carries. Only then does it download the baseline, installer, and startup hook, compare each file's size and SHA-256 with the manifest, and start the guided setup of the verified bundle. Nothing is written outside a temporary directory before these checks pass, and a release that is not newer than the installed baseline changes nothing.
 
 If the update is refused, for example after the release key was rotated, run the current [Quick start](#quick-start) again or install from a reviewed clone with `ARGS=--offline`.
 
