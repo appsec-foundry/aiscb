@@ -92,7 +92,9 @@ SIGNER_PRINCIPAL = "aiscb-release"
 # OpenSSH allowed_signers lines for the keys that may sign a bundle manifest.
 # A rotated key ships here in a new bundle; a copy that predates it verifies
 # nothing signed by the new key and needs the current Quick start once.
-ALLOWED_SIGNERS: tuple[str, ...] = ()
+ALLOWED_SIGNERS: tuple[str, ...] = (
+    "aiscb-release ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILd3kACJfPJk7lcPr79sDqWlq3o552E1+KhaPNmnsboD",
+)
 BUNDLE_FILES = {
     BASELINE: MAX_BASELINE_BYTES,
     "scripts/install.py": MAX_INSTALLER_BYTES,
