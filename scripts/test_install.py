@@ -2450,5 +2450,49 @@ with tempfile.TemporaryDirectory() as tmp:
               completed.returncode == 2 and "usage" in completed.stderr,
               completed.stderr[-200:])
 
+with tempfile.TemporaryDirectory() as tmp:
+    sandbox = Path(tmp)
+    home = sandbox / "home"
+    home.mkdir()
+    install.install(["claude"], home, home, content=bundled.content)
+    copy = sandbox / "copy" / install.BASELINE
+    copy.parent.mkdir()
+    copy.write_bytes(bundled.content)
+    (home / ".codex").mkdir(exist_ok=True)
+    (home / ".codex" / "AGENTS.md").symlink_to(copy)
+
+    def status_rows() -> list[str]:
+        lines: list[str] = []
+        install.installation_status(
+            home=home, output=lines.append, check_online=False,
+            state_path=sandbox / "state.json",
+        )
+        return lines
+
+    rows = status_rows()
+    check("status rows name the tools before the baseline version",
+          any(line.startswith("  ✓  user ")
+              and 0 < line.find("Claude Code") < line.find(bundled.baseline_id)
+              for line in rows), str(rows))
+    check("a second user copy shows its path",
+          any(f"user {install.display_path(copy)}" in line and "Codex" in line
+              for line in rows), str(rows))
+
+    (home / ".claude" / install.BASELINE).unlink()
+    (home / ".codex" / "AGENTS.md").unlink()
+    rows = [line for line in status_rows() if line.startswith("  -  user")]
+    check("an installation no tool loads claims no up-to-date state",
+          len(rows) == 1 and "not set up for any tool" in rows[0]
+          and "up to date" not in rows[0] and bundled.baseline_id not in rows[0],
+          str(rows))
+
+    install.user_source(home).write_bytes(bundled.content.replace(
+        bundled.baseline_id.encode(), b"aiscb-0.0.1", 1
+    ))
+    rows = [line for line in status_rows() if line.startswith("  -  user")]
+    check("an unused installation still shows the update the menu offers",
+          len(rows) == 1 and "not set up for any tool" in rows[0]
+          and f"update → {bundled.baseline_id}" in rows[0], str(rows))
+
 print(f"\ninstall: {'ok' if not failures else f'{failures} failures'}")
 sys.exit(1 if failures else 0)

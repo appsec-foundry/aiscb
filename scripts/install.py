@@ -2399,8 +2399,10 @@ def _installation_symbol(installation: Installation, available: Baseline) -> str
 
 
 def _installation_scope(installation: Installation, current_root: Path | None) -> str:
-    if installation.kind in {"user", "legacy-user"}:
+    if installation.kind == "user":
         return "user"
+    if installation.kind == "legacy-user":
+        return f"user {display_path(installation.source)}"
     if installation.kind == "unmanaged":
         return display_path(installation.source)
     root = installation.root.resolve(strict=False)
@@ -2414,12 +2416,26 @@ def _installation_row(
     available: Baseline,
     current_root: Path | None,
 ) -> tuple[str, ...]:
+    """Lead with the tools; a file no tool loads gets no up-to-date claim.
+
+    Its pending update stays visible because the menu still offers it.
+    """
+    scope = _installation_scope(installation, current_root)
+    if not installation.tools:
+        pending = installation.has_update(available)
+        return (
+            "-",
+            scope,
+            "not set up for any tool",
+            installation.baseline.baseline_id if pending else "",
+            _installation_state(installation, available) if pending else "",
+        )
     return (
         _installation_symbol(installation, available),
-        _installation_scope(installation, current_root),
+        scope,
+        ", ".join(TOOL_LABELS[tool] for tool in installation.tools),
         installation.baseline.baseline_id,
         _installation_state(installation, available),
-        ", ".join(TOOL_LABELS[tool] for tool in installation.tools) or "no tools",
     )
 
 
@@ -2483,10 +2499,10 @@ def _show_setup_status(
     if current_root is not None and not any(
         item.kind == "project" for item in current
     ):
-        rows.append(("-", "project", "", "not installed", ""))
+        rows.append(("-", "project", "not installed", "", ""))
     rows += [_installation_row(item, available, current_root) for item in current]
     if not any(item.kind in {"user", "legacy-user"} for item in user):
-        rows.append(("-", "user", "", "not installed", ""))
+        rows.append(("-", "user", "not installed", "", ""))
     rows += [_installation_row(item, available, current_root) for item in user]
     rows += [_installation_row(item, available, current_root) for item in other]
 
