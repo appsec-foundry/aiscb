@@ -267,6 +267,7 @@ class SessionSwitchTests(unittest.TestCase):
         result = subprocess.run(argv + ["--user"], cwd=self.project, env=env,
                                 capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("approve its hooks in Codex with /hooks", result.stdout)
         self.assertTrue(install.registry_path(self.home).is_file())
         self.assertEqual(install.scan_user(self.home, {})[0].tools, ("claude", "codex"))
 
@@ -277,6 +278,17 @@ class SessionSwitchTests(unittest.TestCase):
                        {"hooks": {"SessionStart": [], "UserPromptSubmit": "bad"}}):
             path.write_text(json.dumps(config))
             self.assertFalse(install._version_hook_is_installed("codex", self.project, None))
+
+    def test_switch_never_adds_a_claude_import_setup_left_to_the_user(self):
+        claude = self.home / ".claude" / "CLAUDE.md"
+        claude.parent.mkdir()
+        claude.write_text("OWN_RULES\n")
+        report = install.install(["claude"], self.project, self.home)
+        install._enable_session_switch(["claude"], self.project, self.home,
+                                       install.user_source(self.home), report)
+        self.assertTrue(any("add the line" in line for line in report), report)
+        self.assertEqual(claude.read_text(), "OWN_RULES\n")
+        self.assertFalse((self.home / ".claude" / "settings.json").exists())
 
 
 if __name__ == "__main__":

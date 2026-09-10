@@ -969,10 +969,10 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
                 if new not in after.splitlines():
                     after += ("\n" if after and not after.endswith("\n") else "") + new + "\n"
                 import_plan = imported, after.encode()
-            plans.append((target, path, config, existed, import_plan))
+            plans.append((tool, target, path, config, existed, import_plan))
     except (OSError, UnicodeDecodeError, ValueError) as error:
         return [
-            f"blocked session switch: {error}; "
+            f"blocked session switch for {_join_labels(tools)}: {error}; "
             "the static installation is unchanged"
         ]
     if place_baseline(source.parent, report, baseline.content, create_root=True) is None:
@@ -984,7 +984,7 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
     try:
         if not loader.exists():
             _write_new(loader, loader_content)
-        for target, path, config, existed, import_plan in plans:
+        for tool, target, path, config, existed, import_plan in plans:
             _write_hook_config(path, config, existed)
             target.parent.mkdir(parents=True, exist_ok=True)
             # os.replace changes the link atomically, never the baseline it points to.
@@ -995,10 +995,35 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
                     _atomic_replace(imported, content)
                 else:
                     _write_new(imported, content)
-            report.append(f"enabled session switch for {target}; AISCB_DISABLE=1 applies to new sessions")
+            approval = "; approve its hooks in Codex with /hooks" if tool == "codex" else ""
+            report.append(f"enabled session switch for {target}; AISCB_DISABLE=1 applies to new sessions{approval}")
     except OSError:
         report.append("blocked session switch: could not finish writing; rerun setup before starting a session")
     return report
+
+
+def _enable_session_switch(
+    tools: list[str], root: Path, home: Path | None, source: Path, report: list[str]
+) -> None:
+    """Load installed Claude Code and Codex links dynamically, one tool at a time.
+
+    A refused switch leaves that tool's static link, so its baseline stays loaded.
+    """
+    targets = user_targets(home) if home is not None else project_targets(root)
+    for tool in ("claude", "codex"):
+        link = targets[tool][0][1]
+        if tool not in tools or not (_link_points_to(link, source) or _session_link(link, source)):
+            continue
+        # Setup leaves an existing CLAUDE.md to the user; the switch must not add the import.
+        if home is not None and tool == "claude" and not any(
+            _import_contains(targets[tool][1][1], item) for item in (source, link)
+        ):
+            continue
+        if _session_link(link, source) and _version_hook_is_installed(tool, root, home):
+            continue
+        # Setup has already reported the shared files the switch keeps in place.
+        report.extend(line for line in install_session_switch([tool], root, home)
+                      if not line.startswith("in place"))
 
 
 def _claude_version_hook(helper: Path, project: bool) -> dict[str, object]:
@@ -2321,6 +2346,24 @@ def choose_tools(
     return None
 
 
+def _choose_dynamic_loading(
+    tools: list[str], input_fn: Callable[[str], str], output: Callable[[str], None]
+) -> bool:
+    """Ask how Claude Code and Codex load the baseline; unclear answers keep it static."""
+    switchable = [tool for tool in tools if tool in {"claude", "codex"}]
+    if not switchable:
+        return False
+    output(f"\nHow should {_join_labels(switchable)} load the baseline?")
+    output("  1. statically, always active")
+    output("  2. dynamically, AISCB_DISABLE=1 turns it off; depends on startup hooks")
+    for _ in range(3):
+        answer = _read_answer(input_fn, "Choice [1]: ") or "1"
+        if answer in {"1", "2"}:
+            return answer == "2"
+        output("Invalid selection. Choose 1 or 2.")
+    return False
+
+
 def _path_from_answer(answer: str, home: Path) -> Path:
     if answer == "~":
         candidate = home
@@ -2915,6 +2958,10 @@ def _add_tools_interactively(
     report = install(
         tools, root if project else Path.cwd(), home, content=available.content
     )
+    # Added tools load the baseline the way the installation already does.
+    targets = project_targets(root) if project else user_targets(root)
+    if any(_session_link(targets[tool][0][1], installation.source) for tool in ("claude", "codex")):
+        _enable_session_switch(tools, root, home, installation.source, report)
     for line in report:
         output(f"  {line}")
     installed = _rescan(installation, registry)
@@ -2983,8 +3030,11 @@ def _install_project_interactively(
     if not tools:
         output("Setup cancelled.")
         return changed, update_incomplete
+    dynamic = _choose_dynamic_loading(tools, input_fn, output)
     output("\nApplying project setup:")
     report = install(tools, root, None, content=available.content)
+    if dynamic:
+        _enable_session_switch(tools, root, None, root / BASELINE, report)
     for line in report:
         output(f"  {line}")
     projects = registry.get("projects", {})
@@ -2995,7 +3045,8 @@ def _install_project_interactively(
     hook_incomplete, hooks_configured = _offer_session_notice(
         installed, input_fn, output
     )
-    if hooks_configured and not update_check_enabled(registry):
+    switched = any(line.startswith("enabled session switch") for line in report)
+    if (hooks_configured or switched) and not update_check_enabled(registry):
         _offer_update_notice(registry, input_fn, output)
     return (
         changed or installed is not None,
@@ -3095,8 +3146,11 @@ def _install_user_interactively(
     if not tools:
         output("Setup cancelled.")
         return changed, update_incomplete
+    dynamic = _choose_dynamic_loading(tools, input_fn, output)
     output("\nApplying user-wide setup:")
     report = install(tools, Path.cwd(), home, content=available.content)
+    if dynamic:
+        _enable_session_switch(tools, Path.cwd(), home, user_source(home), report)
     for line in report:
         output(f"  {line}")
     user_entry = registry.get("user")
@@ -3113,7 +3167,8 @@ def _install_user_interactively(
         hook_incomplete, hooks_configured = _offer_session_notice(
             managed[0], input_fn, output
         )
-        if hooks_configured and not update_check_enabled(registry):
+        switched = any(line.startswith("enabled session switch") for line in report)
+        if (hooks_configured or switched) and not update_check_enabled(registry):
             _offer_update_notice(registry, input_fn, output)
         return True, update_incomplete or incomplete or hook_incomplete
     _verify_baseline_tools(tools, None, output)

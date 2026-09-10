@@ -514,7 +514,7 @@ with tempfile.TemporaryDirectory() as tmp:
     home.mkdir()
     project.mkdir()
     state = home / "state.json"
-    answers = iter(["1", "", "", "y"])
+    answers = iter(["1", "", "", "", "y"])
     output: list[str] = []
     result = install.interactive_setup(
         home=home,
@@ -902,7 +902,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     prompts = []
     migration_output = []
-    answers = iter(["1", "n", "1"])
+    answers = iter(["1", "n", "1", ""])
 
     def decline_migration(prompt: str) -> str:
         prompts.append(prompt)
@@ -984,7 +984,7 @@ with tempfile.TemporaryDirectory() as tmp:
     install.record_installation(registry, previous, trusted=True)
     state = sandbox / "state.json"
     install.save_registry(state, registry)
-    answers = iter(["3", "2", "n"])
+    answers = iter(["3", "2", "", "n"])
     prompts = []
     output = []
 
@@ -1079,7 +1079,7 @@ with tempfile.TemporaryDirectory() as tmp:
         bundled.baseline_id.encode(), b"aiscb-0.0.1", 1
     )
     (target / install.BASELINE).write_bytes(old_content)
-    answers = iter(["3", "y", "2", "n"])
+    answers = iter(["3", "y", "2", "", "n"])
     output = []
     result = install.interactive_setup(
         home=home,
@@ -1464,6 +1464,102 @@ with tempfile.TemporaryDirectory() as tmp:
           and install._version_hook_is_installed("claude", home, home)
           and install._version_hook_is_installed("codex", home, home)
           and not update_notice_enabled(state),
+          f"output={output!r}, prompts={prompts!r}")
+
+# --- static or dynamic loading ----------------------------------------------
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    result, output, prompts = with_agents(
+        ("claude", "codex", "copilot"),
+        lambda: guided(home, home.parent / "state.json", ["", "", "", "n"]))
+    check("guided setup asks how Claude Code and Codex load, static by default",
+          result == 0
+          and "\nHow should Claude Code and Codex load the baseline?" in output
+          and "  1. statically, always active" in output
+          and "  2. dynamically, AISCB_DISABLE=1 turns it off; depends on startup hooks"
+              in output
+          and prompts[2] == "Choice [1]: "
+          and install._link_points_to(home / ".codex" / "AGENTS.md",
+                                      install.user_source(home)),
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    source = install.user_source(home)
+    result, output, prompts = with_agents(
+        ("claude", "codex", "copilot"),
+        lambda: guided(home, home.parent / "state.json", ["", "", "2", "n", "n"]))
+    check("dynamic loading gives Claude Code and Codex the session switch",
+          result == 0
+          and install._session_link(home / ".claude" / install.BASELINE, source)
+          and install._session_link(home / ".codex" / "AGENTS.md", source)
+          and install._link_points_to(home / ".copilot" / "copilot-instructions.md",
+                                      source)
+          and any(line.endswith("approve its hooks in Codex with /hooks")
+                  for line in output)
+          and prompts[3:] == ["Enable session notice? [Y/n] ",
+                              "Enable update notice? [y/N] "],
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    project = Path(tmp) / "project"
+    home.mkdir()
+    project.mkdir()
+    result, output, prompts = with_agents((), lambda: project_setup(
+        home, home.parent / "state.json", project, ["1", "1,2", "2", "n"]))
+    check("a project can load the baseline dynamically",
+          result == 0
+          and install._session_link(project / ".claude" / "rules" / install.BASELINE,
+                                    project / install.BASELINE)
+          and install._session_link(project / "AGENTS.md", project / install.BASELINE)
+          and prompts[3:] == ["Enable update notice? [y/N] "],
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    result, output, prompts = with_agents(
+        ("copilot",), lambda: guided(home, home.parent / "state.json", ["", "n"]))
+    check("the loading question is left out without Claude Code or Codex",
+          result == 0
+          and not any(line.startswith("\nHow should") for line in output)
+          and prompts == ["Choice [1]: ", "Enable session notice? [Y/n] "],
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    result, output, prompts = with_agents(
+        ("codex",),
+        lambda: guided(home, home.parent / "state.json", ["", "3", "dynamic", "yes", "n"]))
+    check("unclear answers keep the baseline static",
+          result == 0
+          and output.count("Invalid selection. Choose 1 or 2.") == 3
+          and install._link_points_to(home / ".codex" / "AGENTS.md",
+                                      install.user_source(home)),
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    install.install_session_switch(["claude"], home, home)
+    registry = install.empty_registry()
+    user = [item for item in install.scan_user(home, {}) if item.kind == "user"][0]
+    install.record_installation(registry, user, trusted=True)
+    state = home.parent / "state.json"
+    install.save_registry(state, registry)
+    result, output, prompts = with_agents(
+        ("claude", "codex"), lambda: guided(home, state, ["1"]))
+    check("a tool added to a dynamic installation loads dynamically too",
+          result == 0
+          and menu(output)[0] == "  1. add to Codex"
+          and not any(line.startswith("\nHow should") for line in output)
+          and install._session_link(home / ".codex" / "AGENTS.md",
+                                    install.user_source(home)),
           f"output={output!r}, prompts={prompts!r}")
 
 with tempfile.TemporaryDirectory() as tmp:

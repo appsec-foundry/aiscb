@@ -1,16 +1,20 @@
 # Session switch
 
 `AISCB_DISABLE=1` omits the baseline security instructions supplied by each
-installation configured with `install.py --session-switch`. Unset the variable
-or use `0` to load them. Other values block the prompt. Start a fresh session:
-the switch cannot remove instructions from conversation history.
+installation set up for dynamic loading, in guided setup or with
+`install.py --session-switch`. Unset the variable or use `0` to load them.
+Other values block the prompt. Start a fresh session: the switch cannot remove
+instructions from conversation history.
 
 ## Scope
 
-Setup supports Claude Code and Codex at user and project level. Add `claude` or
-`codex` to the setup command to select one tool. Existing installer-managed
-links are migrated; foreign links, combined instruction files, and customized
-loader hooks are refused. Other instructions and permissions are preserved.
+Setup supports Claude Code and Codex at user and project level. Guided setup
+asks how they load the baseline; static loading is the default, and tools added
+later load it the way the installation already does. For an existing
+installation, add `claude` or `codex` to the `--session-switch` command to
+select one tool. Existing installer-managed links are migrated; foreign links,
+combined instruction files, and customized loader hooks are refused. Other
+instructions and permissions are preserved.
 
 A derived baseline works when it is the managed `secure-coding-baseline.md`
 file with one valid `baseline-id`. Separate overlays remain active. The
@@ -22,6 +26,8 @@ remain active.
 ## If the baseline still appears
 
 - Check both installation scopes and any manual imports.
+- Look for `blocked session switch` in the setup output, fix the named cause,
+  and run `install.py --session-switch` again.
 - Start a new conversation instead of resuming one.
 - In Codex, trust the new hooks with `/hooks`. After a helper update, review
   its changed code and renew trust when Codex requests it.
