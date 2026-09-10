@@ -12,9 +12,9 @@ aiscb is a short set of secure-coding rules for AI coding assistants. Add it to 
 
 > **Scope and limits**
 >
-> aiscb is instructions, not enforcement. The agent weighs the rules against the task, other instruction files, and whatever it reads while working. Stating them explicitly makes security count for more in that decision, especially when a failing test, a deadline, or a direct request invites a shortcut. They only work when the file is loaded, the agent can still ignore them, and in a long session they can drop out of view.
+> aiscb is a set of instructions, not enforcement. The coding agent weighs the rules against the task, other instruction files, and whatever it reads while working. Stating them explicitly like this makes security count for more in that decision, especially when a failing test, a deadline, or a direct request invites a shortcut. They only work when the baseline file is actually loaded.
 >
-> Keep peer review, tests, SAST, SCA, secret scanning, and CI gates in place, and enforce rules that must hold with deterministic guards such as permission boundaries, hooks, or the [Claude Code gate](examples/claude-code-gate/). Data protection beyond secrets, credentials, and log content is out of scope.
+> Therefore, keep security code reviews, SAST, SCA, secret scanning, etc., and CI gates in place, and enforce rules that must hold with deterministic guards such as permission boundaries, hooks, or the [Claude Code gate](examples/claude-code-gate/). 
 
 ## Quick start
 
