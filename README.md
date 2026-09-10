@@ -125,7 +125,7 @@ make uninstall                         # remove what the installer placed here
 make help                              # list available commands
 ```
 
-`install-codex` and `install-copilot` work like `install-claude`. Project installations support Claude Code, Codex, and GitHub Copilot; user installations support Claude Code, Codex, and Copilot CLI.
+`install-codex` and `install-copilot` work like `install-claude`. Project installations support Claude Code, Codex, and GitHub Copilot; user installations support Claude Code, Codex, and Copilot CLI. Guided setup offers a user installation only for tools it finds on this computer and stops outside a project if it finds none; `make install-<tool> ARGS=--user` installs one anyway.
 
 Guided setup changes only the user installation or current project you select. It keeps existing instruction files and other configured tools. Overwriting an edited baseline creates a backup and requires confirmation; uninstall also previews its changes and defaults to no.
 

@@ -64,6 +64,15 @@ TOOL_LABELS = {
     "codex": "Codex",
     "copilot": "GitHub Copilot",
 }
+# At user level Copilot means Copilot CLI, the tool the guided setup looks for.
+AGENT_LABELS = {**TOOL_LABELS, "copilot": "GitHub Copilot CLI"}
+# What this installer places in a tool's directory in the home directory.
+# Anything else there was written by the tool itself.
+INSTALLER_ENTRIES = {
+    "claude": {BASELINE, "CLAUDE.md", "settings.json"},
+    "codex": {"AGENTS.md", "hooks.json"},
+    "copilot": {"copilot-instructions.md", "hooks"},
+}
 
 OFFICIAL_NAME = "aiscb"
 GITHUB_REPOSITORY = "appsec-foundry/aiscb"
@@ -2238,12 +2247,30 @@ def ask_yes_no(
     return default
 
 
+def _agent_found(tool: str, home: Path) -> bool:
+    if shutil.which(tool):
+        return True
+    try:
+        return any(
+            entry.name not in INSTALLER_ENTRIES[tool]
+            for entry in (home / f".{tool}").iterdir()
+        )
+    except OSError:
+        return False
+
+
+def found_agents(home: Path) -> tuple[str, ...]:
+    """Tools whose command is on PATH or that left files of their own in home."""
+    return tuple(tool for tool in TOOLS if _agent_found(tool, home))
+
+
 def choose_tools(
     input_fn: Callable[[str], str],
     output: Callable[[str], None],
     tools: tuple[str, ...],
     default_tools: list[str] | None = None,
     heading: str = "Install for which tools?",
+    not_found: tuple[str, ...] = (),
 ) -> list[str] | None:
     defaults = (
         [tool for tool in default_tools if tool in tools]
@@ -2265,6 +2292,8 @@ def choose_tools(
             " (installed)" if has_installed_tools and tool in defaults else ""
         )
         output(f"  {number}. {TOOL_LABELS[tool]}{installed}")
+    if not_found:
+        output("  Not found: " + ", ".join(AGENT_LABELS[tool] for tool in not_found))
     for _ in range(3):
         answer = _read_answer(
             input_fn,
@@ -2515,6 +2544,11 @@ def _show_setup_status(
             output("  Session notice: on")
         else:
             output(f"  Session notice: on for {_join_labels(notice)}")
+        if notice:
+            output(
+                "  Update notice: on" if update_check_enabled(registry)
+                else "  Update notice: off, so you won't hear about new versions"
+            )
 
     if not any(item.kind in {"user", "legacy-user"} for item in user):
         output("\nYour user account: not installed")
@@ -2527,21 +2561,12 @@ def _show_setup_status(
     for installation in current + other:
         show(installation)
 
-    notes: list[str] = []
-    if any(_session_notice_tools(item) for item in installations):
-        notes.append(
-            "Update notice: on" if update_check_enabled(registry)
-            else "Update notice: off, so you won't hear about new versions"
-        )
     if LOCAL_ORIGIN == "installed copy":
-        notes.append(
+        output("")
+        output(
             "Check for a new version: "
             f"python3 {display_path(INSTALLER_SOURCE)} --update"
         )
-    if notes:
-        output("")
-        for line in notes:
-            output(line)
 
 
 def _record_current_scope(
@@ -2985,6 +3010,7 @@ def _install_user_interactively(
     reviewed_updates: set[Path],
     input_fn: Callable[[str], str],
     output: Callable[[str], None],
+    agents: tuple[str, ...],
 ) -> tuple[bool, bool]:
     user_entry = registry.get("user")
     existing = scan_user(home, user_entry if isinstance(user_entry, dict) else {})
@@ -3058,7 +3084,14 @@ def _install_user_interactively(
         for tool in installation.tools:
             if tool not in default_tools:
                 default_tools.append(tool)
-    tools = choose_tools(input_fn, output, TOOLS, default_tools or None)
+    # Offer the tools found on this computer and keep those already installed.
+    offered = tuple(tool for tool in TOOLS if tool in agents or tool in default_tools)
+    tools: list[str] | None = list(offered)
+    if len(offered) > 1:
+        tools = choose_tools(
+            input_fn, output, offered, default_tools or None,
+            not_found=tuple(tool for tool in TOOLS if tool not in offered),
+        )
     if not tools:
         output("Setup cancelled.")
         return changed, update_incomplete
@@ -3109,15 +3142,10 @@ def interactive_setup(
     current_root: Path | None = None,
 ) -> int:
     output("AI Secure Coding Baseline setup")
-    if check_online:
-        output("Checking for the newest release...")
-    available, _note, released = latest_available(check_online)
     state_path = state_path or registry_path(home)
     registry, registry_writable, registry_note = load_registry_with_previous(
         home, state_path
     )
-    if registry_writable:
-        cache_release_check(state_path, registry, released)
     explicit_project = current_root is not None
     location = (current_root or Path.cwd()).resolve()
     if not location.is_dir():
@@ -3125,14 +3153,6 @@ def interactive_setup(
     project_root = location if explicit_project else _detect_project_root(location)
     if project_root is not None and project_root == Path(project_root.anchor):
         project_root = None
-
-    release_line = _release_line(available, released, check_online)
-    if release_line:
-        output(release_line)
-    if project_root is None:
-        output("This directory is not a project, so only the user-wide setup applies.")
-    if registry_note:
-        output(registry_note)
     discovered = discover_installations(home, registry, project_root)
     home_resolved = home.resolve(strict=False)
     project_resolved = (
@@ -3148,14 +3168,43 @@ def interactive_setup(
             and item.root.resolve(strict=False) == project_resolved
         )
     ]
+    user_items = [
+        item for item in installations if item.kind in {"user", "legacy-user"}
+    ]
+    agents = found_agents(home)
+    # With no tool to set up and nothing to update or remove, stop before the
+    # release check contacts the network.
+    if not agents and project_root is None and not installations:
+        output(
+            "\nNo supported coding agent found ("
+            + ", ".join(AGENT_LABELS[tool] for tool in TOOLS) + ")."
+        )
+        output("Install one of them, then run the setup again.")
+        return 1
+    if agents:
+        output("Coding agents found: " + ", ".join(AGENT_LABELS[tool] for tool in agents))
+    elif project_root is not None and not user_items:
+        output("No coding agent found on this computer, so only the project setup applies.")
+    else:
+        output("No coding agent found on this computer.")
+
+    if check_online:
+        output("Checking for the newest release...")
+    available, _note, released = latest_available(check_online)
+    if registry_writable:
+        cache_release_check(state_path, registry, released)
+    release_line = _release_line(available, released, check_online)
+    if release_line:
+        output(release_line)
+    if project_root is None:
+        output("This directory is not a project, so only the user-wide setup applies.")
+    if registry_note:
+        output(registry_note)
     _show_setup_status(
         output, installations, available, home, project_root, registry, released
     )
 
     reviewed_updates: set[Path] = set()
-    user_items = [
-        item for item in installations if item.kind in {"user", "legacy-user"}
-    ]
     user_scope = next((item for item in user_items if item.kind == "user"), None)
     project_scope = next(
         (
@@ -3174,7 +3223,9 @@ def interactive_setup(
     outdated = _outdated_installations(installations, available, reviewed_updates)
     removable = [item for item in installations if item.kind != "unmanaged"]
     missing_user = [
-        tool for tool in TOOLS if user_scope is not None and tool not in user_scope.tools
+        tool
+        for tool in TOOLS
+        if user_scope is not None and tool not in user_scope.tools and tool in agents
     ]
     missing_project = [
         tool
@@ -3195,10 +3246,11 @@ def interactive_setup(
     user_action_index = len(actions) + 1
     if any(item.kind == "legacy-user" for item in user_items):
         actions.append(("switch your user account to a managed copy...", "user"))
-    elif user_scope is None or not user_scope.tools:
+    elif (user_scope is None or not user_scope.tools) and agents:
         actions.append(("install for your user account...", "user"))
     elif missing_user:
         actions.append((_add_label(missing_user, ""), "user_add"))
+    user_offered = len(actions) == user_action_index
     if project_root is not None:
         if project_scope is None or not project_scope.tools:
             actions.append(
@@ -3235,11 +3287,12 @@ def interactive_setup(
     exit_choice = str(len(actions))
     # A tracked update keeps its former default, while an unrecorded file still
     # gets a separate default-no replacement question. Otherwise offer user-wide
-    # setup only while it is missing or still needs migration. Pressing Enter
-    # must never install into the current project implicitly.
+    # setup only while the menu offers it and it is missing or still needs
+    # migration. Pressing Enter must never install into the current project
+    # implicitly.
     if outdated:
         default_choice = "1"
-    elif not user_installed or user_needs_migration:
+    elif (not user_installed or user_needs_migration) and user_offered:
         default_choice = str(user_action_index)
     else:
         default_choice = exit_choice
@@ -3263,7 +3316,7 @@ def interactive_setup(
         )
     elif chosen == "user":
         action_changed, action_incomplete = _install_user_interactively(
-            home, registry, available, reviewed_updates, input_fn, output
+            home, registry, available, reviewed_updates, input_fn, output, agents
         )
     elif chosen == "user_add" and user_scope is not None:
         action_changed, action_incomplete, message = _add_tools_interactively(

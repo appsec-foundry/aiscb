@@ -21,6 +21,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
 
 failures = 0
+# The scenarios assume all three agents are on this computer, whatever the
+# machine running them has installed; with_agents() narrows that.
+real_found_agents = install.found_agents
+install.found_agents = lambda _home: install.TOOLS
 
 
 def check(name: str, condition: bool, detail: str = "") -> None:
@@ -1180,7 +1184,8 @@ with tempfile.TemporaryDirectory() as tmp:
           and f"  {bundled.baseline_id}, up to date as of {CHECKED_ON}" in output
           and "  Loaded by Claude Code and Codex" in output
           and "  Session notice: on" in output
-          and "Update notice: off, so you won't hear about new versions" in output
+          and output[output.index("  Session notice: on") + 1]
+              == "  Update notice: off, so you won't hear about new versions"
           and "This directory is not a project, so only the user-wide setup applies."
               in output,
           str(output))
@@ -1214,7 +1219,7 @@ with tempfile.TemporaryDirectory() as tmp:
           f"  {bundled.baseline_id}, newest release not checked" in output
           and f"Online check skipped; this copy has {bundled.baseline_id}" in output
           and "  Session notice: off" in output
-          and not any(line.startswith("Update notice") for line in output),
+          and not any("Update notice" in line for line in output),
           str(output))
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -1225,6 +1230,175 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a newer release from an earlier check is named with its date",
           f"  {bundled.baseline_id}, update to aiscb-99.0.0 available "
           f"(checked {CHECKED_ON})" in output, str(output))
+
+# --- the guided setup offers the agents it finds ----------------------------
+
+
+def with_agents(agents: tuple[str, ...], call):
+    """Run call as if only these agents were on this computer."""
+    original = install.found_agents
+    install.found_agents = lambda _home: agents
+    try:
+        return call()
+    finally:
+        install.found_agents = original
+
+
+def project_setup(home: Path, state: Path, project: Path,
+                  answers: list[str]) -> tuple[int, list[str], list[str]]:
+    """Run the guided setup for one project with scripted answers."""
+    replies = iter(answers)
+    prompts: list[str] = []
+    output: list[str] = []
+
+    def reply(prompt: str) -> str:
+        prompts.append(prompt)
+        return next(replies, "")
+
+    result = install.interactive_setup(
+        home=home, input_fn=reply, output=output.append,
+        check_online=False, state_path=state, current_root=project,
+    )
+    return result, output, prompts
+
+
+def tool_list(output: list[str]) -> list[str]:
+    """The entries right below the tool question."""
+    entries: list[str] = []
+    for line in output[output.index("\nInstall for which tools?") + 1:]:
+        if not line.startswith("  "):
+            break
+        entries.append(line)
+    return entries
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp)
+    original_which = install.shutil.which
+    try:
+        install.shutil.which = lambda _name: None
+        empty_home = real_found_agents(home)
+        install.install(list(install.TOOLS), home, home)
+        install.install_version_hooks(list(install.TOOLS), home, home)
+        placed = sorted(f"{tool}/{entry.name}" for tool in install.TOOLS
+                        for entry in (home / f".{tool}").iterdir())
+        installer_files_only = real_found_agents(home)
+        (home / ".codex" / "sessions").mkdir()
+        own_files = real_found_agents(home)
+        install.shutil.which = (
+            lambda name: f"/usr/bin/{name}" if name == "claude" else None
+        )
+        on_path = real_found_agents(home)
+    finally:
+        install.shutil.which = original_which
+    check("an empty home without agent commands has no agent", empty_home == ())
+    check("files the installer placed do not count as an agent",
+          installer_files_only == (), str(placed))
+    check("a file an agent wrote itself counts", own_files == ("codex",))
+    check("an agent command on PATH counts", on_path == ("claude", "codex"))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = Path(tmp) / "state.json"
+    contacted: list[object] = []
+    original_fetch = install.fetch_release_baseline
+    install.fetch_release_baseline = lambda *args, **_kwargs: contacted.append(args)
+    try:
+        result, output, prompts = with_agents(
+            (), lambda: guided(home, state, [], check_online=True))
+    finally:
+        install.fetch_release_baseline = original_fetch
+    check("without any agent the setup stops before the release check",
+          result == 1
+          and output == [
+              "AI Secure Coding Baseline setup",
+              "\nNo supported coding agent found "
+              "(Claude Code, Codex, GitHub Copilot CLI).",
+              "Install one of them, then run the setup again.",
+          ]
+          and prompts == [] and contacted == [] and not state.exists(),
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = Path(tmp) / "state.json"
+    _result, output, prompts = with_agents(
+        ("claude", "codex"), lambda: guided(home, state, ["1", ""]))
+    user = [item for item in install.scan_user(home, {}) if item.kind == "user"]
+    check("the setup names the agents it found before anything else",
+          output[1] == "Coding agents found: Claude Code, Codex", str(output[:3]))
+    check("the user setup lists only the agents it found",
+          tool_list(output) == [
+              "  1. Claude Code",
+              "  2. Codex",
+              "  Not found: GitHub Copilot CLI",
+          ]
+          and prompts[1] == "Tools (comma-separated; Enter = both): "
+          and bool(user) and user[0].tools == ("claude", "codex"),
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = Path(tmp) / "state.json"
+    _result, output, prompts = with_agents(
+        ("codex",), lambda: guided(home, state, ["1"]))
+    user = [item for item in install.scan_user(home, {}) if item.kind == "user"]
+    check("with one agent found the user setup does not ask for tools",
+          "\nInstall for which tools?" not in output
+          and not any(prompt.startswith("Tools") for prompt in prompts)
+          and bool(user) and user[0].tools == ("codex",),
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    project = Path(tmp) / "project"
+    project.mkdir()
+    state = Path(tmp) / "state.json"
+    result, output, prompts = with_agents(
+        (), lambda: project_setup(home, state, project, []))
+    check("in a project without agents Enter does not install anything",
+          result == 0
+          and output[1] == "No coding agent found on this computer, so only the "
+                           "project setup applies."
+          and menu(output) == [
+              f"  1. install in project {install.display_path(project.resolve())}...",
+              "  2. exit",
+          ]
+          and prompts == ["Choice [2]: "],
+          f"output={output!r}, prompts={prompts!r}")
+    _result, output, _prompts = with_agents(
+        (), lambda: project_setup(home, state, project, ["1", ""]))
+    check("the project setup still offers every tool",
+          tool_list(output) == [
+              "  1. Claude Code",
+              "  2. Codex",
+              "  3. GitHub Copilot",
+          ],
+          str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["codex"], notice=False)
+    result, output, _prompts = with_agents((), lambda: guided(home, state, []))
+    check("an installation stays manageable when no agent is found",
+          result == 0
+          and output[1] == "No coding agent found on this computer."
+          and "  Loaded by Codex" in output
+          and menu(output) == [
+              "  1. enable session notice...",
+              "  2. remove from your user account...",
+              "  3. exit",
+          ],
+          str(output))
+    _result, output, _prompts = with_agents(
+        ("claude", "codex"), lambda: guided(home, state, []))
+    check("adding tools offers only the agents that were found",
+          menu(output)[0] == "  1. add to Claude Code", str(output))
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
