@@ -179,14 +179,6 @@ Claude Code does **not** load `AGENTS.md` automatically. Use one of its own inst
 
 - **Organization:** deploy it as a managed-policy `CLAUDE.md`. See the [organization setup](https://code.claude.com/docs/en/admin-setup).
 
-To run one session without a user-level baseline, start Claude Code without its user settings, from a working directory outside your home directory:
-
-```bash
-claude --setting-sources project,local
-```
-
-This skips all `~/.claude` configuration for that session, including hooks and permissions; a project baseline still loads. Run it outside your home directory because Claude Code also reads parent `CLAUDE.md` files.
-
 ### GitHub Copilot
 
 Copilot's coding agent and VS Code support `AGENTS.md`. For other Copilot surfaces, `.github/copilot-instructions.md` has the broadest support.
