@@ -1026,6 +1026,107 @@ def _enable_session_switch(
                       if not line.startswith("in place"))
 
 
+def install_static_loading(tools: list[str], root: Path, home: Path | None) -> list[str]:
+    """Undo the session switch, so Claude Code and Codex always load the baseline.
+
+    Links return to the baseline before any hook changes, so a failed later
+    step still leaves the baseline loaded. A session notice the loader hooks
+    showed stays on as the static notice hook.
+    """
+    if not tools or any(tool not in {"claude", "codex"} for tool in tools):
+        return ["blocked static loading: choose claude and/or codex"]
+    report: list[str] = []
+    project = home is None
+    source = user_source(home) if home is not None else root / BASELINE
+    targets = user_targets(home) if home is not None else project_targets(root)
+    helper = version_hook_path(root, home)
+    loader = helper.parent / SESSION_LOADER_NAME
+    plans = []
+    try:
+        for path in (source, helper, loader):
+            _check_session_parents(path, home or root)
+        if source.is_symlink():
+            raise ValueError("baseline source is a symlink")
+        read_baseline(source)
+        for tool in tools:
+            target = targets[tool][0][1]
+            for _, path in targets[tool]:
+                _check_session_parents(path, home or root)
+            if _link_points_to(target, source):
+                report.append(f"in place {target}")
+                continue
+            if not _session_link(target, source):
+                raise ValueError("an instruction file is not an exact managed link")
+            path = _session_hook_path(tool, root, home)
+            _check_session_parents(path, home or root)
+            config, existed = _read_hook_config(path)
+            hooks = config.setdefault("hooks", {})
+            if not isinstance(hooks, dict):
+                raise ValueError("invalid hooks configuration")
+            starts = hooks.get("SessionStart", [])
+            checks = hooks.get("UserPromptSubmit", [])
+            if not isinstance(starts, list) or not isinstance(checks, list):
+                raise ValueError("invalid session hooks")
+            session = _session_hook(tool, helper, project)
+            session_check = _session_check_hook(tool, helper, project)
+            legacy = (_claude_version_hook if tool == "claude" else _codex_version_hook)(helper, project)
+            notice = any(item == session or _is_moved_version_hook(item, legacy) for item in starts)
+            kept = [item for item in starts if item != session and not _is_moved_version_hook(item, legacy)]
+            kept_checks = [item for item in checks if item != session_check]
+            if any(VERSION_HOOK_NAME in json.dumps(item) for item in kept + kept_checks):
+                raise ValueError("a baseline hook was customized")
+            for event, entries in (
+                ("SessionStart", (kept + [legacy]) if notice else kept),
+                ("UserPromptSubmit", kept_checks),
+            ):
+                if entries:
+                    hooks[event] = entries
+                else:
+                    hooks.pop(event, None)
+            if not hooks:
+                del config["hooks"]
+            import_plan = None
+            if home is not None and tool == "claude":
+                imported = targets[tool][1][1]
+                if imported.is_symlink():
+                    raise ValueError("CLAUDE.md is a symlink")
+                before = read_limited(imported, MAX_INSTRUCTION_BYTES).decode("utf-8") if imported.exists() else ""
+                # Keep every unrelated byte, including line endings and comments.
+                old, new = f"@{target}", f"@{source}"
+                after = "".join(new + line[len(old):] if line.rstrip("\r\n") == old else line
+                                for line in before.splitlines(keepends=True))
+                if after != before:
+                    import_plan = imported, after.encode()
+            plans.append((tool, target, path, config, existed, import_plan, notice))
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        return [
+            f"blocked static loading for {_join_labels(tools)}: {error}; "
+            "the dynamic installation is unchanged"
+        ]
+    try:
+        for tool, target, path, config, existed, import_plan, notice in plans:
+            # os.replace changes the link atomically, never the baseline it points to.
+            _atomic_symlink(target, Path(link_text(target, source, relative=project)))
+            if import_plan:
+                _atomic_replace(*import_plan)
+            if config:
+                _write_hook_config(path, config, existed)
+            elif existed:
+                path.unlink()
+            approval = "; approve its hooks in Codex with /hooks" if tool == "codex" and notice else ""
+            report.append(f"disabled session switch for {target}; every new session loads the baseline{approval}")
+        if (
+            loader.is_file() and not loader.is_symlink()
+            and not any(_session_link(targets[tool][0][1], source) for tool in ("claude", "codex"))
+            and read_limited(loader, MAX_INSTRUCTION_BYTES) == _session_loader(source, helper)
+        ):
+            loader.unlink()
+            report.append(f"removed {loader}")
+    except (OSError, ValueError):
+        report.append("blocked static loading: could not finish writing; rerun setup before starting a session")
+    return report
+
+
 def _claude_version_hook(helper: Path, project: bool) -> dict[str, object]:
     script = (
         f"${{CLAUDE_PROJECT_DIR}}/{VERSION_HOOK_DIR}/{VERSION_HOOK_NAME}"
@@ -2507,6 +2608,19 @@ def _session_notice_tools(installation: Installation) -> list[str]:
     ]
 
 
+def _loading_modes(installation: Installation) -> tuple[list[str], list[str]]:
+    """The Claude Code and Codex of a managed installation, loading dynamically and statically."""
+    if installation.kind not in {"user", "project"}:
+        return [], []
+    targets = (
+        project_targets(installation.root) if installation.kind == "project"
+        else user_targets(installation.root)
+    )
+    tools = [tool for tool in installation.tools if tool in {"claude", "codex"}]
+    dynamic = [tool for tool in tools if _session_link(targets[tool][0][1], installation.source)]
+    return dynamic, [tool for tool in tools if tool not in dynamic]
+
+
 def _scope_title(installation: Installation, home: Path) -> str:
     source = display_path(installation.source)
     if installation.kind == "user":
@@ -2580,6 +2694,13 @@ def _show_setup_status(
         output(f"  Loaded by {_join_labels(installation.tools)}")
         if installation.kind not in {"user", "project"}:
             return
+        dynamic, static = _loading_modes(installation)
+        if dynamic and static:
+            output(f"  Loading: dynamic for {_join_labels(dynamic)}, static for {_join_labels(static)}")
+        elif dynamic:
+            output(f"  Loading: dynamic for {_join_labels(dynamic)}; AISCB_DISABLE=1 turns it off")
+        elif static:
+            output("  Loading: static, always active")
         notice = _session_notice_tools(installation)
         if not notice:
             output("  Session notice: off")
@@ -2818,6 +2939,50 @@ def _offer_session_notice(
             output(f"  ! {TOOL_LABELS[tool]} session notice incomplete")
             incomplete = True
     return incomplete, configured
+
+
+def _change_loading_interactively(
+    installation: Installation | None,
+    input_fn: Callable[[str], str],
+    output: Callable[[str], None],
+) -> tuple[bool, bool, str | None]:
+    """Switch Claude Code and Codex between static and dynamic loading."""
+    if installation is None:
+        return False, False, None
+    dynamic, static = _loading_modes(installation)
+    if dynamic and static:
+        to_dynamic = _choose_dynamic_loading(
+            [tool for tool in TOOLS if tool in dynamic + static], input_fn, output
+        )
+    else:
+        to_dynamic = bool(static)
+        if to_dynamic:
+            output("\nDynamic loading: a session started with AISCB_DISABLE=1 leaves the baseline out.")
+            output("It depends on startup hooks.")
+        else:
+            output("\nStatic loading: every session loads the baseline; AISCB_DISABLE=1 no longer leaves it out.")
+        # Only the static side, which keeps the baseline loaded, is the default answer.
+        question = "Load dynamically?" if to_dynamic else "Load statically?"
+        if not ask_yes_no(input_fn, question, not to_dynamic, output):
+            return False, False, None
+    tools = static if to_dynamic else dynamic
+    home = None if installation.kind == "project" else installation.root
+    report: list[str] = []
+    if to_dynamic:
+        output("\nApplying dynamic loading:")
+        _enable_session_switch(tools, installation.root, home, installation.source, report)
+    else:
+        output("\nApplying static loading:")
+        report = install_static_loading(tools, installation.root, home)
+    for line in report:
+        output(f"  {line}")
+    dynamic, static = _loading_modes(installation)
+    changed = [tool for tool in tools if tool in (dynamic if to_dynamic else static)]
+    if not changed:
+        return False, True, None
+    verb = "loads" if len(changed) == 1 else "load"
+    mode = "dynamically" if to_dynamic else "statically"
+    return True, len(changed) < len(tools), f"{_join_labels(changed)} now {verb} the baseline {mode}."
 
 
 def _set_update_notice(registry: dict[str, object], enabled: bool) -> None:
@@ -3316,6 +3481,18 @@ def interactive_setup(
                 (_add_label(missing_project, " in project"), "project_add")
             )
     for scope, where, key in (
+        (user_scope, "", "user_loading"),
+        (project_scope, " in project", "project_loading"),
+    ):
+        dynamic, static = _loading_modes(scope) if scope is not None else ([], [])
+        if dynamic and static:
+            both = [tool for tool in TOOLS if tool in dynamic + static]
+            actions.append((f"change how {_join_labels(both)} load the baseline{where}...", key))
+        elif static:
+            actions.append((f"load dynamically for {_join_labels(static)}{where}...", key))
+        elif dynamic:
+            actions.append((f"load statically for {_join_labels(dynamic)}{where}...", key))
+    for scope, where, key in (
         (user_scope, "", "user_notice"),
         (project_scope, " in project", "project_notice"),
     ):
@@ -3390,6 +3567,10 @@ def interactive_setup(
     elif chosen == "project_add" and project_scope is not None:
         action_changed, action_incomplete, message = _add_tools_interactively(
             project_scope, missing_project, available, registry, input_fn, output
+        )
+    elif chosen in {"user_loading", "project_loading"}:
+        action_changed, action_incomplete, message = _change_loading_interactively(
+            user_scope if chosen == "user_loading" else project_scope, input_fn, output
         )
     elif chosen in {"user_notice", "project_notice"}:
         scope = user_scope if chosen == "user_notice" else project_scope

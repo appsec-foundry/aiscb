@@ -734,7 +734,7 @@ with tempfile.TemporaryDirectory() as tmp:
         current_root=project,
     )
     check("a complete user scope defaults to leaving, not to writing a project",
-          prompts == ["Choice [4]: "], str(prompts))
+          prompts == ["Choice [5]: "], str(prompts))
 
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
@@ -767,13 +767,13 @@ with tempfile.TemporaryDirectory() as tmp:
           not any("up to date" in line and "not installed" in line
                   for line in output), str(output[:12]))
     check("existing installations expose removal but no unnecessary update action",
-          "  3. remove..." in output
+          "  5. remove..." in output
           and not any(line.startswith("  1. update to") for line in output)
           and not any("registered project" in line for line in output),
           str(output))
     check("a setup with nothing left to do defaults to leaving",
           result == 0
-          and prompts == ["Choice [4]: "]
+          and prompts == ["Choice [6]: "]
           and output[-1] == "No changes made.",
           f"prompts={prompts!r}, last={output[-1]!r}")
     prompts = []
@@ -781,7 +781,7 @@ with tempfile.TemporaryDirectory() as tmp:
     result = install.interactive_setup(
         home=home,
         input_fn=lambda prompt: prompts.append(prompt) or (
-            "3" if len(prompts) == 1 else ""),
+            "5" if len(prompts) == 1 else ""),
         output=output.append,
         check_online=False,
         state_path=state,
@@ -789,7 +789,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("removal from two scopes asks which one and cancels on Enter",
           result == 0
-          and prompts == ["Choice [4]: ", "Choice (Enter = cancel): "]
+          and prompts == ["Choice [6]: ", "Choice (Enter = cancel): "]
           and "\nRemove from:" in output
           and "  1. your user account" in output
           and "  3. both" in output
@@ -1198,11 +1198,12 @@ with tempfile.TemporaryDirectory() as tmp:
           result == 0
           and menu(output) == [
               "  1. add to GitHub Copilot",
-              "  2. enable update notice...",
-              "  3. remove from your user account...",
-              "  4. exit",
+              "  2. load dynamically for Claude Code and Codex...",
+              "  3. enable update notice...",
+              "  4. remove from your user account...",
+              "  5. exit",
           ]
-          and prompts == ["Choice [4]: "],
+          and prompts == ["Choice [5]: "],
           f"output={output!r}, prompts={prompts!r}")
     check("the dialog drops the bulk wording and installer jargon",
           not any(word in line for line in output
@@ -1390,9 +1391,10 @@ with tempfile.TemporaryDirectory() as tmp:
           and output[1] == "No coding agent found on this computer."
           and "  Loaded by Codex" in output
           and menu(output) == [
-              "  1. enable session notice...",
-              "  2. remove from your user account...",
-              "  3. exit",
+              "  1. load dynamically for Codex...",
+              "  2. enable session notice...",
+              "  3. remove from your user account...",
+              "  4. exit",
           ],
           str(output))
     _result, output, _prompts = with_agents(
@@ -1421,7 +1423,7 @@ with tempfile.TemporaryDirectory() as tmp:
     result, output, prompts = guided(home, state, ["1"])
     check("adding the one missing tool asks nothing more and inherits the notice",
           result == 0
-          and prompts == ["Choice [4]: "]
+          and prompts == ["Choice [5]: "]
           and (home / ".copilot" / "copilot-instructions.md").is_symlink()
           and install._version_hook_is_installed("copilot", home, home)
           and "\nAdding the session notice, as for the other tools:" in output
@@ -1451,10 +1453,10 @@ with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
     home.mkdir()
     state = user_scope(home, ["claude", "codex"], notice=False)
-    result, output, prompts = guided(home, state, ["2", "", "n"])
+    result, output, prompts = guided(home, state, ["3", "", "n"])
     check("the session notice is explained by the line it shows",
           result == 0
-          and menu(output)[1] == "  2. enable session notice..."
+          and menu(output)[2] == "  3. enable session notice..."
           and "\nSession notice: when a session starts, Claude Code and Codex show"
               in output
           and f"  AI Secure Coding Baseline active: {bundled.baseline_id}" in output
@@ -1566,21 +1568,98 @@ with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
     home.mkdir()
     state = user_scope(home, list(install.TOOLS), notice=True)
+    links = (home / ".claude" / install.BASELINE, home / ".codex" / "AGENTS.md")
+    source = install.user_source(home)
+    _result, output, _prompts = guided(home, state, [])
+    check("the status names static loading and the menu offers dynamic loading",
+          "  Loading: static, always active" in output
+          and menu(output)[0] == "  1. load dynamically for Claude Code and Codex...",
+          str(output))
+    result, output, prompts = guided(home, state, ["1", ""])
+    check("dynamic loading from the menu needs an explicit yes",
+          result == 0
+          and "\nDynamic loading: a session started with AISCB_DISABLE=1 leaves the "
+              "baseline out." in output
+          and prompts == ["Choice [4]: ", "Load dynamically? [y/N] "]
+          and all(install._link_points_to(link, source) for link in links)
+          and output[-1] == "\nNo additional changes made.",
+          f"output={output!r}, prompts={prompts!r}")
     result, output, prompts = guided(home, state, ["1", "y"])
+    check("the menu switches Claude Code and Codex to dynamic loading",
+          result == 0
+          and all(install._session_link(link, source) for link in links)
+          and output[-1] == "\nClaude Code and Codex now load the baseline dynamically.",
+          f"output={output!r}, prompts={prompts!r}")
+    result, output, prompts = guided(home, state, ["1", ""])
+    check("static loading is the default answer and keeps the session notice",
+          result == 0
+          and "  Loading: dynamic for Claude Code and Codex; AISCB_DISABLE=1 turns it off"
+              in output
+          and menu(output)[0] == "  1. load statically for Claude Code and Codex..."
+          and prompts == ["Choice [4]: ", "Load statically? [Y/n] "]
+          and all(install._link_points_to(link, source) for link in links)
+          and not (install.user_data_root(home) / install.SESSION_LOADER_NAME).exists()
+          and all(install._version_hook_is_installed(tool, home, home)
+                  for tool in install.TOOLS)
+          and output[-1] == "\nClaude Code and Codex now load the baseline statically.",
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["claude", "codex"], notice=True)
+    install.install_session_switch(["claude"], home, home)
+    result, output, prompts = with_agents(
+        ("claude", "codex"), lambda: guided(home, state, ["1", ""]))
+    check("a mixed installation names both modes and asks which one to use",
+          result == 0
+          and "  Loading: dynamic for Claude Code, static for Codex" in output
+          and menu(output)[0]
+              == "  1. change how Claude Code and Codex load the baseline..."
+          and "\nHow should Claude Code and Codex load the baseline?" in output
+          and install._link_points_to(home / ".claude" / install.BASELINE,
+                                      install.user_source(home))
+          and install._link_points_to(home / ".codex" / "AGENTS.md",
+                                      install.user_source(home))
+          and output[-1] == "\nClaude Code now loads the baseline statically.",
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    project = Path(tmp) / "project"
+    project.mkdir()
+    state = user_scope(home, ["codex"], notice=False)
+    install.install(["codex"], project, None)
+    _result, output, _prompts = with_agents(
+        ("codex",), lambda: project_setup(home, state, project, []))
+    check("the project scope offers its own loading switch",
+          output.count("  Loading: static, always active") == 2
+          and any(entry.endswith(". load dynamically for Codex...")
+                  for entry in menu(output))
+          and any(entry.endswith(". load dynamically for Codex in project...")
+                  for entry in menu(output)),
+          str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, list(install.TOOLS), notice=True)
+    result, output, prompts = guided(home, state, ["2", "y"])
     check("enabling the update notice says what it contacts and only reports",
           result == 0
-          and menu(output)[0] == "  1. enable update notice..."
+          and menu(output)[1] == "  2. enable update notice..."
           and "To find out, a background process asks api.github.com once a day."
               in output
-          and prompts == ["Choice [3]: ", "Enable update notice? [y/N] "]
+          and prompts == ["Choice [4]: ", "Enable update notice? [y/N] "]
           and update_notice_enabled(state)
           and output[-1] == "\nUpdate notice enabled.",
           f"output={output!r}, prompts={prompts!r}")
-    result, output, prompts = guided(home, state, ["1"])
+    result, output, prompts = guided(home, state, ["2"])
     check("disabling the update notice needs no further question",
           result == 0
-          and menu(output)[0] == "  1. disable update notice"
-          and prompts == ["Choice [3]: "]
+          and menu(output)[1] == "  2. disable update notice"
+          and prompts == ["Choice [4]: "]
           and not update_notice_enabled(state)
           and output[-1] == "\nUpdate notice disabled.",
           f"output={output!r}, prompts={prompts!r}")
@@ -1589,7 +1668,7 @@ with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
     home.mkdir()
     state = user_scope(home, ["claude", "codex"], notice=True)
-    result, output, prompts = guided(home, state, ["3", "y"])
+    result, output, prompts = guided(home, state, ["4", "y"])
     check("removal first names everything that goes, the installer included",
           result == 0
           and "\nThis removes from your user account:" in output
@@ -2267,7 +2346,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     state = sandbox / "state.json"
     install.save_registry(state, registry)
-    answers = iter(["5", "3", "y"])
+    answers = iter(["7", "3", "y"])
     output = []
     result = install.interactive_setup(
         home=home,

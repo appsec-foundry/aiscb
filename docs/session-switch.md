@@ -11,10 +11,12 @@ instructions from conversation history.
 Setup supports Claude Code and Codex at user and project level. Guided setup
 asks how they load the baseline; static loading is the default, and tools added
 later load it the way the installation already does. For an existing
-installation, add `claude` or `codex` to the `--session-switch` command to
-select one tool. Existing installer-managed links are migrated; foreign links,
-combined instruction files, and customized loader hooks are refused. Other
-instructions and permissions are preserved.
+installation, guided setup shows how it loads the baseline and switches it
+either way; returning to static loading keeps the session notice. The
+`--session-switch` command only switches to dynamic loading; add `claude` or
+`codex` to it to select one tool. Existing installer-managed links are
+migrated; foreign links, combined instruction files, and customized loader
+hooks are refused. Other instructions and permissions are preserved.
 
 A derived baseline works when it is the managed `secure-coding-baseline.md`
 file with one valid `baseline-id`. Separate overlays remain active. The
@@ -43,8 +45,9 @@ uninstall removes the managed loader and hooks.
 
 ## Verification
 
-`make check` covers loading, migration, preservation of other settings,
-parallel sessions, invalid values, and removal without model calls.
+`make check` covers loading, migration, switching back to static loading,
+preservation of other settings, parallel sessions, invalid values, and removal
+without model calls.
 
 Run `python3 scripts/probe_session_switch.py` for an additional check against
 installed CLIs (`--tools claude` or `--tools codex` selects one). It creates

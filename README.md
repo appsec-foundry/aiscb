@@ -135,7 +135,7 @@ The update notice is off by default. When enabled, it checks `api.github.com` at
 
 ### Temporarily disable the baseline
 
-Guided setup asks how Claude Code and Codex load the baseline. Static loading, the default, always loads it. Dynamic loading lets you start a session without it but depends on startup hooks. To switch an existing installation to dynamic loading, run once from this checkout:
+Guided setup asks how Claude Code and Codex load the baseline. Static loading, the default, always loads it. Dynamic loading lets you start a session without it but depends on startup hooks. Run guided setup again to see how an installation loads the baseline and to switch it either way. Without guided setup, switch an existing installation to dynamic loading once from this checkout:
 
 ```bash
 # Personal installation:

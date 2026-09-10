@@ -290,6 +290,82 @@ class SessionSwitchTests(unittest.TestCase):
         self.assertEqual(claude.read_text(), "OWN_RULES\n")
         self.assertFalse((self.home / ".claude" / "settings.json").exists())
 
+    def test_static_loading_restores_links_import_and_notice(self):
+        install.install(["claude", "codex", "copilot"], self.project, self.home)
+        install.install_version_hooks(["claude", "codex"], self.project, self.home)
+        claude = self.home / ".claude" / "CLAUDE.md"
+        claude.write_bytes(b"OTHER_USER_RULE\r\n" + claude.read_bytes())
+        static_import = claude.read_bytes()
+        settings = self.home / ".claude" / "settings.json"
+        config = json.loads(settings.read_text())
+        config["permissions"] = {"deny": ["Bash(curl *)"]}
+        other_hook = {"hooks": [{"type": "command", "command": "echo OTHER_HOOK"}]}
+        config["hooks"]["SessionStart"].append(other_hook)
+        settings.write_text(json.dumps(config))
+        self.setup_switch(user=True)
+        report = install.install_static_loading(["claude", "codex"], self.project, self.home)
+        self.assertFalse(any(line.startswith("blocked") for line in report), report)
+        self.assertIn("approve its hooks in Codex with /hooks", "\n".join(report))
+        source = install.user_source(self.home)
+        targets = install.user_targets(self.home)
+        for tool in ("claude", "codex"):
+            self.assertTrue(install._link_points_to(targets[tool][0][1], source))
+            self.assertTrue(install._version_hook_is_installed(tool, self.project, self.home))
+        self.assertEqual(claude.read_bytes(), static_import)
+        config = json.loads(settings.read_text())
+        self.assertEqual(config["permissions"], {"deny": ["Bash(curl *)"]})
+        self.assertIn(other_hook, config["hooks"]["SessionStart"])
+        self.assertNotIn("UserPromptSubmit", config["hooks"])
+        self.assertNotIn("--session-context", settings.read_text())
+        self.assertFalse((install.user_data_root(self.home) / install.SESSION_LOADER_NAME).exists())
+        self.assertEqual(install.scan_user(self.home, {})[0].tools, ("claude", "codex", "copilot"))
+        before = self.snapshot()
+        report = install.install_static_loading(["claude", "codex"], self.project, self.home)
+        self.assertTrue(all(line.startswith("in place") for line in report), report)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_static_loading_per_tool_keeps_the_loader_for_the_other(self):
+        self.setup_switch()
+        source = self.project / install.BASELINE
+        agents = self.project / "AGENTS.md"
+        rule = self.project / ".claude" / "rules" / install.BASELINE
+        loader = install.version_hook_path(self.project, None).parent / install.SESSION_LOADER_NAME
+        report = install.install_static_loading(["codex"], self.project, None)
+        self.assertFalse(any(line.startswith("blocked") for line in report), report)
+        self.assertEqual(agents.readlink(), Path(install.BASELINE))
+        self.assertTrue(install._session_link(rule, source))
+        self.assertTrue(loader.is_file())
+        # Without its loader hooks Claude showed no notice, so none is added.
+        (self.project / ".claude" / "settings.json").unlink()
+        report = install.install_static_loading(["claude"], self.project, None)
+        self.assertFalse(any(line.startswith("blocked") for line in report), report)
+        self.assertTrue(install._link_points_to(rule, source))
+        self.assertFalse(Path(rule.readlink()).is_absolute())
+        self.assertFalse(loader.exists())
+        self.assertTrue(install._version_hook_is_installed("codex", self.project, None))
+        self.assertFalse(install._version_hook_is_installed("claude", self.project, None))
+        self.assertFalse((self.project / ".claude" / "settings.json").exists())
+        self.setup_switch()
+
+    def test_static_loading_blocks_foreign_links_and_customized_hooks(self):
+        self.setup_switch()
+        path = self.project / ".codex" / "hooks.json"
+        config = json.loads(path.read_text())
+        config["hooks"]["SessionStart"][0]["hooks"][0]["command"] += " --custom-option"
+        path.write_text(json.dumps(config))
+        before = self.snapshot()
+        report = install.install_static_loading(["claude", "codex"], self.project, None)
+        self.assertEqual(len(report), 1, report)
+        self.assertTrue(report[0].startswith("blocked static loading"), report)
+        self.assertEqual(self.snapshot(), before)
+        agents = self.project / "AGENTS.md"
+        agents.unlink()
+        agents.write_text("OTHER_PROJECT_RULE\n")
+        before = self.snapshot()
+        report = install.install_static_loading(["codex"], self.project, None)
+        self.assertIn("instruction file", report[0])
+        self.assertEqual(self.snapshot(), before)
+
 
 if __name__ == "__main__":
     unittest.main()
