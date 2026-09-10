@@ -2416,26 +2416,24 @@ def _installation_row(
     available: Baseline,
     current_root: Path | None,
 ) -> tuple[str, ...]:
-    """Lead with the tools; a file no tool loads gets no up-to-date claim.
+    """A file no tool loads gets no up-to-date claim.
 
     Its pending update stays visible because the menu still offers it.
     """
     scope = _installation_scope(installation, current_root)
+    version = installation.baseline.baseline_id
     if not installation.tools:
-        pending = installation.has_update(available)
-        return (
-            "-",
-            scope,
-            "not set up for any tool",
-            installation.baseline.baseline_id if pending else "",
-            _installation_state(installation, available) if pending else "",
-        )
+        unused = "not used by any tool"
+        if installation.has_update(available):
+            state = _installation_state(installation, available)
+            return ("-", scope, version, state, unused)
+        return ("-", scope, version, unused, "")
     return (
         _installation_symbol(installation, available),
         scope,
-        ", ".join(TOOL_LABELS[tool] for tool in installation.tools),
-        installation.baseline.baseline_id,
+        version,
         _installation_state(installation, available),
+        ", ".join(TOOL_LABELS[tool] for tool in installation.tools),
     )
 
 
@@ -2499,10 +2497,10 @@ def _show_setup_status(
     if current_root is not None and not any(
         item.kind == "project" for item in current
     ):
-        rows.append(("-", "project", "not installed", "", ""))
+        rows.append(("-", "project", "", "not installed", ""))
     rows += [_installation_row(item, available, current_root) for item in current]
     if not any(item.kind in {"user", "legacy-user"} for item in user):
-        rows.append(("-", "user", "not installed", "", ""))
+        rows.append(("-", "user", "", "not installed", ""))
     rows += [_installation_row(item, available, current_root) for item in user]
     rows += [_installation_row(item, available, current_root) for item in other]
 
