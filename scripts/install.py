@@ -2187,6 +2187,32 @@ def update_installation(
     )
 
 
+def _refresh_updated_artifacts(
+    installation: Installation, report: list[str]
+) -> bool:
+    """Refresh the bundled installer/helper that belong to an updated scope.
+
+    User installations always carry both files. Project installations carry
+    only the helper, and only after a startup hook or session switch placed it.
+    Return whether a bundled artifact could not be refreshed.
+    """
+    incomplete = False
+    if installation.kind in {"user", "legacy-user"}:
+        if _place_installer(installation.root, report) is None:
+            incomplete = True
+        if _place_version_hook(
+            installation.root, installation.root, report
+        ) is None:
+            incomplete = True
+    elif installation.kind == "project":
+        helper = version_hook_path(installation.root, None)
+        if (helper.exists() or helper.is_symlink()) and _place_version_hook(
+            installation.root, None, report
+        ) is None:
+            incomplete = True
+    return incomplete
+
+
 def _read_answer(input_fn: Callable[[str], str], prompt: str) -> str:
     answer = input_fn(prompt)
     if len(answer) > 4096:
@@ -2486,6 +2512,48 @@ def _update_key(installation: Installation) -> Path:
     return installation.source.resolve(strict=False)
 
 
+def _outdated_installations(
+    installations: list[Installation],
+    available: Baseline,
+    reviewed: set[Path],
+) -> list[Installation]:
+    return [
+        item
+        for item in installations
+        if item.has_update(available) and _update_key(item) not in reviewed
+    ]
+
+
+def _apply_update(
+    installation: Installation,
+    available: Baseline,
+    registry: dict[str, object],
+    output: Callable[[str], None],
+) -> tuple[bool, bool]:
+    report: list[str] = []
+    artifact_incomplete = _refresh_updated_artifacts(installation, report)
+    artifact_changed = any(
+        line.startswith(("added ", "updated ")) for line in report
+    )
+    if artifact_incomplete:
+        for line in report:
+            output(f"  {line}")
+        return artifact_changed, True
+
+    update_report, updated = update_installation(
+        installation, available, replace_unrecorded=True
+    )
+    report.extend(update_report)
+    if updated:
+        record_installation(registry, updated, trusted=True)
+    for line in report:
+        output(f"  {line}")
+    incomplete = updated is None and any(
+        line.startswith("blocked") for line in report
+    )
+    return artifact_changed or updated is not None, incomplete
+
+
 def _review_updates(
     installations: list[Installation],
     available: Baseline,
@@ -2493,16 +2561,13 @@ def _review_updates(
     reviewed: set[Path],
     input_fn: Callable[[str], str],
     output: Callable[[str], None],
-) -> bool:
-    outdated = [
-        item
-        for item in installations
-        if item.has_update(available) and _update_key(item) not in reviewed
-    ]
+) -> tuple[bool, bool]:
+    outdated = _outdated_installations(installations, available, reviewed)
     if not outdated:
-        return False
+        return False, False
 
     changed = False
+    incomplete = False
     for installation in outdated:
         reviewed.add(_update_key(installation))
         if installation.baseline.version < available.version:
@@ -2521,15 +2586,50 @@ def _review_updates(
         if not ask_yes_no(input_fn, question, not unrecorded, output):
             output(f"  kept {installation.label} unchanged")
             continue
-        report, updated = update_installation(
-            installation, available, replace_unrecorded=True
+        update_changed, update_incomplete = _apply_update(
+            installation, available, registry, output
         )
-        for line in report:
-            output(f"  {line}")
-        if updated:
-            record_installation(registry, updated, trusted=True)
-            changed = True
-    return changed
+        changed = changed or update_changed
+        incomplete = incomplete or update_incomplete
+    return changed, incomplete
+
+
+def _update_all_interactively(
+    installations: list[Installation],
+    available: Baseline,
+    registry: dict[str, object],
+    reviewed: set[Path],
+    input_fn: Callable[[str], str],
+    output: Callable[[str], None],
+) -> tuple[bool, bool]:
+    """Update every shown managed installation, preserving local-content consent."""
+    outdated = _outdated_installations(installations, available, reviewed)
+    if not outdated:
+        output("No shown installation needs an update.")
+        return False, False
+
+    output("\nUpdating all shown installations (user and current project only):")
+    for installation in outdated:
+        output(f"  {installation.label}  {installation.baseline.baseline_id}")
+
+    changed = False
+    incomplete = False
+    for installation in outdated:
+        reviewed.add(_update_key(installation))
+        if _lacks_install_record(installation):
+            question = (
+                f"\n{installation.label} has no matching install record. "
+                "Back it up and replace it?"
+            )
+            if not ask_yes_no(input_fn, question, False, output):
+                output(f"  kept {installation.label} unchanged")
+                continue
+        update_changed, update_incomplete = _apply_update(
+            installation, available, registry, output
+        )
+        changed = changed or update_changed
+        incomplete = incomplete or update_incomplete
+    return changed, incomplete
 
 
 def _offer_version_hooks(
@@ -2645,6 +2745,35 @@ def _remove_interactively(
     return removed
 
 
+def _remove_all_interactively(
+    registry: dict[str, object],
+    installations: list[Installation],
+    input_fn: Callable[[str], str],
+    output: Callable[[str], None],
+) -> bool:
+    """Remove every shown managed installation after one explicit confirmation."""
+    output(
+        "\nRemove all shown managed installations "
+        "(user and current project only)?"
+    )
+    for item in installations:
+        output(f"  {item.label}  {item.baseline.baseline_id}")
+    output("Other registered project directories are not affected.")
+    if not ask_yes_no(input_fn, "Remove all shown installations?", False, output):
+        output("Nothing removed.")
+        return False
+
+    removed = False
+    for item in installations:
+        report: list[str] = []
+        if remove_installation(item, report):
+            forget_installation(registry, item)
+            removed = True
+        for line in report:
+            output(f"  {line}")
+    return removed
+
+
 def _verify_baseline_tools(
     selected_tools: list[str],
     installed: Installation | None,
@@ -2698,7 +2827,7 @@ def _install_project_interactively(
         f"\nSelected project {display_path(root)}:",
         root,
     )
-    changed = _review_updates(
+    changed, update_incomplete = _review_updates(
         found,
         available,
         registry,
@@ -2711,7 +2840,7 @@ def _install_project_interactively(
     tools = choose_tools(input_fn, output, TOOLS, default_tools)
     if not tools:
         output("Setup cancelled.")
-        return changed, False
+        return changed, update_incomplete
     output("\nApplying project setup:")
     report = install(tools, root, None, content=available.content)
     for line in report:
@@ -2726,7 +2855,10 @@ def _install_project_interactively(
     )
     if hooks_configured:
         _offer_update_check(registry, input_fn, output)
-    return changed or installed is not None, incomplete or hook_incomplete
+    return (
+        changed or installed is not None,
+        update_incomplete or incomplete or hook_incomplete,
+    )
 
 
 def _install_user_interactively(
@@ -2740,7 +2872,7 @@ def _install_user_interactively(
     user_entry = registry.get("user")
     existing = scan_user(home, user_entry if isinstance(user_entry, dict) else {})
     _show_installations(output, existing, available, "\nSelected user-wide scope:")
-    changed = _review_updates(
+    changed, update_incomplete = _review_updates(
         existing,
         available,
         registry,
@@ -2813,7 +2945,7 @@ def _install_user_interactively(
     tools = choose_tools(input_fn, output, TOOLS, default_tools or None)
     if not tools:
         output("Setup cancelled.")
-        return changed, False
+        return changed, update_incomplete
     output("\nApplying user-wide setup:")
     report = install(tools, Path.cwd(), home, content=available.content)
     for line in report:
@@ -2834,7 +2966,7 @@ def _install_user_interactively(
         )
         if hooks_configured:
             _offer_update_check(registry, input_fn, output)
-        return True, incomplete or hook_incomplete
+        return True, update_incomplete or incomplete or hook_incomplete
     _verify_baseline_tools(tools, None, output)
     return changed, True
 
@@ -2904,17 +3036,6 @@ def interactive_setup(
     _show_setup_status(output, installations, available, home, project_root)
 
     reviewed_updates: set[Path] = set()
-    changed = _review_updates(
-        installations,
-        available,
-        registry,
-        reviewed_updates,
-        input_fn,
-        output,
-    )
-    if changed:
-        _save_setup_registry(state_path, registry, registry_writable, output)
-
     current_installed = project_root is not None and any(
         item.kind == "project"
         and item.root.resolve(strict=False) == project_root.resolve(strict=False)
@@ -2925,29 +3046,53 @@ def interactive_setup(
         _is_previous_managed_user(item) for item in installations
     )
     current_action = (
-        "change tools in project" if current_installed else "install in project"
+        "add or verify tools in project" if current_installed else "install in project"
     )
     if user_needs_migration:
         user_action = "migrate user installation"
     else:
-        user_action = "change tools for user" if user_installed else "install for user"
-    actions = [(user_action, "user")]
+        user_action = (
+            "add or verify tools for user" if user_installed else "install for user"
+        )
+
+    outdated = _outdated_installations(installations, available, reviewed_updates)
+    removable = [item for item in installations if item.kind != "unmanaged"]
+    if removable:
+        output(
+            "Bulk actions affect only the user installation and the current "
+            "project shown above."
+        )
+        output("Other registered project directories are not affected.")
+
+    actions: list[tuple[str, str]] = []
+    if outdated:
+        actions.append(("update all shown installations", "update_all"))
+        actions.append(("review shown updates individually", "update_review"))
+    user_action_index = len(actions) + 1
+    actions.append((user_action, "user"))
     if project_root is not None:
         actions.append(
             (f"{current_action} {display_path(project_root)}", "project")
         )
-    removable = [item for item in installations if item.kind != "unmanaged"]
     if removable:
-        actions.append(("remove an installation", "remove"))
+        actions.append(("remove shown installation(s)...", "remove"))
+        actions.append(("remove all shown managed installations", "remove_all"))
     actions.append(("exit", "exit"))
     output("\nWhat would you like to do?")
     for number, (label, _key) in enumerate(actions, 1):
         output(f"  {number}. {label}")
     valid_choices = {str(number) for number in range(1, len(actions) + 1)}
     exit_choice = str(len(actions))
-    # Offer user-wide setup while it is missing or still in the previous managed
-    # location. Pressing Enter must never write into the current directory.
-    default_choice = exit_choice if user_installed and not user_needs_migration else "1"
+    # A tracked update keeps its former default, while an unrecorded file still
+    # gets a separate default-no replacement question. Otherwise offer user-wide
+    # setup only while it is missing or still needs migration. Pressing Enter
+    # must never install into the current project implicitly.
+    if outdated:
+        default_choice = "1"
+    elif not user_installed or user_needs_migration:
+        default_choice = str(user_action_index)
+    else:
+        default_choice = exit_choice
     choice = ""
     for _ in range(3):
         choice = _read_answer(input_fn, f"Choice [{default_choice}]: ") or default_choice
@@ -2961,7 +3106,25 @@ def interactive_setup(
     action_changed = False
     action_incomplete = False
     chosen = actions[int(choice) - 1][1]
-    if chosen == "user":
+    if chosen == "update_all":
+        action_changed, action_incomplete = _update_all_interactively(
+            installations,
+            available,
+            registry,
+            reviewed_updates,
+            input_fn,
+            output,
+        )
+    elif chosen == "update_review":
+        action_changed, action_incomplete = _review_updates(
+            installations,
+            available,
+            registry,
+            reviewed_updates,
+            input_fn,
+            output,
+        )
+    elif chosen == "user":
         action_changed, action_incomplete = _install_user_interactively(
             home, registry, available, reviewed_updates, input_fn, output
         )
@@ -2979,11 +3142,15 @@ def interactive_setup(
         action_changed = _remove_interactively(
             registry, removable, input_fn, output
         )
+    elif chosen == "remove_all":
+        action_changed = _remove_all_interactively(
+            registry, removable, input_fn, output
+        )
 
     if action_changed:
         _save_setup_registry(state_path, registry, registry_writable, output)
-    if choice == exit_choice:
-        output("Setup complete." if changed else "No changes made.")
+    if chosen == "exit":
+        output("No changes made.")
     elif action_incomplete:
         output("\nSetup finished with unresolved items.")
         return 2

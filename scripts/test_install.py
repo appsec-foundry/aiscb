@@ -750,7 +750,7 @@ with tempfile.TemporaryDirectory() as tmp:
         current_root=project,
     )
     check("a complete user scope defaults to leaving, not to writing a project",
-          prompts == ["Choice [4]: "], str(prompts))
+          prompts == ["Choice [5]: "], str(prompts))
 
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
@@ -782,9 +782,14 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a table of one condition needs no legend",
           not any("up to date" in line and "not installed" in line
                   for line in output), str(output[:12]))
+    check("existing installations expose removal but no unnecessary update action",
+          any("remove all shown managed installations" in line for line in output)
+          and not any("update all shown installations" in line for line in output)
+          and "Other registered project directories are not affected." in output,
+          str(output))
     check("a setup with nothing left to do defaults to leaving",
           result == 0
-          and prompts == ["Choice [4]: "]
+          and prompts == ["Choice [5]: "]
           and output[-1] == "No changes made.",
           f"prompts={prompts!r}, last={output[-1]!r}")
 
@@ -803,25 +808,76 @@ with tempfile.TemporaryDirectory() as tmp:
     install.record_installation(registry, previous, trusted=True)
     state = sandbox / "state.json"
     install.save_registry(state, registry)
+    installed_installer = install.user_data_root(home) / install.INSTALLER_NAME
+    installed_helper = install.version_hook_path(home, home)
+    old_installer = b"# previously verified installer\n"
+    old_helper = b"# previously verified hook helper\n"
+    installed_installer.write_bytes(old_installer)
+    installed_helper.write_bytes(old_helper)
+    known_hook_digests = install.KNOWN_HOOK_DIGESTS
+    install.KNOWN_HOOK_DIGESTS += (hashlib.sha256(old_helper).hexdigest(),)
     prompts: list[str] = []
-    result = install.interactive_setup(
-        home=home,
-        input_fn=lambda prompt: prompts.append(prompt) or (
-            "1" if prompt.startswith("Choice") else ""
-        ),
-        output=lambda _line: None,
-        check_online=False,
-        state_path=state,
-        current_root=project,
-    )
-    check("an update runs first, and the user scope keeps its tools",
+    output = []
+    try:
+        result = install.interactive_setup(
+            home=home,
+            input_fn=lambda prompt: prompts.append(prompt) or "",
+            output=output.append,
+            check_online=False,
+            state_path=state,
+            current_root=project,
+        )
+    finally:
+        install.KNOWN_HOOK_DIGESTS = known_hook_digests
+    check("update all is the default when a shown installation is outdated",
           result == 0
-          and any(prompt == "Choice [4]: " for prompt in prompts)
-          and any("keep installed (Codex)" in prompt for prompt in prompts)
+          and prompts == ["Choice [1]: "]
+          and "  1. update all shown installations" in output
+          and "  2. review shown updates individually" in output
           and (home / ".codex" / "AGENTS.md").is_symlink()
           and not (home / ".claude" / "rules").exists()
           and not (home / ".copilot" / "copilot-instructions.md").exists(),
           str(prompts))
+    check("a baseline update persists the complete verified user bundle",
+          installed_installer.read_bytes() == install.INSTALLER_SOURCE.read_bytes()
+          and installed_helper.read_bytes() == install.VERSION_HOOK_SOURCE.read_bytes(),
+          f"installer={installed_installer.read_bytes()!r}, "
+          f"helper={installed_helper.read_bytes()!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    sandbox = Path(tmp)
+    home = sandbox / "home"
+    project = sandbox / "project"
+    home.mkdir()
+    project.mkdir()
+    old_content = bundled.content.replace(
+        bundled.baseline_id.encode(), b"aiscb-0.0.1", 1
+    )
+    install.install(["codex"], home, home, content=old_content)
+    previous = [item for item in install.scan_user(home, {}) if item.kind == "user"][0]
+    registry = install.empty_registry()
+    install.record_installation(registry, previous, trusted=True)
+    state = sandbox / "state.json"
+    install.save_registry(state, registry)
+    helper = install.version_hook_path(home, home)
+    foreign_helper = b"# locally replaced helper\n"
+    helper.write_bytes(foreign_helper)
+    output = []
+    result = install.interactive_setup(
+        home=home,
+        input_fn=lambda _prompt: "",
+        output=output.append,
+        check_online=False,
+        state_path=state,
+        current_root=project,
+    )
+    check("a blocked bundle artifact stops the baseline update for a safe retry",
+          result == 2
+          and install.read_baseline(install.user_source(home)).version
+              == install.SemVer.parse("0.0.1")
+          and helper.read_bytes() == foreign_helper
+          and any("contains different hook helper code" in line for line in output),
+          str(output))
 
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
@@ -857,7 +913,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("the migration prompt names the file, the benefit, and stays short",
           result == 2
-          and any(prompt == "Choice [4]: " for prompt in prompts)
+          and any(prompt == "Choice [5]: " for prompt in prompts)
           and any("Claude Code reads the baseline from a file this setup does not "
                   "manage" in line for line in migration_output)
           and any(str(source) in line for line in migration_output)
@@ -923,7 +979,7 @@ with tempfile.TemporaryDirectory() as tmp:
     install.record_installation(registry, previous, trusted=True)
     state = sandbox / "state.json"
     install.save_registry(state, registry)
-    answers = iter(["", "2", "2", "n"])
+    answers = iter(["4", "2", "2", "n"])
     prompts = []
     output = []
 
@@ -943,29 +999,30 @@ with tempfile.TemporaryDirectory() as tmp:
           result == 0
           and any(line.startswith("  -") and "project" in line
                   and "not installed" in line for line in output)
-          and "  1. change tools for user" in output
-          and any(line.startswith("  2. install in project ")
+          and "  1. update all shown installations" in output
+          and "  3. add or verify tools for user" in output
+          and any(line.startswith("  4. install in project ")
                   and str(project) in line for line in output),
           str(output))
-    check("a user update can be followed by a project install",
-          install.read_baseline(install.user_source(home)).digest == bundled.digest
-          and (project / "AGENTS.md").is_symlink()
-          and any("Update user-wide" in prompt for prompt in prompts),
+    check("configuring the current project does not silently update another scope",
+          install.read_baseline(install.user_source(home)).digest != bundled.digest
+          and (project / "AGENTS.md").is_symlink(),
           f"prompts={prompts!r}, output={output!r}")
 
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
     home = sandbox / "home"
-    current = sandbox / "current"
     project = sandbox / "known-project"
     home.mkdir()
-    current.mkdir()
     project.mkdir()
+    active = sandbox / "active-project"
+    active.mkdir()
     old_content = bundled.content.replace(
         bundled.baseline_id.encode(), b"aiscb-0.0.1", 1
     )
     install.install(["codex"], home, home, content=old_content)
     install.install(["codex"], project, None, content=old_content)
+    install.install(["codex"], active, None, content=old_content)
     registry = install.empty_registry()
     user_installation = [
         item for item in install.scan_user(home, {}) if item.kind == "user"
@@ -974,32 +1031,36 @@ with tempfile.TemporaryDirectory() as tmp:
     install.record_installation(
         registry, install.scan_project(project, {}), trusted=True
     )
+    install.record_installation(
+        registry, install.scan_project(active, {}), trusted=True
+    )
     state = sandbox / "state.json"
     install.save_registry(state, registry)
-    answers = iter(["n", ""])
     prompts = []
+    output = []
 
-    def decline_separate_updates(prompt: str) -> str:
+    def accept_active_bulk_update(prompt: str) -> str:
         prompts.append(prompt)
-        return next(answers)
+        return ""
 
     install.interactive_setup(
         home=home,
-        input_fn=decline_separate_updates,
-        output=lambda _line: None,
+        input_fn=accept_active_bulk_update,
+        output=output.append,
         check_online=False,
         state_path=state,
-        current_root=current,
+        current_root=active,
     )
-    update_prompts = [
-        prompt for prompt in prompts if prompt.lstrip().startswith("Update ")
-    ]
-    check("only the active scopes receive update decisions",
-          len(update_prompts) == 1
-          and "user-wide" in update_prompts[0]
+    check("update all affects only the user and current project shown",
+          prompts == ["Choice [1]: "]
+          and install.read_baseline(install.user_source(home)).digest == bundled.digest
+          and install.read_baseline(active / install.BASELINE).digest == bundled.digest
           and install.read_baseline(project / install.BASELINE).digest
-              != bundled.digest,
-          str(prompts))
+              != bundled.digest
+          and str(project) not in "\n".join(output)
+          and any("Other registered project directories are not affected." == line
+                  for line in output),
+          f"prompts={prompts!r}, output={output!r}")
 
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
@@ -1013,7 +1074,7 @@ with tempfile.TemporaryDirectory() as tmp:
         bundled.baseline_id.encode(), b"aiscb-0.0.1", 1
     )
     (target / install.BASELINE).write_bytes(old_content)
-    answers = iter(["y", "2", "2", "n"])
+    answers = iter(["4", "y", "2", "2", "n"])
     output = []
     result = install.interactive_setup(
         home=home,
@@ -1625,6 +1686,53 @@ with tempfile.TemporaryDirectory() as tmp:
           and any(line.startswith("  removed") for line in output), str(output))
 
 with tempfile.TemporaryDirectory() as tmp:
+    sandbox = Path(tmp)
+    home = sandbox / "home"
+    current = sandbox / "current"
+    other = sandbox / "other"
+    home.mkdir()
+    current.mkdir()
+    other.mkdir()
+    install.install(["codex"], home, home)
+    install.install(["codex"], current, None)
+    install.install(["codex"], other, None)
+    registry = install.empty_registry()
+    user_item = [
+        item for item in install.scan_user(home, {}) if item.kind == "user"
+    ][0]
+    install.record_installation(registry, user_item, trusted=True)
+    install.record_installation(
+        registry, install.scan_project(current, {}), trusted=True
+    )
+    install.record_installation(
+        registry, install.scan_project(other, {}), trusted=True
+    )
+    state = sandbox / "state.json"
+    install.save_registry(state, registry)
+    answers = iter(["4", "y"])
+    output = []
+    result = install.interactive_setup(
+        home=home,
+        input_fn=lambda _prompt: next(answers),
+        output=output.append,
+        check_online=False,
+        state_path=state,
+        current_root=current,
+    )
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    check("remove all affects only the user and current project shown",
+          result == 0
+          and not install.user_source(home).exists()
+          and not (current / install.BASELINE).exists()
+          and (other / install.BASELINE).is_file()
+          and saved["user"] is None
+          and str(current.resolve()) not in saved["projects"]
+          and str(other.resolve()) in saved["projects"]
+          and str(other) not in "\n".join(output)
+          and "Other registered project directories are not affected." in output,
+          f"output={output!r}, state={saved!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp)
     output: list[str] = []
     cancelled = install._install_project_interactively(
@@ -1731,14 +1839,14 @@ with tempfile.TemporaryDirectory() as tmp:
     unrecorded = install.scan_project(root, {})
     prompts: list[str] = []
     lines: list[str] = []
-    changed = install._review_updates(
+    changed, incomplete = install._review_updates(
         [unrecorded], bundled, {}, set(),
         lambda prompt: prompts.append(prompt) or "", lines.append,
     )
     check("an unrecorded baseline gets one update prompt that names the backup",
           len(prompts) == 1 and "backed up first" in prompts[0], str(prompts))
     check("that prompt defaults to keeping the file",
-          prompts[0].endswith("[y/N] ") and not changed
+          prompts[0].endswith("[y/N] ") and not changed and not incomplete
           and (root / install.BASELINE).read_bytes() == old_content
           and any("kept" in line for line in lines), str(prompts) + str(lines))
 
@@ -1748,12 +1856,12 @@ with tempfile.TemporaryDirectory() as tmp:
     unrecorded = install.scan_project(root, {})
     prompts = []
     lines = []
-    changed = install._review_updates(
+    changed, incomplete = install._review_updates(
         [unrecorded], bundled, {}, set(),
         lambda prompt: prompts.append(prompt) or "y", lines.append,
     )
     check("one yes replaces the unrecorded baseline and keeps a backup",
-          len(prompts) == 1 and changed
+          len(prompts) == 1 and changed and not incomplete
           and (root / install.BASELINE).read_bytes() == bundled.content
           and (root / f"{install.BASELINE}.bak").read_bytes() == old_content,
           str(prompts) + str(lines))

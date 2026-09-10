@@ -97,7 +97,7 @@ Use the pinned and verified command in the [Quick start](#quick-start). It requi
 
 ### Later updates without a checkout
 
-A user-level install keeps a runnable installer beside the managed baseline for signed updates, status checks, and changes to the selected tools:
+A user-level install keeps a runnable installer beside the managed baseline for signed updates, status checks, and adding or verifying tool integrations:
 
 ```bash
 python3 ~/.local/share/aiscb/install.py --update
@@ -105,7 +105,7 @@ python3 ~/.local/share/aiscb/install.py --status
 python3 ~/.local/share/aiscb/install.py --interactive
 ```
 
-`--update` looks up the latest release, downloads its bundle manifest and signature, and checks the signature with `ssh-keygen` against the release key the installed copy carries. Only then does it download the baseline, the installer, and the startup hook, compare each file's size and SHA-256 with the manifest, and start the guided setup of the verified bundle. Nothing is written outside a temporary directory before these checks pass. A release that is not newer than the installed baseline changes nothing.
+`--update` looks up the latest release, downloads its bundle manifest and signature, and checks the signature with `ssh-keygen` against the release key the installed copy carries. Only then does it download the baseline, the installer, and the startup hook, compare each file's size and SHA-256 with the manifest, and start the guided setup of the verified bundle. Applying the update replaces all three managed user files with that verified bundle. Nothing is written outside a temporary directory before these checks pass. A release that is not newer than the installed baseline changes nothing.
 
 An installer from before aiscb-0.1.14 does not know `--update`; from that version on, the update is refused when the installed copy cannot verify the release, for example after the release key was rotated. In that case run the current [Quick start](#quick-start) again, or install from a reviewed clone with `make setup ARGS=--offline`.
 
@@ -127,7 +127,9 @@ make help                              # list available commands
 
 `install-codex` and `install-copilot` work like `install-claude`. In a project, the installer supports Claude Code, Codex, and GitHub Copilot; at user level, Claude Code, Codex, and Copilot CLI.
 
-The installer keeps existing instruction files, and uninstall removes only what the installer placed. Replacing a locally edited managed baseline requires confirmation and creates a backup.
+The guided menu offers bulk update and removal when managed installations are shown. These actions cover only the user installation and the current project displayed by that run; other registered project directories are neither shown nor changed. Selective setup adds or verifies tools and does not remove tools omitted from that selection.
+
+The installer keeps existing instruction files, and uninstall removes only what the installer placed. Replacing a locally edited managed baseline requires confirmation and creates a backup. Removing all shown installations lists the affected scopes and requires an explicit confirmation that defaults to no.
 
 Optional session-start hooks show the active `baseline-id` and whether a checked release is current; setup lets you skip them. Codex runs a new or changed hook only after you trust it with `/hooks` and warns at startup until then.
 
