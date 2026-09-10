@@ -34,7 +34,7 @@ The installer asks which tools to set up and verifies each one. Installing from 
 
 ## Update
 
-If the optional startup hook is installed, it reports a newer release and links to this section. A user-level install is updated from a terminal, outside any agent session:
+If the optional update notice is enabled, the session notice reports a newer release and links to this section. A user-level install is updated from a terminal, outside any agent session:
 
 ```bash
 python3 ~/.local/share/aiscb/install.py --update
@@ -97,7 +97,7 @@ Use the pinned and verified command in the [Quick start](#quick-start). It requi
 
 ### Later updates without a checkout
 
-A user-level install keeps a runnable installer beside the managed baseline for signed updates, status checks, and adding or verifying tool integrations:
+A user-level install keeps a runnable installer beside the managed baseline for signed updates, status checks, and adding tools or notices:
 
 ```bash
 python3 ~/.local/share/aiscb/install.py --update
@@ -127,13 +127,13 @@ make help                              # list available commands
 
 `install-codex` and `install-copilot` work like `install-claude`. In a project, the installer supports Claude Code, Codex, and GitHub Copilot; at user level, Claude Code, Codex, and Copilot CLI.
 
-The guided menu offers bulk update and removal when managed installations are shown. These actions cover only the user installation and the current project displayed by that run; other registered project directories are neither shown nor changed. Selective setup adds or verifies tools and does not remove tools omitted from that selection.
+The guided setup shows your user installation and the project in the current directory, and each menu entry names the one change it makes. When both need an update, or when you remove one, it asks which to change; other registered project directories are neither shown nor changed. Adding a tool never removes another.
 
-The installer keeps existing instruction files, and uninstall removes only what the installer placed. Replacing a locally edited managed baseline requires confirmation and creates a backup. Removing all shown installations lists the affected scopes and requires an explicit confirmation that defaults to no.
+The installer keeps existing instruction files, and uninstall removes only what the installer placed. Replacing a locally edited managed baseline requires confirmation and creates a backup. Removal first lists what goes, including the session notice and, for the user installation, the installer itself, and requires a confirmation that defaults to no.
 
-Optional session-start hooks show the active `baseline-id` and whether a checked release is current; setup lets you skip them. Codex runs a new or changed hook only after you trust it with `/hooks` and warns at startup until then.
+The optional session notice is a startup hook that shows the active `baseline-id` and whether a checked release is current; setup lets you skip it, and a tool you add later gets it too. Codex runs a new or changed hook only after you trust it with `/hooks` and warns at startup until then.
 
-Release checks are off by default. If you enable them, a background process contacts `api.github.com` at most once a day; `ARGS=--offline` skips the check during setup and status.
+The update notice is off by default. If you enable it, a background process contacts `api.github.com` at most once a day so the session notice can name a newer release; it never installs one. `ARGS=--offline` skips the release check during setup and status.
 
 From a checkout, the installer installs the latest published release when it can reach it and otherwise the checkout copy.
 

@@ -13,6 +13,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 from pathlib import Path
 
@@ -185,9 +186,8 @@ chosen_tools = install.choose_tools(
 )
 check("guided tool selection clearly supports multiple tools",
       chosen_tools == ["claude", "codex"]
-      and any("one or more" in line for line in tool_output)
-      and any("comma-separated" in prompt and "Enter = all" in prompt
-              for prompt in tool_prompts),
+      and "\nInstall for which tools?" in tool_output
+      and tool_prompts == ["Tools (comma-separated; Enter = both): "],
       f"prompts={tool_prompts!r}, output={tool_output!r}")
 all_tools = install.choose_tools(lambda _prompt: "", lambda _line: None, install.TOOLS)
 check("guided setup defaults to all three tools", all_tools == list(install.TOOLS))
@@ -208,26 +208,6 @@ check("existing scopes default to their installed tools",
       and any("Enter = keep installed (Codex)" in prompt
               for prompt in existing_tool_prompts),
       f"prompts={existing_tool_prompts!r}, output={existing_tool_output!r}")
-hook_output: list[str] = []
-hook_prompts: list[str] = []
-hook_tools = install.choose_hook_tools(
-    lambda prompt: hook_prompts.append(prompt) or "1,3",
-    hook_output.append,
-    list(install.TOOLS),
-)
-check("startup hooks can target a subset of the installed tools",
-      hook_tools == ["claude", "copilot"]
-      and any("Enter = all shown" in prompt for prompt in hook_prompts),
-      f"prompts={hook_prompts!r}, output={hook_output!r}")
-default_hook_tools = install.choose_hook_tools(
-    lambda _prompt: "", lambda _line: None, list(install.TOOLS)
-)
-check("startup hooks default to all selected tools",
-      default_hook_tools == list(install.TOOLS))
-no_hook_tools = install.choose_hook_tools(
-    lambda _prompt: "none", lambda _line: None, list(install.TOOLS)
-)
-check("startup hooks can be skipped explicitly", no_hook_tools == [])
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -388,10 +368,11 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("status check marks current and outdated installations",
           status_result == 0
-          and any(line.startswith("  ✓") and " project " in line
-                  for line in status_output)
-          and any(line.startswith("  ↻") and " user " in line
-                  for line in status_output),
+          and f"\nProject {install.display_path(project.resolve())}" in status_output
+          and f"  {bundled.baseline_id}, newest release not checked" in status_output
+          and any(line.startswith(
+              f"  aiscb-0.0.1, update to {bundled.baseline_id} available")
+              for line in status_output),
           str(status_output))
     check("status check is read-only", not state.exists(), str(state))
 
@@ -545,25 +526,22 @@ with tempfile.TemporaryDirectory() as tmp:
           and (home / ".codex" / "AGENTS.md").is_symlink()
           and (home / ".copilot" / "copilot-instructions.md").is_symlink(),
           str(output))
-    check("guided setup can add user-wide startup hooks for all three tools",
+    check("guided setup can add the user-wide session notice for all three tools",
           (home / ".claude" / "settings.json").is_file()
           and (home / ".codex" / "hooks.json").is_file()
           and (home / ".copilot" / "hooks"
                / install.COPILOT_VERSION_HOOK_NAME).is_file(), str(output))
-    check("guided setup records the answer about background release checks",
+    check("guided setup records the answer about the update notice",
           json.loads(state.read_text())["update_check"]["enabled"] is True,
           state.read_text())
     check("guided setup explains its purpose and progress",
-          output[:4] == [
-              "AI Secure Coding Baseline setup",
-              "Install or update the baseline for Claude Code, Codex, and Copilot.",
-              "Existing instruction files are preserved; conflicts are reported.",
-              "\nChecking the available baseline...",
-          ]
-          and "\nInstallations" in output
+          output[0] == "AI Secure Coding Baseline setup"
+          and "\nYour user account: not installed" in output
+          and f"\nProject {install.display_path(project.resolve())}: not installed"
+              in output
           and "\nApplying user-wide setup:" in output
           and "\nVerifying baseline setup:" in output
-          and "\nVerifying startup hooks:" in output
+          and "\nVerifying session notice:" in output
           and output[-1] == "\nSetup complete.", str(output))
     state_mode = os.stat(state).st_mode & 0o777 if state.exists() else None
     check("guided setup records known installation locations",
@@ -590,8 +568,9 @@ with tempfile.TemporaryDirectory() as tmp:
         os.chdir(previous_cwd)
     check("project setup is hidden outside a detected project",
           result == 0
-          and "Project    none detected" in output
-          and "  1. install for user" in output
+          and "This directory is not a project, so only the user-wide setup applies."
+              in output
+          and "  1. install for your user account..." in output
           and "  2. exit" in output
           and not any("in project" in line for line in output),
           str(output))
@@ -659,7 +638,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("the guided default migrates the released aisec user install to aiscb",
           result == 0
           and any(prompt == "Choice [1]: " for prompt in prompts)
-          and any("migration" in line and bundled.baseline_id in line
+          and "  1. switch your user account to a managed copy..." in output
+          and any("switch to a managed copy so updates reach it" in line
                   for line in output)
           and any("previous managed location" in line for line in output)
           and install.read_baseline(managed_source).baseline_id
@@ -750,7 +730,7 @@ with tempfile.TemporaryDirectory() as tmp:
         current_root=project,
     )
     check("a complete user scope defaults to leaving, not to writing a project",
-          prompts == ["Choice [5]: "], str(prompts))
+          prompts == ["Choice [4]: "], str(prompts))
 
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
@@ -783,15 +763,36 @@ with tempfile.TemporaryDirectory() as tmp:
           not any("up to date" in line and "not installed" in line
                   for line in output), str(output[:12]))
     check("existing installations expose removal but no unnecessary update action",
-          any("remove all shown managed installations" in line for line in output)
-          and not any("update all shown installations" in line for line in output)
-          and "Other registered project directories are not affected." in output,
+          "  3. remove..." in output
+          and not any(line.startswith("  1. update to") for line in output)
+          and not any("registered project" in line for line in output),
           str(output))
     check("a setup with nothing left to do defaults to leaving",
           result == 0
-          and prompts == ["Choice [5]: "]
+          and prompts == ["Choice [4]: "]
           and output[-1] == "No changes made.",
           f"prompts={prompts!r}, last={output[-1]!r}")
+    prompts = []
+    output = []
+    result = install.interactive_setup(
+        home=home,
+        input_fn=lambda prompt: prompts.append(prompt) or (
+            "3" if len(prompts) == 1 else ""),
+        output=output.append,
+        check_online=False,
+        state_path=state,
+        current_root=project,
+    )
+    check("removal from two scopes asks which one and cancels on Enter",
+          result == 0
+          and prompts == ["Choice [4]: ", "Choice (Enter = cancel): "]
+          and "\nRemove from:" in output
+          and "  1. your user account" in output
+          and "  3. both" in output
+          and "Nothing removed." in output
+          and install.user_source(home).is_file()
+          and (project / install.BASELINE).is_file(),
+          f"prompts={prompts!r}, output={output!r}")
 
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
@@ -829,11 +830,11 @@ with tempfile.TemporaryDirectory() as tmp:
         )
     finally:
         install.KNOWN_HOOK_DIGESTS = known_hook_digests
-    check("update all is the default when a shown installation is outdated",
+    check("an update is the default when a shown installation is outdated",
           result == 0
           and prompts == ["Choice [1]: "]
-          and "  1. update all shown installations" in output
-          and "  2. review shown updates individually" in output
+          and f"  1. update to {bundled.baseline_id}" in output
+          and not any("individually" in line for line in output)
           and (home / ".codex" / "AGENTS.md").is_symlink()
           and not (home / ".claude" / "rules").exists()
           and not (home / ".copilot" / "copilot-instructions.md").exists(),
@@ -913,7 +914,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("the migration prompt names the file, the benefit, and stays short",
           result == 2
-          and any(prompt == "Choice [5]: " for prompt in prompts)
+          and any(prompt == "Choice [4]: " for prompt in prompts)
           and any("Claude Code reads the baseline from a file this setup does not "
                   "manage" in line for line in migration_output)
           and any(str(source) in line for line in migration_output)
@@ -960,7 +961,7 @@ with tempfile.TemporaryDirectory() as tmp:
               != bundled.digest
           and not any("Update project" in prompt for prompt in prompts)
           and "\nWhat would you like to do?" in output
-          and "  1. install for user" in output
+          and "  1. install for your user account..." in output
           and any(line.startswith("  2. install in project ") for line in output),
           f"prompts={prompts!r}, output={output!r}")
 
@@ -979,7 +980,7 @@ with tempfile.TemporaryDirectory() as tmp:
     install.record_installation(registry, previous, trusted=True)
     state = sandbox / "state.json"
     install.save_registry(state, registry)
-    answers = iter(["4", "2", "2", "n"])
+    answers = iter(["3", "2", "n"])
     prompts = []
     output = []
 
@@ -997,11 +998,11 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("the user-first menu clearly offers the current project",
           result == 0
-          and any(line.startswith("  -") and "project" in line
-                  and "not installed" in line for line in output)
-          and "  1. update all shown installations" in output
-          and "  3. add or verify tools for user" in output
-          and any(line.startswith("  4. install in project ")
+          and f"\nProject {install.display_path(project.resolve())}: not installed"
+              in output
+          and f"  1. update to {bundled.baseline_id}" in output
+          and "  2. add to more tools (Claude Code, GitHub Copilot)..." in output
+          and any(line.startswith("  3. install in project ")
                   and str(project) in line for line in output),
           str(output))
     check("configuring the current project does not silently update another scope",
@@ -1051,15 +1052,15 @@ with tempfile.TemporaryDirectory() as tmp:
         state_path=state,
         current_root=active,
     )
-    check("update all affects only the user and current project shown",
-          prompts == ["Choice [1]: "]
+    check("an update of both shown scopes leaves other projects alone",
+          prompts == ["Choice [1]: ", "Choice [3]: "]
           and install.read_baseline(install.user_source(home)).digest == bundled.digest
           and install.read_baseline(active / install.BASELINE).digest == bundled.digest
           and install.read_baseline(project / install.BASELINE).digest
               != bundled.digest
           and str(project) not in "\n".join(output)
-          and any("Other registered project directories are not affected." == line
-                  for line in output),
+          and output[-1] == f"\nYour user account and project "
+              f"{install.display_path(active.resolve())} now use {bundled.baseline_id}.",
           f"prompts={prompts!r}, output={output!r}")
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -1074,7 +1075,7 @@ with tempfile.TemporaryDirectory() as tmp:
         bundled.baseline_id.encode(), b"aiscb-0.0.1", 1
     )
     (target / install.BASELINE).write_bytes(old_content)
-    answers = iter(["4", "y", "2", "2", "n"])
+    answers = iter(["3", "y", "2", "n"])
     output = []
     result = install.interactive_setup(
         home=home,
@@ -1098,6 +1099,287 @@ with tempfile.TemporaryDirectory() as tmp:
     found = install.scan_project(root, {})
     check("same-version content differences are not reported as current",
           found is not None and found.has_update(bundled))
+
+# --- the guided dialog names each change -----------------------------------
+
+CHECKED = 1789000000
+CHECKED_ON = time.strftime("%Y-%m-%d", time.gmtime(CHECKED))
+
+
+def user_scope(home: Path, tools: list[str], *, notice: bool,
+               update_notice: bool = False, latest: str | None = None) -> Path:
+    """Install for the user with a registry record; return the registry path."""
+    install.install(tools, home, home)
+    if notice:
+        install.install_version_hooks(tools, home, home)
+    registry = install.empty_registry()
+    user = [item for item in install.scan_user(home, {}) if item.kind == "user"][0]
+    install.record_installation(registry, user, trusted=True)
+    section: dict[str, object] = {"enabled": update_notice}
+    if latest is not None:
+        section.update(latest=latest, checked=CHECKED)
+    registry[install.UPDATE_CHECK_KEY] = section
+    state = home.parent / "state.json"
+    install.save_registry(state, registry)
+    return state
+
+
+def guided(home: Path, state: Path, answers: list[str], *,
+           check_online: bool = False) -> tuple[int, list[str], list[str]]:
+    """Run the guided setup outside any project with scripted answers."""
+    replies = iter(answers)
+    prompts: list[str] = []
+    output: list[str] = []
+
+    def reply(prompt: str) -> str:
+        prompts.append(prompt)
+        return next(replies, "")
+
+    plain = home.parent / "plain"
+    plain.mkdir(exist_ok=True)
+    previous_cwd = Path.cwd()
+    try:
+        os.chdir(plain)
+        result = install.interactive_setup(
+            home=home, input_fn=reply, output=output.append,
+            check_online=check_online, state_path=state,
+        )
+    finally:
+        os.chdir(previous_cwd)
+    return result, output, prompts
+
+
+def menu(output: list[str]) -> list[str]:
+    """The numbered entries right below the menu question."""
+    entries: list[str] = []
+    for line in output[output.index("\nWhat would you like to do?") + 1:]:
+        if not (line.startswith("  ") and line.split(".", 1)[0].strip().isdigit()):
+            break
+        entries.append(line)
+    return entries
+
+
+def update_notice_enabled(state: Path) -> bool:
+    section = json.loads(state.read_text())[install.UPDATE_CHECK_KEY]
+    return section.get("enabled") is True
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["claude", "codex"], notice=True,
+                       latest=bundled.baseline_id)
+    original_origin = install.LOCAL_ORIGIN
+    install.LOCAL_ORIGIN = "installed copy"
+    try:
+        result, output, prompts = guided(home, state, [])
+    finally:
+        install.LOCAL_ORIGIN = original_origin
+    check("the status names the user scope, its tools, and both notices",
+          "\nYour user account (all projects)" in output
+          and f"  {bundled.baseline_id}, up to date as of {CHECKED_ON}" in output
+          and "  Loaded by Claude Code and Codex" in output
+          and "  Session notice: on" in output
+          and "Update notice: off, so you won't hear about new versions" in output
+          and "This directory is not a project, so only the user-wide setup applies."
+              in output,
+          str(output))
+    check("an installed copy points to the signed update, not to a fresh check",
+          any(line.startswith("Check for a new version: python3 ")
+              and line.endswith(" --update") for line in output)
+          and not any(line.endswith(", up to date") for line in output),
+          str(output))
+    check("each menu entry names the one change it makes",
+          result == 0
+          and menu(output) == [
+              "  1. add to GitHub Copilot",
+              "  2. enable update notice...",
+              "  3. remove from your user account...",
+              "  4. exit",
+          ]
+          and prompts == ["Choice [4]: "],
+          f"output={output!r}, prompts={prompts!r}")
+    check("the dialog drops the bulk wording and installer jargon",
+          not any(word in line for line in output
+                  for word in ("Bulk", "shown", "managed installations",
+                               "registered project", "startup hook")),
+          str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["codex"], notice=False)
+    _result, output, _prompts = guided(home, state, [])
+    check("without any release check the status says so",
+          f"  {bundled.baseline_id}, newest release not checked" in output
+          and f"Online check skipped; this copy has {bundled.baseline_id}" in output
+          and "  Session notice: off" in output
+          and not any(line.startswith("Update notice") for line in output),
+          str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["codex"], notice=False, latest="aiscb-99.0.0")
+    _result, output, _prompts = guided(home, state, [])
+    check("a newer release from an earlier check is named with its date",
+          f"  {bundled.baseline_id}, update to aiscb-99.0.0 available "
+          f"(checked {CHECKED_ON})" in output, str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["codex"], notice=False)
+    original_fetch = install.fetch_release_baseline
+    install.fetch_release_baseline = lambda *_args, **_kwargs: bundled
+    try:
+        _result, output, _prompts = guided(home, state, [], check_online=True)
+    finally:
+        install.fetch_release_baseline = original_fetch
+    check("only a check in this run supports a plain up to date",
+          f"Newest release: {bundled.baseline_id} (checked online just now)" in output
+          and f"  {bundled.baseline_id}, up to date" in output, str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["claude", "codex"], notice=True)
+    result, output, prompts = guided(home, state, ["1"])
+    check("adding the one missing tool asks nothing more and inherits the notice",
+          result == 0
+          and prompts == ["Choice [4]: "]
+          and (home / ".copilot" / "copilot-instructions.md").is_symlink()
+          and install._version_hook_is_installed("copilot", home, home)
+          and "\nAdding the session notice, as for the other tools:" in output
+          and "  ✓ GitHub Copilot session notice configured" in output
+          and output[-1] == f"\nGitHub Copilot now loads {bundled.baseline_id}.",
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["claude"], notice=False)
+    result, output, prompts = guided(home, state, ["1", ""])
+    check("several missing tools share one entry that asks which to add",
+          result == 0
+          and menu(output)[0] == "  1. add to more tools (Codex, GitHub Copilot)..."
+          and "\nAdd the baseline to:" in output
+          and "  1. Codex" in output and "  2. GitHub Copilot" in output
+          and prompts[1:] == ["Tools (comma-separated; Enter = both): "]
+          and (home / ".codex" / "AGENTS.md").is_symlink()
+          and (home / ".copilot" / "copilot-instructions.md").is_symlink()
+          and not install._version_hook_is_installed("codex", home, home)
+          and output[-1]
+              == f"\nCodex and GitHub Copilot now load {bundled.baseline_id}.",
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["claude", "codex"], notice=False)
+    result, output, prompts = guided(home, state, ["2", "", "n"])
+    check("the session notice is explained by the line it shows",
+          result == 0
+          and menu(output)[1] == "  2. enable session notice..."
+          and "\nSession notice: when a session starts, Claude Code and Codex show"
+              in output
+          and f"  AI Secure Coding Baseline active: {bundled.baseline_id}" in output
+          and "Codex asks you once to approve it with /hooks." in output
+          and prompts[1:] == ["Enable session notice? [Y/n] ",
+                              "Enable update notice? [y/N] "]
+          and install._version_hook_is_installed("claude", home, home)
+          and install._version_hook_is_installed("codex", home, home)
+          and not update_notice_enabled(state),
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, list(install.TOOLS), notice=True)
+    result, output, prompts = guided(home, state, ["1", "y"])
+    check("enabling the update notice says what it contacts and only reports",
+          result == 0
+          and menu(output)[0] == "  1. enable update notice..."
+          and "To find out, a background process asks api.github.com once a day."
+              in output
+          and prompts == ["Choice [3]: ", "Enable update notice? [y/N] "]
+          and update_notice_enabled(state)
+          and output[-1] == "\nUpdate notice enabled.",
+          f"output={output!r}, prompts={prompts!r}")
+    result, output, prompts = guided(home, state, ["1"])
+    check("disabling the update notice needs no further question",
+          result == 0
+          and menu(output)[0] == "  1. disable update notice"
+          and prompts == ["Choice [3]: "]
+          and not update_notice_enabled(state)
+          and output[-1] == "\nUpdate notice disabled.",
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["claude", "codex"], notice=True)
+    result, output, prompts = guided(home, state, ["3", "y"])
+    check("removal first names everything that goes, the installer included",
+          result == 0
+          and "\nThis removes from your user account:" in output
+          and "  the baseline for Claude Code and Codex" in output
+          and "  the session notice" in output
+          and f"  this installer in "
+              f"{install.display_path(install.user_data_root(home))}" in output
+          and "Projects not listed here keep their own installation." in output
+          and "To install again later, use the Quick start." in output
+          and prompts[-1] == "Remove? [y/N] "
+          and not install.user_source(home).exists()
+          and not install._version_hook_is_installed("claude", home, home)
+          and output[-1] == "\nRemoved from your user account.",
+          f"output={output!r}, prompts={prompts!r}")
+
+with tempfile.TemporaryDirectory() as tmp:
+    sandbox = Path(tmp)
+    home = sandbox / "home"
+    project = sandbox / "project"
+    home.mkdir()
+    project.mkdir()
+    old_content = bundled.content.replace(
+        bundled.baseline_id.encode(), b"aiscb-0.0.1", 1
+    )
+    install.install(list(install.TOOLS), home, home, content=old_content)
+    install.install(list(install.TOOLS), project, None, content=old_content)
+    registry = install.empty_registry()
+    user = [item for item in install.scan_user(home, {}) if item.kind == "user"][0]
+    install.record_installation(registry, user, trusted=True)
+    install.record_installation(
+        registry, install.scan_project(project, {}), trusted=True
+    )
+    state = sandbox / "state.json"
+    install.save_registry(state, registry)
+    answers = iter(["1", "2"])
+    prompts = []
+    output = []
+    result = install.interactive_setup(
+        home=home,
+        input_fn=lambda prompt: prompts.append(prompt) or next(answers),
+        output=output.append,
+        check_online=False,
+        state_path=state,
+        current_root=project,
+    )
+    shown = install.display_path(project.resolve())
+    check("an update for two scopes asks which one to change",
+          result == 0
+          and menu(output)[0] == f"  1. update to {bundled.baseline_id}..."
+          and "\nUpdate:" in output
+          and "  1. your user account" in output
+          and f"  2. project {shown}" in output
+          and "  3. both" in output
+          and prompts == ["Choice [1]: ", "Choice [3]: "]
+          and install.read_baseline(install.user_source(home)).digest
+              != bundled.digest
+          and install.read_baseline(project / install.BASELINE).digest
+              == bundled.digest
+          and output[-1] == f"\nProject {shown} now uses {bundled.baseline_id}.",
+          f"output={output!r}, prompts={prompts!r}")
 
 setup_script = install.REPO / "setup.sh"
 setup_content = setup_script.read_text(encoding="utf-8")
@@ -1545,7 +1827,9 @@ with tempfile.TemporaryDirectory() as tmp:
         cwd=str(home), stdin=subprocess.DEVNULL,
     )
     check("the placed installer reports status without a checkout",
-          standalone.returncode == 0 and "installed copy" in standalone.stdout,
+          standalone.returncode == 0
+          and "Check for a new version: python3 " in standalone.stdout
+          and "--update" in standalone.stdout,
           standalone.stderr or standalone.stdout)
     placed.write_bytes(b"# an outdated installer copy\n")
     again = install.install(["claude"], home, home)
@@ -1637,13 +1921,17 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
-    placeholder = install.Installation(
-        "project", root, root / install.BASELINE, bundled, ("codex",)
-    )
-    answers = iter(["invalid", "0", "2"])
+    placeholders = [
+        install.Installation(
+            "project", root / name, root / name / install.BASELINE, bundled,
+            ("codex",),
+        )
+        for name in ("first", "second")
+    ]
+    answers = iter(["invalid", "0", "9"])
     output = []
     removed = install._remove_interactively(
-        install.empty_registry(), [placeholder],
+        install.empty_registry(), placeholders,
         lambda _prompt: next(answers), output.append,
     )
     check("interactive removal gives up after three invalid selections",
@@ -1656,7 +1944,7 @@ with tempfile.TemporaryDirectory() as tmp:
     placeholder = install.Installation(
         "project", root, root / install.BASELINE, bundled, ("codex",)
     )
-    answers = iter(["all", "n"])
+    answers = iter(["n"])
     output = []
     removed = install._remove_interactively(
         install.empty_registry(), [placeholder],
@@ -1674,7 +1962,7 @@ with tempfile.TemporaryDirectory() as tmp:
             if entry.kind == "user"][0]
     registry = install.empty_registry()
     install.record_installation(registry, item, trusted=True)
-    answers = iter(["1", "y"])
+    answers = iter(["y"])
     output = []
     removed = install._remove_interactively(
         registry, [item], lambda _prompt: next(answers), output.append
@@ -1709,7 +1997,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     state = sandbox / "state.json"
     install.save_registry(state, registry)
-    answers = iter(["4", "y"])
+    answers = iter(["5", "3", "y"])
     output = []
     result = install.interactive_setup(
         home=home,
@@ -1720,7 +2008,7 @@ with tempfile.TemporaryDirectory() as tmp:
         current_root=current,
     )
     saved = json.loads(state.read_text(encoding="utf-8"))
-    check("remove all affects only the user and current project shown",
+    check("removing both scopes leaves other projects alone",
           result == 0
           and not install.user_source(home).exists()
           and not (current / install.BASELINE).exists()
@@ -1729,7 +2017,7 @@ with tempfile.TemporaryDirectory() as tmp:
           and str(current.resolve()) not in saved["projects"]
           and str(other.resolve()) in saved["projects"]
           and str(other) not in "\n".join(output)
-          and "Other registered project directories are not affected." in output,
+          and "Projects not listed here keep their own installation." in output,
           f"output={output!r}, state={saved!r}")
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -1927,12 +2215,6 @@ check("tools can be chosen by name",
 check("the all keyword selects every tool",
       install.choose_tools(lambda _p: "all", lambda _l: None,
                            install.TOOLS) == list(install.TOOLS))
-hook_invalid: list[str] = []
-check("a repeatedly invalid hook selection skips the hooks",
-      install.choose_hook_tools(lambda _p: "nonsense", hook_invalid.append,
-                                list(install.TOOLS)) == []
-      and sum("Invalid selection" in line for line in hook_invalid) == 3,
-      str(hook_invalid))
 check("an over-long answer is refused",
       rejected(lambda: install._read_answer(lambda _p: "x" * 4097, "? ")))
 check("yes/no falls back to the default after three invalid answers",
@@ -2469,28 +2751,42 @@ with tempfile.TemporaryDirectory() as tmp:
         )
         return lines
 
-    rows = status_rows()
-    check("a status row names the tools that load the installation",
-          any(line.startswith("  ✓  user ") and "up to date" in line
-              and line.endswith("Claude Code") for line in rows), str(rows))
+    def block(lines: list[str], title: str) -> list[str]:
+        """The indented lines that belong to one titled installation."""
+        if title not in lines:
+            return []
+        entries: list[str] = []
+        for line in lines[lines.index(title) + 1:]:
+            if not line.startswith("  "):
+                break
+            entries.append(line)
+        return entries
+
+    user_title = "\nYour user account (all projects)"
+    lines = status_rows()
+    check("a status block names the tools that load the installation",
+          "  Loaded by Claude Code" in block(lines, user_title), str(lines))
     check("a second user copy shows its path",
-          any(f"user {install.display_path(copy)}" in line and "Codex" in line
-              for line in rows), str(rows))
+          "  Loaded by Codex" in block(
+              lines, f"{user_title}, linked to {install.display_path(copy)}"),
+          str(lines))
 
     (home / ".claude" / install.BASELINE).unlink()
     (home / ".codex" / "AGENTS.md").unlink()
-    rows = [line for line in status_rows() if line.startswith("  -  user")]
+    entries = block(status_rows(), user_title)
     check("an installation no tool loads claims no up-to-date state",
-          len(rows) == 1 and "not used by any tool" in rows[0]
-          and "up to date" not in rows[0], str(rows))
+          entries[:2] == [f"  {bundled.baseline_id}", "  Not loaded by any tool"],
+          str(entries))
 
     install.user_source(home).write_bytes(bundled.content.replace(
         bundled.baseline_id.encode(), b"aiscb-0.0.1", 1
     ))
-    rows = [line for line in status_rows() if line.startswith("  -  user")]
+    entries = block(status_rows(), user_title)
     check("an unused installation still shows the update the menu offers",
-          len(rows) == 1 and "not used by any tool" in rows[0]
-          and f"update → {bundled.baseline_id}" in rows[0], str(rows))
+          "  Not loaded by any tool" in entries
+          and any(f"update to {bundled.baseline_id} available" in line
+                  for line in entries),
+          str(entries))
 
 print(f"\ninstall: {'ok' if not failures else f'{failures} failures'}")
 sys.exit(1 if failures else 0)

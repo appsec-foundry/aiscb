@@ -80,7 +80,6 @@ MAX_API_BYTES = 512 * 1024
 MAX_REGISTRY_BYTES = 128 * 1024
 MAX_HOOK_CONFIG_BYTES = 128 * 1024
 MAX_PROJECTS = 200
-MAX_COLUMN = 40
 REGISTRY_SCHEMA = 1
 UPDATE_CHECK_KEY = "update_check"
 QUICK_START_URL = f"https://github.com/{GITHUB_REPOSITORY}#quick-start"
@@ -2244,6 +2243,7 @@ def choose_tools(
     output: Callable[[str], None],
     tools: tuple[str, ...],
     default_tools: list[str] | None = None,
+    heading: str = "Install for which tools?",
 ) -> list[str] | None:
     defaults = (
         [tool for tool in default_tools if tool in tools]
@@ -2256,10 +2256,10 @@ def choose_tools(
     if has_installed_tools:
         default_label = "keep installed (" + ", ".join(
             TOOL_LABELS[tool] for tool in defaults
-        ) + ")"
+        ) + "); all = all"
     else:
-        default_label = "all"
-    output("\nChoose one or more tools:")
+        default_label = "both" if len(tools) == 2 else "all"
+    output(f"\n{heading}")
     for number, tool in enumerate(tools, 1):
         installed = (
             " (installed)" if has_installed_tools and tool in defaults else ""
@@ -2268,7 +2268,7 @@ def choose_tools(
     for _ in range(3):
         answer = _read_answer(
             input_fn,
-            f"Tools (comma-separated; Enter = {default_label}; all = all): ",
+            f"Tools (comma-separated; Enter = {default_label}): ",
         )
         if not answer:
             return defaults
@@ -2290,42 +2290,6 @@ def choose_tools(
             return chosen
         output("Invalid selection. Use numbers or tool names separated by commas.")
     return None
-
-
-def choose_hook_tools(
-    input_fn: Callable[[str], str],
-    output: Callable[[str], None],
-    tools: list[str],
-) -> list[str]:
-    output("\nStartup hook:")
-    output("Shows the active baseline ID at the start of each session:")
-    for number, tool in enumerate(tools, 1):
-        output(f"  {number}. {TOOL_LABELS[tool]}")
-    for _ in range(3):
-        answer = _read_answer(
-            input_fn,
-            "Hook tools (comma-separated; Enter = all shown; none = skip): ",
-        )
-        if not answer or answer.lower() == "all":
-            return list(tools)
-        if answer.lower() in {"n", "no", "none"}:
-            return []
-        chosen: list[str] = []
-        valid = True
-        for item in re.split(r"[\s,]+", answer.lower()):
-            if item.isdigit() and 1 <= int(item) <= len(tools):
-                tool = tools[int(item) - 1]
-            elif item in tools:
-                tool = item
-            else:
-                valid = False
-                break
-            if tool not in chosen:
-                chosen.append(tool)
-        if valid and chosen:
-            return chosen
-        output("Invalid selection. Use shown numbers, tool names, all, or none.")
-    return []
 
 
 def _path_from_answer(answer: str, home: Path) -> Path:
@@ -2359,113 +2323,150 @@ def _is_previous_managed_user(installation: Installation) -> bool:
     )
 
 
-def _installation_state(installation: Installation, available: Baseline) -> str:
-    if _is_previous_managed_user(installation):
-        if installation.baseline.digest == available.digest:
-            return "up to date, migration recommended"
-        return f"migration → {available.baseline_id}"
-    if not installation.baseline.is_official:
-        if installation.baseline.name != OFFICIAL_NAME:
-            return f"{installation.baseline.name} baseline, no auto-update"
-        return "customized, no auto-update"
-    if installation.kind == "unmanaged":
-        return "manual file, no auto-update"
-    if installation.has_update(available):
-        if installation.baseline.version < available.version:
-            state = f"update → {available.baseline_id}"
-        else:
-            state = f"differs from {available.baseline_id}"
-        if _lacks_install_record(installation):
-            state += ", needs confirmation and backup"
-        return state
-    if installation.baseline.version > available.version:
-        return "newer than available"
+def _join_words(words: list[str]) -> str:
+    if len(words) <= 1:
+        return "".join(words)
+    return ", ".join(words[:-1]) + f" and {words[-1]}"
+
+
+def _join_labels(tools: list[str] | tuple[str, ...]) -> str:
+    return _join_words([TOOL_LABELS[tool] for tool in tools])
+
+
+def _sentence(text: str) -> str:
+    """Capitalize only the first letter, so a quoted path keeps its case."""
+    return text[:1].upper() + text[1:]
+
+
+def _scope_name(installation: Installation) -> str:
+    if installation.kind == "project":
+        return f"project {display_path(installation.root)}"
     if installation.kind == "legacy-user":
-        return "up to date, migration recommended"
-    return "up to date"
+        return f"your user account (linked to {display_path(installation.source)})"
+    return "your user account"
 
 
-def _installation_symbol(installation: Installation, available: Baseline) -> str:
-    if installation.baseline.digest == available.digest:
-        return "✓"
-    if _is_previous_managed_user(installation):
-        return "↻"
-    if installation.baseline.is_official and (
-        installation.baseline.version < available.version
-        or installation.baseline.version == available.version
-    ):
-        return "↻"
-    return "•"
+def _scope_names(installations: list[Installation]) -> str:
+    return _join_words([_scope_name(item) for item in installations])
 
 
-def _installation_scope(installation: Installation, current_root: Path | None) -> str:
-    if installation.kind == "user":
-        return "user"
-    if installation.kind == "legacy-user":
-        return f"user {display_path(installation.source)}"
-    if installation.kind == "unmanaged":
-        return display_path(installation.source)
-    root = installation.root.resolve(strict=False)
-    if current_root and root == current_root.resolve(strict=False):
-        return "project"
-    return display_path(installation.root)
+def _latest_known(registry: dict[str, object]) -> tuple[str, str] | None:
+    """The release an earlier check recorded, with the day it was checked."""
+    section = registry.get(UPDATE_CHECK_KEY)
+    if not isinstance(section, dict):
+        return None
+    latest, checked = section.get("latest"), section.get("checked")
+    if not isinstance(latest, str) or isinstance(checked, bool):
+        return None
+    if not isinstance(checked, int) or checked < 0:
+        return None
+    try:
+        return latest, time.strftime("%Y-%m-%d", time.gmtime(checked))
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
-def _installation_row(
+def _version_phrase(
     installation: Installation,
     available: Baseline,
-    current_root: Path | None,
-) -> tuple[str, ...]:
-    """A file no tool loads gets no up-to-date claim.
+    released: Baseline | None,
+    latest_known: tuple[str, str] | None,
+) -> str:
+    """Say how current an installation is, never more than this run knows.
 
-    Its pending update stays visible because the menu still offers it.
+    Only a release check in this run supports a plain "up to date"; otherwise
+    the phrase names the last recorded check and its day, or that none ran.
+    A file no tool loads gets no up-to-date claim, but keeps a pending update
+    visible because the menu still offers it.
     """
-    scope = _installation_scope(installation, current_root)
-    version = installation.baseline.baseline_id
+    identifier = installation.baseline.baseline_id
+    older = installation.baseline.version < available.version
+    if installation.kind == "legacy-user" and not (
+        installation.has_update(available) and older
+    ):
+        return f"{identifier}, switch to a managed copy so updates reach it"
+    if not installation.baseline.is_official:
+        if installation.baseline.name != OFFICIAL_NAME:
+            return f"{identifier}, setup leaves it unchanged"
+        return f"{identifier}, customized, setup leaves it unchanged"
+    if installation.kind == "unmanaged":
+        return f"{identifier}, setup leaves it unchanged"
+    if installation.has_update(available):
+        if older:
+            phrase = f"{identifier}, update to {available.baseline_id} available"
+        else:
+            phrase = f"{identifier}, differs from {available.baseline_id}"
+        if _lacks_install_record(installation):
+            phrase += ", needs confirmation and backup"
+        return phrase
+    if installation.baseline.version > available.version:
+        return f"{identifier}, newer than {available.baseline_id}"
     if not installation.tools:
-        unused = "not used by any tool"
-        if installation.has_update(available):
-            state = _installation_state(installation, available)
-            return ("-", scope, version, state, unused)
-        return ("-", scope, version, unused, "")
-    return (
-        _installation_symbol(installation, available),
-        scope,
-        version,
-        _installation_state(installation, available),
-        ", ".join(TOOL_LABELS[tool] for tool in installation.tools),
+        return identifier
+    if released is not None:
+        return f"{identifier}, up to date"
+    unknown = f"{identifier}, newest release not checked"
+    if latest_known is None:
+        return unknown
+    latest, checked_on = latest_known
+    match = re.fullmatch(
+        rf"(?P<name>[a-z][a-z0-9-]*)-(?P<version>{SEMVER_TEXT})", latest
     )
+    if match is None or match.group("name") != installation.baseline.name:
+        return unknown
+    try:
+        newer = SemVer.parse(match.group("version")) > installation.baseline.version
+    except ValueError:
+        return unknown
+    if newer:
+        return f"{identifier}, update to {latest} available (checked {checked_on})"
+    return f"{identifier}, up to date as of {checked_on}"
 
 
-def _show_rows(output: Callable[[str], None], rows: list[tuple[str, ...]]) -> None:
-    """Print one aligned line per installation; the last column is not padded.
-
-    A single long path is capped so it does not indent every other row.
-    """
-    widths = [
-        min(max(len(row[column]) for row in rows), MAX_COLUMN)
-        for column in range(len(rows[0]) - 1)
+def _session_notice_tools(installation: Installation) -> list[str]:
+    """The tools of a managed installation whose session notice is configured."""
+    if installation.kind not in {"user", "project"}:
+        return []
+    home = None if installation.kind == "project" else installation.root
+    return [
+        tool
+        for tool in installation.tools
+        if _version_hook_is_installed(tool, installation.root, home)
     ]
-    for row in rows:
-        padded = [cell.ljust(width) for cell, width in zip(row, widths)]
-        output(("  " + "  ".join([*padded, row[-1]])).rstrip())
 
 
-def _show_installations(
-    output: Callable[[str], None],
-    installations: list[Installation],
-    available: Baseline,
-    heading: str,
-    current_root: Path | None = None,
-) -> None:
-    output(heading)
-    if not installations:
-        output("  - none found")
-        return
-    _show_rows(
-        output,
-        [_installation_row(item, available, current_root) for item in installations],
-    )
+def _scope_title(installation: Installation, home: Path) -> str:
+    source = display_path(installation.source)
+    if installation.kind == "user":
+        return "Your user account (all projects)"
+    if installation.kind == "legacy-user":
+        return f"Your user account (all projects), linked to {source}"
+    if installation.kind == "project":
+        return f"Project {display_path(installation.root)}"
+    if installation.root.resolve(strict=False) == home.resolve(strict=False):
+        return f"Your user account: manual file {source}"
+    return f"Project {display_path(installation.root)}: manual file {source}"
+
+
+def _release_line(
+    available: Baseline, released: Baseline | None, check_online: bool
+) -> str | None:
+    """Name the newest release only as far as this run actually checked it."""
+    if released is not None:
+        if available is released:
+            return f"Newest release: {released.baseline_id} (checked online just now)"
+        return (
+            f"Newest release: {released.baseline_id}; "
+            f"this copy has the newer {available.baseline_id}"
+        )
+    if check_online:
+        return (
+            "Newest release: could not be checked; "
+            f"this copy has {available.baseline_id}"
+        )
+    if LOCAL_ORIGIN == "installed copy":
+        return None
+    return f"Online check skipped; this copy has {available.baseline_id}"
 
 
 def _show_setup_status(
@@ -2474,6 +2475,8 @@ def _show_setup_status(
     available: Baseline,
     home: Path,
     current_root: Path | None,
+    registry: dict[str, object],
+    released: Baseline | None,
 ) -> None:
     current_resolved = (
         current_root.resolve(strict=False) if current_root is not None else None
@@ -2493,19 +2496,52 @@ def _show_setup_status(
         else:
             other.append(installation)
 
-    rows: list[tuple[str, ...]] = []
+    latest_known = None if released is not None else _latest_known(registry)
+
+    def show(installation: Installation) -> None:
+        output(f"\n{_scope_title(installation, home)}")
+        phrase = _version_phrase(installation, available, released, latest_known)
+        output(f"  {phrase}")
+        if not installation.tools:
+            output("  Not loaded by any tool")
+            return
+        output(f"  Loaded by {_join_labels(installation.tools)}")
+        if installation.kind not in {"user", "project"}:
+            return
+        notice = _session_notice_tools(installation)
+        if not notice:
+            output("  Session notice: off")
+        elif len(notice) == len(installation.tools):
+            output("  Session notice: on")
+        else:
+            output(f"  Session notice: on for {_join_labels(notice)}")
+
+    if not any(item.kind in {"user", "legacy-user"} for item in user):
+        output("\nYour user account: not installed")
+    for installation in user:
+        show(installation)
     if current_root is not None and not any(
         item.kind == "project" for item in current
     ):
-        rows.append(("-", "project", "", "not installed", ""))
-    rows += [_installation_row(item, available, current_root) for item in current]
-    if not any(item.kind in {"user", "legacy-user"} for item in user):
-        rows.append(("-", "user", "", "not installed", ""))
-    rows += [_installation_row(item, available, current_root) for item in user]
-    rows += [_installation_row(item, available, current_root) for item in other]
+        output(f"\nProject {display_path(current_root)}: not installed")
+    for installation in current + other:
+        show(installation)
 
-    output("\nInstallations")
-    _show_rows(output, rows)
+    notes: list[str] = []
+    if any(_session_notice_tools(item) for item in installations):
+        notes.append(
+            "Update notice: on" if update_check_enabled(registry)
+            else "Update notice: off, so you won't hear about new versions"
+        )
+    if LOCAL_ORIGIN == "installed copy":
+        notes.append(
+            "Check for a new version: "
+            f"python3 {display_path(INSTALLER_SOURCE)} --update"
+        )
+    if notes:
+        output("")
+        for line in notes:
+            output(line)
 
 
 def _record_current_scope(
@@ -2608,97 +2644,133 @@ def _review_updates(
     return changed, incomplete
 
 
-def _update_all_interactively(
+def _choose_scopes(
+    input_fn: Callable[[str], str],
+    output: Callable[[str], None],
     installations: list[Installation],
+    heading: str,
+    *,
+    enter_all: bool,
+) -> list[Installation]:
+    """Pick one shown scope or all of them; Enter picks all or cancels."""
+    everything = "both" if len(installations) == 2 else "all of them"
+    last = len(installations) + 1
+    output(f"\n{heading}")
+    for number, item in enumerate(installations, 1):
+        output(f"  {number}. {_scope_name(item)}")
+    output(f"  {last}. {everything}")
+    prompt = f"Choice [{last}]: " if enter_all else "Choice (Enter = cancel): "
+    for _ in range(3):
+        answer = _read_answer(input_fn, prompt)
+        if not answer:
+            return list(installations) if enter_all else []
+        if answer.isdigit() and 1 <= int(answer) <= last:
+            if int(answer) == last:
+                return list(installations)
+            return [installations[int(answer) - 1]]
+        output(f"Invalid selection. Choose a number from 1 to {last}.")
+    return []
+
+
+def _update_interactively(
+    outdated: list[Installation],
     available: Baseline,
     registry: dict[str, object],
     reviewed: set[Path],
     input_fn: Callable[[str], str],
     output: Callable[[str], None],
-) -> tuple[bool, bool]:
-    """Update every shown managed installation, preserving local-content consent."""
-    outdated = _outdated_installations(installations, available, reviewed)
-    if not outdated:
-        output("No shown installation needs an update.")
-        return False, False
-
-    output("\nUpdating all shown installations (user and current project only):")
-    for installation in outdated:
-        output(f"  {installation.label}  {installation.baseline.baseline_id}")
+) -> tuple[bool, bool, str | None]:
+    """Update the shown scopes the user picks, preserving local-content consent."""
+    chosen = (
+        outdated
+        if len(outdated) == 1
+        else _choose_scopes(input_fn, output, outdated, "Update:", enter_all=True)
+    )
+    if not chosen:
+        output("Nothing updated.")
+        return False, False, None
 
     changed = False
     incomplete = False
-    for installation in outdated:
+    updated: list[Installation] = []
+    for installation in chosen:
         reviewed.add(_update_key(installation))
         if _lacks_install_record(installation):
             question = (
-                f"\n{installation.label} has no matching install record. "
-                "Back it up and replace it?"
+                f"\n{_sentence(_scope_name(installation))} has no matching install "
+                "record. Back it up and replace it?"
             )
             if not ask_yes_no(input_fn, question, False, output):
-                output(f"  kept {installation.label} unchanged")
+                output(f"  kept {_scope_name(installation)} unchanged")
                 continue
         update_changed, update_incomplete = _apply_update(
             installation, available, registry, output
         )
         changed = changed or update_changed
         incomplete = incomplete or update_incomplete
-    return changed, incomplete
+        if update_changed and not update_incomplete:
+            updated.append(installation)
+    if not updated:
+        return changed, incomplete, None
+    verb = "uses" if len(updated) == 1 else "use"
+    message = f"{_sentence(_scope_names(updated))} now {verb} {available.baseline_id}."
+    return changed, incomplete, message
 
 
-def _offer_version_hooks(
-    selected_tools: list[str],
-    installed: Installation | None,
-    root: Path,
-    home: Path | None,
+def _offer_session_notice(
+    installation: Installation | None,
     input_fn: Callable[[str], str],
     output: Callable[[str], None],
 ) -> tuple[bool, bool]:
-    """Install the chosen startup hooks; report whether any is now configured."""
-    if installed is None:
+    """Offer the session notice to every tool that lacks it; report the result."""
+    if installation is None:
         return False, False
-    tools = [tool for tool in selected_tools if tool in installed.tools]
+    configured_tools = _session_notice_tools(installation)
+    tools = [tool for tool in installation.tools if tool not in configured_tools]
     if not tools:
         return False, False
-    hook_tools = choose_hook_tools(input_fn, output, tools)
-    if not hook_tools:
+    verb = "shows" if len(tools) == 1 else "show"
+    output(f"\nSession notice: when a session starts, {_join_labels(tools)} {verb}")
+    output(f"  AI Secure Coding Baseline active: {installation.baseline.baseline_id}")
+    if "codex" in tools:
+        output("Codex asks you once to approve it with /hooks.")
+    if not ask_yes_no(input_fn, "Enable session notice?", True, output):
         return False, False
-    for line in install_version_hooks(hook_tools, root, home):
+    home = None if installation.kind == "project" else installation.root
+    for line in install_version_hooks(tools, installation.root, home):
         output(f"  {line}")
-    output("\nVerifying startup hooks:")
+    output("\nVerifying session notice:")
     incomplete = False
     configured = False
-    for tool in hook_tools:
-        if _version_hook_is_installed(tool, root, home):
-            output(f"  ✓ {TOOL_LABELS[tool]} hook configured")
+    for tool in tools:
+        if _version_hook_is_installed(tool, installation.root, home):
+            output(f"  ✓ {TOOL_LABELS[tool]} session notice configured")
             configured = True
         else:
-            output(f"  ! {TOOL_LABELS[tool]} hook incomplete")
+            output(f"  ! {TOOL_LABELS[tool]} session notice incomplete")
             incomplete = True
     return incomplete, configured
 
 
-def _offer_update_check(
+def _set_update_notice(registry: dict[str, object], enabled: bool) -> None:
+    section = registry.get(UPDATE_CHECK_KEY)
+    section = section if isinstance(section, dict) else {}
+    registry[UPDATE_CHECK_KEY] = {**section, "enabled": enabled}
+
+
+def _offer_update_notice(
     registry: dict[str, object],
     input_fn: Callable[[str], str],
     output: Callable[[str], None],
-) -> None:
-    """Ask whether the startup hook may look up new releases in the background."""
-    output("\nThe hook can also name a newer release when one exists.")
-    output(
-        "Finding that out contacts api.github.com once a day, in a background "
-        "process that never delays a session."
-    )
-    output("Without it, the hook reports what the last setup or status run saw.")
-    section = registry.get(UPDATE_CHECK_KEY)
-    section = section if isinstance(section, dict) else {}
-    enabled = ask_yes_no(
-        input_fn,
-        "Check for new releases in the background?",
-        update_check_enabled(registry),
-        output,
-    )
-    registry[UPDATE_CHECK_KEY] = {**section, "enabled": enabled}
+) -> bool:
+    """Ask whether the session notice may look up new releases in the background."""
+    output("\nThe session notice will also say when a new version is out.")
+    output("To find out, a background process asks api.github.com once a day.")
+    output("It only reports; you still update with --update.")
+    enabled = ask_yes_no(input_fn, "Enable update notice?", False, output)
+    if enabled:
+        _set_update_notice(registry, True)
+    return enabled
 
 
 def _remove_interactively(
@@ -2706,83 +2778,43 @@ def _remove_interactively(
     installations: list[Installation],
     input_fn: Callable[[str], str],
     output: Callable[[str], None],
-) -> bool:
-    """Remove whole installations the user picks, one, several, or all."""
-    output("\nRemove which installation?")
-    for number, item in enumerate(installations, 1):
-        output(f"  {number}. {item.label}  {item.baseline.baseline_id}")
-    chosen: list[Installation] = []
-    for _ in range(3):
-        answer = _read_answer(
-            input_fn,
-            "Installations (comma-separated; all = all; Enter = cancel): ",
+) -> list[Installation]:
+    """Remove the scopes the user picks after one confirmation naming what goes."""
+    chosen = (
+        list(installations)
+        if len(installations) == 1
+        else _choose_scopes(
+            input_fn, output, installations, "Remove from:", enter_all=False
         )
-        if not answer:
-            output("Nothing removed.")
-            return False
-        if answer.lower() == "all":
-            chosen = list(installations)
-            break
-        picked: list[Installation] = []
-        valid = True
-        for part in re.split(r"[\s,]+", answer):
-            if part.isdigit() and 1 <= int(part) <= len(installations):
-                item = installations[int(part) - 1]
-                if item not in picked:
-                    picked.append(item)
-            else:
-                valid = False
-                break
-        if valid and picked:
-            chosen = picked
-            break
-        output("Invalid selection. Use the numbers shown, or all.")
+    )
     if not chosen:
         output("Nothing removed.")
-        return False
+        return []
 
-    output("\nThis removes the links, instruction lines, hooks and files it placed for:")
     for item in chosen:
-        output(f"  {item.label}")
-    if not ask_yes_no(input_fn, "Remove them?", False, output):
+        output(f"\nThis removes from {_scope_name(item)}:")
+        if item.tools:
+            output(f"  the baseline for {_join_labels(item.tools)}")
+        else:
+            output("  the baseline")
+        if _session_notice_tools(item):
+            output("  the session notice")
+        installer = user_data_root(item.root) / INSTALLER_NAME
+        if item.kind != "project" and installer.is_file() and not installer.is_symlink():
+            output(f"  this installer in {display_path(installer.parent)}")
+    output("Projects not listed here keep their own installation.")
+    if any(item.kind != "project" for item in chosen):
+        output("To install again later, use the Quick start.")
+    if not ask_yes_no(input_fn, "Remove?", False, output):
         output("Nothing removed.")
-        return False
+        return []
 
-    removed = False
+    removed: list[Installation] = []
     for item in chosen:
         report: list[str] = []
         if remove_installation(item, report):
             forget_installation(registry, item)
-            removed = True
-        for line in report:
-            output(f"  {line}")
-    return removed
-
-
-def _remove_all_interactively(
-    registry: dict[str, object],
-    installations: list[Installation],
-    input_fn: Callable[[str], str],
-    output: Callable[[str], None],
-) -> bool:
-    """Remove every shown managed installation after one explicit confirmation."""
-    output(
-        "\nRemove all shown managed installations "
-        "(user and current project only)?"
-    )
-    for item in installations:
-        output(f"  {item.label}  {item.baseline.baseline_id}")
-    output("Other registered project directories are not affected.")
-    if not ask_yes_no(input_fn, "Remove all shown installations?", False, output):
-        output("Nothing removed.")
-        return False
-
-    removed = False
-    for item in installations:
-        report: list[str] = []
-        if remove_installation(item, report):
-            forget_installation(registry, item)
-            removed = True
+            removed.append(item)
         for line in report:
             output(f"  {line}")
     return removed
@@ -2803,6 +2835,84 @@ def _verify_baseline_tools(
             output(f"  ! {TOOL_LABELS[tool]} incomplete")
             incomplete = True
     return incomplete
+
+
+def _add_label(missing: list[str], where: str) -> str:
+    if len(missing) == 1:
+        return f"add to {TOOL_LABELS[missing[0]]}{where}"
+    labels = ", ".join(TOOL_LABELS[tool] for tool in missing)
+    return f"add to more tools{where} ({labels})..."
+
+
+def _rescan(
+    installation: Installation, registry: dict[str, object]
+) -> Installation | None:
+    if installation.kind == "project":
+        projects = registry.get("projects", {})
+        entry = (
+            projects.get(str(installation.root.resolve()))
+            if isinstance(projects, dict)
+            else None
+        )
+        return scan_project(installation.root, entry if isinstance(entry, dict) else {})
+    user_entry = registry.get("user")
+    managed = [
+        item
+        for item in scan_user(
+            installation.root, user_entry if isinstance(user_entry, dict) else {}
+        )
+        if item.kind == "user"
+    ]
+    return managed[0] if managed else None
+
+
+def _add_tools_interactively(
+    installation: Installation,
+    missing: list[str],
+    available: Baseline,
+    registry: dict[str, object],
+    input_fn: Callable[[str], str],
+    output: Callable[[str], None],
+) -> tuple[bool, bool, str | None]:
+    """Link more tools to an installation; they inherit its session notice."""
+    tools: list[str] | None = list(missing)
+    if len(missing) > 1:
+        tools = choose_tools(
+            input_fn, output, tuple(missing), heading="Add the baseline to:"
+        )
+    if not tools:
+        output("Setup cancelled.")
+        return False, False, None
+    project = installation.kind == "project"
+    root = installation.root
+    home = None if project else root
+    output("\nApplying project setup:" if project else "\nApplying user-wide setup:")
+    report = install(
+        tools, root if project else Path.cwd(), home, content=available.content
+    )
+    for line in report:
+        output(f"  {line}")
+    installed = _rescan(installation, registry)
+    _record_current_scope(registry, installed, available)
+    incomplete = _verify_baseline_tools(tools, installed, output)
+    added = [tool for tool in tools if installed is not None and tool in installed.tools]
+    if added and _session_notice_tools(installation):
+        output("\nAdding the session notice, as for the other tools:")
+        for line in install_version_hooks(added, root, home):
+            output(f"  {line}")
+        for tool in added:
+            if _version_hook_is_installed(tool, root, home):
+                output(f"  ✓ {TOOL_LABELS[tool]} session notice configured")
+            else:
+                output(f"  ! {TOOL_LABELS[tool]} session notice incomplete")
+                incomplete = True
+        if "codex" in added:
+            output("Codex asks you once to approve it with /hooks.")
+    if installed is None or not added:
+        return installed is not None, incomplete, None
+    verb = "loads" if len(added) == 1 else "load"
+    message = f"{_join_labels(added)} now {verb} {installed.baseline.baseline_id}."
+    return True, incomplete, message
 
 
 def _install_project_interactively(
@@ -2834,13 +2944,6 @@ def _install_project_interactively(
     existing = scan_project(root, entry if isinstance(entry, dict) else {})
     unmanaged = scan_unmanaged_project_files(root)
     found = ([existing] if existing else []) + unmanaged
-    _show_installations(
-        output,
-        found,
-        available,
-        f"\nSelected project {display_path(root)}:",
-        root,
-    )
     changed, update_incomplete = _review_updates(
         found,
         available,
@@ -2864,11 +2967,11 @@ def _install_project_interactively(
     installed = scan_project(root, entry if isinstance(entry, dict) else {})
     _record_current_scope(registry, installed, available)
     incomplete = _verify_baseline_tools(tools, installed, output)
-    hook_incomplete, hooks_configured = _offer_version_hooks(
-        tools, installed, root, None, input_fn, output
+    hook_incomplete, hooks_configured = _offer_session_notice(
+        installed, input_fn, output
     )
-    if hooks_configured:
-        _offer_update_check(registry, input_fn, output)
+    if hooks_configured and not update_check_enabled(registry):
+        _offer_update_notice(registry, input_fn, output)
     return (
         changed or installed is not None,
         update_incomplete or incomplete or hook_incomplete,
@@ -2885,7 +2988,6 @@ def _install_user_interactively(
 ) -> tuple[bool, bool]:
     user_entry = registry.get("user")
     existing = scan_user(home, user_entry if isinstance(user_entry, dict) else {})
-    _show_installations(output, existing, available, "\nSelected user-wide scope:")
     changed, update_incomplete = _review_updates(
         existing,
         available,
@@ -2975,11 +3077,11 @@ def _install_user_interactively(
     if managed:
         _record_current_scope(registry, managed[0], available)
         incomplete = _verify_baseline_tools(tools, managed[0], output)
-        hook_incomplete, hooks_configured = _offer_version_hooks(
-            tools, managed[0], Path.cwd(), home, input_fn, output
+        hook_incomplete, hooks_configured = _offer_session_notice(
+            managed[0], input_fn, output
         )
-        if hooks_configured:
-            _offer_update_check(registry, input_fn, output)
+        if hooks_configured and not update_check_enabled(registry):
+            _offer_update_notice(registry, input_fn, output)
         return True, update_incomplete or incomplete or hook_incomplete
     _verify_baseline_tools(tools, None, output)
     return changed, True
@@ -3007,10 +3109,9 @@ def interactive_setup(
     current_root: Path | None = None,
 ) -> int:
     output("AI Secure Coding Baseline setup")
-    output("Install or update the baseline for Claude Code, Codex, and Copilot.")
-    output("Existing instruction files are preserved; conflicts are reported.")
-    output("\nChecking the available baseline...")
-    available, online_note, released = latest_available(check_online)
+    if check_online:
+        output("Checking for the newest release...")
+    available, _note, released = latest_available(check_online)
     state_path = state_path or registry_path(home)
     registry, registry_writable, registry_note = load_registry_with_previous(
         home, state_path
@@ -3025,11 +3126,11 @@ def interactive_setup(
     if project_root is not None and project_root == Path(project_root.anchor):
         project_root = None
 
-    output(f"Available  {available.baseline_id}  ({available.origin}{online_note})")
+    release_line = _release_line(available, released, check_online)
+    if release_line:
+        output(release_line)
     if project_root is None:
-        output("Project    none detected")
-    else:
-        output(f"Project    {display_path(project_root)}")
+        output("This directory is not a project, so only the user-wide setup applies.")
     if registry_note:
         output(registry_note)
     discovered = discover_installations(home, registry, project_root)
@@ -3047,50 +3148,85 @@ def interactive_setup(
             and item.root.resolve(strict=False) == project_resolved
         )
     ]
-    _show_setup_status(output, installations, available, home, project_root)
+    _show_setup_status(
+        output, installations, available, home, project_root, registry, released
+    )
 
     reviewed_updates: set[Path] = set()
-    current_installed = project_root is not None and any(
-        item.kind == "project"
-        and item.root.resolve(strict=False) == project_root.resolve(strict=False)
-        for item in installations
+    user_items = [
+        item for item in installations if item.kind in {"user", "legacy-user"}
+    ]
+    user_scope = next((item for item in user_items if item.kind == "user"), None)
+    project_scope = next(
+        (
+            item
+            for item in installations
+            if item.kind == "project"
+            and project_resolved is not None
+            and item.root.resolve(strict=False) == project_resolved
+        ),
+        None,
     )
-    user_installed = any(item.kind in {"user", "legacy-user"} for item in installations)
+    user_installed = bool(user_items)
     user_needs_migration = any(
         _is_previous_managed_user(item) for item in installations
     )
-    current_action = (
-        "add or verify tools in project" if current_installed else "install in project"
-    )
-    if user_needs_migration:
-        user_action = "migrate user installation"
-    else:
-        user_action = (
-            "add or verify tools for user" if user_installed else "install for user"
-        )
-
     outdated = _outdated_installations(installations, available, reviewed_updates)
     removable = [item for item in installations if item.kind != "unmanaged"]
-    if removable:
-        output(
-            "Bulk actions affect only the user installation and the current "
-            "project shown above."
-        )
-        output("Other registered project directories are not affected.")
+    missing_user = [
+        tool for tool in TOOLS if user_scope is not None and tool not in user_scope.tools
+    ]
+    missing_project = [
+        tool
+        for tool in TOOLS
+        if project_scope is not None and tool not in project_scope.tools
+    ]
+    notice_scopes = [
+        scope
+        for scope in (user_scope, project_scope)
+        if scope is not None and scope.tools
+    ]
 
+    # One entry per change; a trailing "..." means a question follows.
     actions: list[tuple[str, str]] = []
     if outdated:
-        actions.append(("update all shown installations", "update_all"))
-        actions.append(("review shown updates individually", "update_review"))
+        more = "..." if len(outdated) > 1 else ""
+        actions.append((f"update to {available.baseline_id}{more}", "update"))
     user_action_index = len(actions) + 1
-    actions.append((user_action, "user"))
+    if any(item.kind == "legacy-user" for item in user_items):
+        actions.append(("switch your user account to a managed copy...", "user"))
+    elif user_scope is None or not user_scope.tools:
+        actions.append(("install for your user account...", "user"))
+    elif missing_user:
+        actions.append((_add_label(missing_user, ""), "user_add"))
     if project_root is not None:
-        actions.append(
-            (f"{current_action} {display_path(project_root)}", "project")
-        )
-    if removable:
-        actions.append(("remove shown installation(s)...", "remove"))
-        actions.append(("remove all shown managed installations", "remove_all"))
+        if project_scope is None or not project_scope.tools:
+            actions.append(
+                (f"install in project {display_path(project_root)}...", "project")
+            )
+        elif missing_project:
+            actions.append(
+                (_add_label(missing_project, " in project"), "project_add")
+            )
+    for scope, where, key in (
+        (user_scope, "", "user_notice"),
+        (project_scope, " in project", "project_notice"),
+    ):
+        if (
+            scope is not None
+            and scope.tools
+            and len(_session_notice_tools(scope)) < len(scope.tools)
+        ):
+            actions.append((f"enable session notice{where}...", key))
+    if any(_session_notice_tools(scope) for scope in notice_scopes):
+        if update_check_enabled(registry):
+            actions.append(("disable update notice", "notice_off"))
+        else:
+            actions.append(("enable update notice...", "notice_on"))
+    if len(removable) == 1:
+        actions.append((f"remove from {_scope_name(removable[0])}...", "remove"))
+    elif removable:
+        actions.append(("remove...", "remove"))
     actions.append(("exit", "exit"))
     output("\nWhat would you like to do?")
     for number, (label, _key) in enumerate(actions, 1):
@@ -3119,28 +3255,19 @@ def interactive_setup(
 
     action_changed = False
     action_incomplete = False
+    message: str | None = None
     chosen = actions[int(choice) - 1][1]
-    if chosen == "update_all":
-        action_changed, action_incomplete = _update_all_interactively(
-            installations,
-            available,
-            registry,
-            reviewed_updates,
-            input_fn,
-            output,
-        )
-    elif chosen == "update_review":
-        action_changed, action_incomplete = _review_updates(
-            installations,
-            available,
-            registry,
-            reviewed_updates,
-            input_fn,
-            output,
+    if chosen == "update":
+        action_changed, action_incomplete, message = _update_interactively(
+            outdated, available, registry, reviewed_updates, input_fn, output
         )
     elif chosen == "user":
         action_changed, action_incomplete = _install_user_interactively(
             home, registry, available, reviewed_updates, input_fn, output
+        )
+    elif chosen == "user_add" and user_scope is not None:
+        action_changed, action_incomplete, message = _add_tools_interactively(
+            user_scope, missing_user, available, registry, input_fn, output
         )
     elif chosen == "project" and project_root is not None:
         action_changed, action_incomplete = _install_project_interactively(
@@ -3152,14 +3279,28 @@ def interactive_setup(
             output,
             project_root,
         )
+    elif chosen == "project_add" and project_scope is not None:
+        action_changed, action_incomplete, message = _add_tools_interactively(
+            project_scope, missing_project, available, registry, input_fn, output
+        )
+    elif chosen in {"user_notice", "project_notice"}:
+        scope = user_scope if chosen == "user_notice" else project_scope
+        action_incomplete, action_changed = _offer_session_notice(
+            scope, input_fn, output
+        )
+        if action_changed and not update_check_enabled(registry):
+            _offer_update_notice(registry, input_fn, output)
+    elif chosen == "notice_on":
+        action_changed = _offer_update_notice(registry, input_fn, output)
+        message = "Update notice enabled."
+    elif chosen == "notice_off":
+        _set_update_notice(registry, False)
+        action_changed = True
+        message = "Update notice disabled."
     elif chosen == "remove":
-        action_changed = _remove_interactively(
-            registry, removable, input_fn, output
-        )
-    elif chosen == "remove_all":
-        action_changed = _remove_all_interactively(
-            registry, removable, input_fn, output
-        )
+        removed = _remove_interactively(registry, removable, input_fn, output)
+        action_changed = bool(removed)
+        message = f"Removed from {_scope_names(removed)}."
 
     if action_changed:
         _save_setup_registry(state_path, registry, registry_writable, output)
@@ -3169,7 +3310,7 @@ def interactive_setup(
         output("\nSetup finished with unresolved items.")
         return 2
     elif action_changed:
-        output("\nSetup complete.")
+        output(f"\n{message or 'Setup complete.'}")
     else:
         output("\nNo additional changes made.")
     return 0
@@ -3183,7 +3324,7 @@ def installation_status(
     state_path: Path | None = None,
     current_root: Path | None = None,
 ) -> int:
-    available, online_note, released = latest_available(check_online)
+    available, _note, released = latest_available(check_online)
     state_path = state_path or registry_path(home)
     registry, registry_writable, registry_note = load_registry_with_previous(
         home, state_path
@@ -3195,12 +3336,15 @@ def installation_status(
         raise ValueError("current project must be an existing non-root directory")
 
     output("AI Secure Coding Baseline status")
-    output(f"Available  {available.baseline_id}  ({available.origin}{online_note})")
-    output(f"Project    {display_path(current_root)}")
+    release_line = _release_line(available, released, check_online)
+    if release_line:
+        output(release_line)
     if registry_note:
         output(registry_note)
     installations = discover_installations(home, registry, current_root)
-    _show_setup_status(output, installations, available, home, current_root)
+    _show_setup_status(
+        output, installations, available, home, current_root, registry, released
+    )
     return 0
 
 
@@ -3354,12 +3498,6 @@ def main(argv: list[str] | None = None) -> int:
             )
         try:
             check_online = _interactive_check_online(args.offline)
-            if not args.offline and not check_online:
-                print(
-                    "This installed copy manages its verified bundle only. "
-                    "Run it with --update for a signed release update, or use "
-                    "the current Quick start."
-                )
             return interactive_setup(home=Path.home(), check_online=check_online)
         except (EOFError, KeyboardInterrupt):
             print("\nSetup cancelled.", file=sys.stderr)
