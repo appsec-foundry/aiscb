@@ -1856,11 +1856,24 @@ def migrate_legacy_user(
     return report, result
 
 
+def _lacks_install_record(installation: Installation) -> bool:
+    """True when no registry entry vouches for the file, so it is backed up first."""
+    return (
+        installation.kind in {"project", "user"}
+        and installation.tracked_digest != installation.baseline.digest
+    )
+
+
 def update_installation(
     installation: Installation,
     available: Baseline,
-    confirm: Callable[[str, bool], bool],
+    replace_unrecorded: bool,
 ) -> tuple[list[str], Installation | None]:
+    """Replace the installed baseline; a file without an install record needs consent.
+
+    The caller asks that question, so the guided setup puts one prompt per
+    installation to the user instead of a second one after the first yes.
+    """
     if not installation.baseline.is_official:
         return [f"skipped {installation.label}: customized baseline"], None
     if installation.kind == "legacy-user":
@@ -1877,12 +1890,8 @@ def update_installation(
         return [f"blocked {installation.source}: source changed since discovery"], None
 
     report: list[str] = []
-    if installation.tracked_digest != installation.baseline.digest:
-        question = (
-            f"{installation.label} was not installed by this setup or changed locally. "
-            "Back it up and replace it?"
-        )
-        if not confirm(question, False):
+    if _lacks_install_record(installation):
+        if not replace_unrecorded:
             return [f"skipped {installation.label}: kept local content"], None
         backup = _backup_path(installation.source)
         _write_new(backup, installation.baseline.content)
@@ -2072,10 +2081,7 @@ def _installation_state(installation: Installation, available: Baseline) -> str:
             state = f"update → {available.baseline_id}"
         else:
             state = f"differs from {available.baseline_id}"
-        if (
-            installation.kind in {"project", "user"}
-            and installation.tracked_digest != installation.baseline.digest
-        ):
+        if _lacks_install_record(installation):
             state += ", needs confirmation and backup"
         return state
     if installation.baseline.version > available.version:
@@ -2191,20 +2197,6 @@ def _show_setup_status(
     rows += [_installation_row(item, available, current_root) for item in other]
 
     output("\nInstallations")
-    # Each row states its condition in words; the legend only helps to group a
-    # mixed table, so it names the symbols in use and nothing else.
-    legend = [
-        f"{symbol} {meaning}"
-        for symbol, meaning in (
-            ("✓", "up to date"),
-            ("↻", "update available"),
-            ("•", "review needed"),
-            ("-", "not installed"),
-        )
-        if any(row[0] == symbol for row in rows)
-    ]
-    if len(legend) > 1:
-        output("  " + "  ".join(legend))
     _show_rows(output, rows)
 
 
@@ -2255,13 +2247,14 @@ def _review_updates(
                 f"\nReplace the differing {installation.baseline.baseline_id} content "
                 f"in {installation.label} with the available copy?"
             )
-        if not ask_yes_no(input_fn, question, True, output):
+        unrecorded = _lacks_install_record(installation)
+        if unrecorded:
+            question += " No install record for this file, so it is backed up first."
+        if not ask_yes_no(input_fn, question, not unrecorded, output):
             output(f"  kept {installation.label} unchanged")
             continue
         report, updated = update_installation(
-            installation,
-            available,
-            lambda prompt, default: ask_yes_no(input_fn, prompt, default, output),
+            installation, available, replace_unrecorded=True
         )
         for line in report:
             output(f"  {line}")

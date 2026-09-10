@@ -448,10 +448,8 @@ with tempfile.TemporaryDirectory() as tmp:
         first.kind, first.root, first.source, first.baseline, first.tools,
         first.baseline.digest,
     )
-    report, updated = install.update_installation(
-        tracked, bundled, lambda _question, _default: False
-    )
-    check("a tracked baseline updates without a second overwrite prompt",
+    report, updated = install.update_installation(tracked, bundled, False)
+    check("a tracked baseline updates without consent to replace unrecorded content",
           updated is not None and updated.baseline.digest == bundled.digest, str(report))
     check("a tracked update does not create a backup",
           not (root / f"{install.BASELINE}.bak").exists())
@@ -466,15 +464,11 @@ with tempfile.TemporaryDirectory() as tmp:
     changed_content = old_content + b"\nlocal note\n"
     (root / install.BASELINE).write_bytes(changed_content)
     changed = install.scan_project(root, {"sha256": first.baseline.digest})
-    report, updated = install.update_installation(
-        changed, bundled, lambda _question, _default: False
-    )
+    report, updated = install.update_installation(changed, bundled, False)
     check("a locally changed baseline is not replaced by default",
           updated is None and (root / install.BASELINE).read_bytes() == changed_content,
           str(report))
-    report, updated = install.update_installation(
-        changed, bundled, lambda _question, _default: True
-    )
+    report, updated = install.update_installation(changed, bundled, True)
     check("an explicitly approved local replacement keeps a backup",
           updated is not None
           and (root / f"{install.BASELINE}.bak").read_bytes() == changed_content,
@@ -732,8 +726,8 @@ with tempfile.TemporaryDirectory() as tmp:
         current_root=project,
     )
     legend = [line for line in output if line.startswith("  ✓ up to date")]
-    check("a mixed table explains only the symbols it uses",
-          legend == ["  ✓ up to date  ↻ update available"], str(output[:12]))
+    check("a mixed table prints no legend line that reads like a row",
+          legend == [], str(output[:12]))
 
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
@@ -1021,7 +1015,7 @@ with tempfile.TemporaryDirectory() as tmp:
         bundled.baseline_id.encode(), b"aiscb-0.0.1", 1
     )
     (target / install.BASELINE).write_bytes(old_content)
-    answers = iter(["", "y", "2", "2", "n"])
+    answers = iter(["y", "2", "2", "n"])
     output = []
     result = install.interactive_setup(
         home=home,
@@ -1731,6 +1725,58 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a copied Claude baseline is reported as an unmanaged file",
           len(found) == 1 and found[0].tools == ("claude",), str(found))
 
+# --- one update prompt per installation ------------------------------------
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    install.install(["codex"], root, None, content=old_content)
+    unrecorded = install.scan_project(root, {})
+    prompts: list[str] = []
+    lines: list[str] = []
+    changed = install._review_updates(
+        [unrecorded], bundled, {}, set(),
+        lambda prompt: prompts.append(prompt) or "", lines.append,
+    )
+    check("an unrecorded baseline gets one update prompt that names the backup",
+          len(prompts) == 1 and "backed up first" in prompts[0], str(prompts))
+    check("that prompt defaults to keeping the file",
+          prompts[0].endswith("[y/N] ") and not changed
+          and (root / install.BASELINE).read_bytes() == old_content
+          and any("kept" in line for line in lines), str(prompts) + str(lines))
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    install.install(["codex"], root, None, content=old_content)
+    unrecorded = install.scan_project(root, {})
+    prompts = []
+    lines = []
+    changed = install._review_updates(
+        [unrecorded], bundled, {}, set(),
+        lambda prompt: prompts.append(prompt) or "y", lines.append,
+    )
+    check("one yes replaces the unrecorded baseline and keeps a backup",
+          len(prompts) == 1 and changed
+          and (root / install.BASELINE).read_bytes() == bundled.content
+          and (root / f"{install.BASELINE}.bak").read_bytes() == old_content,
+          str(prompts) + str(lines))
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    install.install(["codex"], root, None, content=old_content)
+    first = install.scan_project(root, {})
+    recorded = install.scan_project(root, {"sha256": first.baseline.digest})
+    prompts = []
+    install._review_updates(
+        [recorded], bundled, {}, set(),
+        lambda prompt: prompts.append(prompt) or "", lambda _line: None,
+    )
+    check("a recorded baseline gets one prompt that defaults to updating",
+          len(prompts) == 1 and "backed up" not in prompts[0]
+          and prompts[0].endswith("[Y/n] ")
+          and (root / install.BASELINE).read_bytes() == bundled.content
+          and not (root / f"{install.BASELINE}.bak").exists(),
+          str(prompts))
+
 # --- update refusals -------------------------------------------------------
 
 customized = install.parse_baseline(
@@ -1740,18 +1786,14 @@ customized = install.parse_baseline(
 custom_installation = install.Installation(
     "project", Path("/nonexistent"), Path("/nonexistent/x.md"), customized, ("codex",)
 )
-report, updated = install.update_installation(
-    custom_installation, bundled, lambda _q, _d: True
-)
+report, updated = install.update_installation(custom_installation, bundled, True)
 check("a customized baseline is never replaced",
       updated is None and any("customized" in line for line in report), str(report))
 
 unmanaged_installation = install.Installation(
     "unmanaged", Path("/nonexistent"), Path("/nonexistent/x.md"), bundled, ("codex",)
 )
-report, updated = install.update_installation(
-    unmanaged_installation, bundled, lambda _q, _d: True
-)
+report, updated = install.update_installation(unmanaged_installation, bundled, True)
 check("an unmanaged file is not updated in place",
       updated is None and any("not managed" in line for line in report), str(report))
 
@@ -1760,7 +1802,7 @@ with tempfile.TemporaryDirectory() as tmp:
     install.install(["codex"], root, None, content=old_content)
     found = install.scan_project(root, {})
     (root / install.BASELINE).write_bytes(bundled.content)
-    report, updated = install.update_installation(found, bundled, lambda _q, _d: True)
+    report, updated = install.update_installation(found, bundled, True)
     check("a source that changed since discovery is not overwritten",
           updated is None
           and any("changed since discovery" in line for line in report), str(report))
