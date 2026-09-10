@@ -1400,7 +1400,7 @@ bundle_hashes = {
     ).hexdigest(),
 }
 check("the remote bootstrap pins and hashes one coherent bundle",
-      "bundle_ref=\"aiscb-bundle-0.1.14-3\"" in setup_content
+      "bundle_ref=\"aiscb-bundle-0.1.14-4\"" in setup_content
       and "/branches/main" not in setup_content
       and all(digest in setup_content for digest in bundle_hashes.values())
       and "--interactive --offline" in setup_content
@@ -1457,7 +1457,7 @@ with tempfile.TemporaryDirectory() as tmp:
     mock_curl.chmod(0o755)
     environment = os.environ.copy()
     environment["PATH"] = f"{mock_bin}{os.pathsep}{environment['PATH']}"
-    environment["aiscb_test_ref"] = "aiscb-bundle-0.1.14-3"
+    environment["aiscb_test_ref"] = "aiscb-bundle-0.1.14-4"
     environment["aiscb_test_repo"] = str(install.REPO)
     remote = subprocess.run(
         ["sh", str(remote_setup), "--help"],
