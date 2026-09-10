@@ -24,8 +24,8 @@ Use the guided installer to install or update aiscb. The complete command verifi
 curl --proto '=https' \
   --fail --silent --show-error \
   --output aiscb-setup.sh \
-  https://raw.githubusercontent.com/appsec-foundry/aiscb/aad93563e6a1e5c834da1633a893903e93a67400/setup.sh &&
-echo 'f8173ff3a051c70d204681d89d6471aaba4fd630d740ff02a76e8687e568bc0f  aiscb-setup.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/aiscb/cef57e08d79f1022a88c979fb29bc9232c42ac5f/setup.sh &&
+echo '446d7c041cea751cb9dde60323ad59f0f4e99991581d6980c90676bb2b821456  aiscb-setup.sh' |
   sha256sum --check &&
 bash aiscb-setup.sh
 ```
@@ -153,8 +153,6 @@ AISCB_DISABLE=1 codex
 ```
 
 Start normally to restore the baseline. Other instructions and permissions remain active. The switch affects only installations where you enabled it; enable both personal and project installations if both exist. It does not disable separate overlays or organization packages. Start a new conversation, then check with `baseline?`. See [scope and troubleshooting](docs/session-switch.md).
-
-This switch is available from a checkout, but not yet from the published Quick start.
 
 ### Claude Code
 
