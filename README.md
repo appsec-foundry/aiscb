@@ -164,7 +164,7 @@ To run one session without a user-level baseline, start Claude Code without its 
 claude --setting-sources project,local
 ```
 
-This skips everything under `~/.claude`, including `settings.json` with its hooks and permissions, for that session only. A baseline installed in the project still loads.
+This skips everything under `~/.claude`, including `settings.json` with its hooks and permissions, for that session only. A baseline installed in the project still loads. Start it inside a project directory: in the home directory itself, `~/.claude` also counts as the project's configuration and loads anyway.
 
 ### GitHub Copilot
 
