@@ -158,13 +158,13 @@ Claude Code does **not** load `AGENTS.md` automatically. Use one of its own inst
 
 - **Organization:** deploy it as a managed-policy `CLAUDE.md`. See the [organization setup](https://code.claude.com/docs/en/admin-setup).
 
-To run one session without a user-level baseline, start Claude Code without its user settings:
+To run one session without a user-level baseline, start Claude Code without its user settings, from a working directory outside your home directory:
 
 ```bash
 claude --setting-sources project,local
 ```
 
-This skips everything under `~/.claude`, including `settings.json` with its hooks and permissions, for that session only. A baseline installed in the project still loads. Start it inside a project directory: in the home directory itself, `~/.claude` also counts as the project's configuration and loads anyway.
+This skips `~/.claude` as user configuration, including `settings.json` with its hooks and permissions, for that session only. A baseline installed in the project still loads. Below your home directory the switch has no effect: Claude Code also reads `CLAUDE.md` files from parent directories, and there `~/.claude/CLAUDE.md` is one of them.
 
 ### GitHub Copilot
 
