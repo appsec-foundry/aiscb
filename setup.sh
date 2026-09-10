@@ -28,9 +28,9 @@ command -v sha256sum >/dev/null 2>&1 || {
 
 # This tag is never moved or reused. The hashes keep a moved or corrupted tag
 # from changing what this reviewed bootstrap executes.
-bundle_ref="aiscb-bundle-0.1.14-7"
+bundle_ref="aiscb-bundle-0.1.14-8"
 baseline_sha="a6fc88833aaae7f9e5e1ff9ebe4ba152e56660e743c75094b56b8b25968bfeb2"
-installer_sha="d447e9ca97fb1c9e70d79cddd2c6fad7d88d8c110c4b052236f0cb18d1cef173"
+installer_sha="7b893732470c5ba2c863947b0c026cc74dfe3b015704d6de771557079a21db25"
 helper_sha="b2fa3d5d1d9d891117ca9b035db243129d24b6eb0c2c54c3568eef623f83bdea"
 
 setup_tmp=$(mktemp -d "${TMPDIR:-/tmp}/aiscb-setup.XXXXXX")
