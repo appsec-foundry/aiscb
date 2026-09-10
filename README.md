@@ -129,11 +129,36 @@ make help                              # list available commands
 
 The installer keeps existing instruction files, and uninstall removes only what the installer placed. Replacing a locally edited managed baseline requires confirmation and creates a backup.
 
-Optional session-start hooks show the active `baseline-id` and load the managed baseline; setup lets you skip them. Codex runs a new or changed hook only after you trust it with `/hooks` and warns at startup until then.
+Optional session-start hooks show the active `baseline-id`; setup lets you skip them. Codex runs a new or changed hook only after you trust it with `/hooks` and warns at startup until then.
 
 Release checks are off by default. If you enable them, a background process contacts `api.github.com` at most once a day; `ARGS=--offline` skips the check during setup and status.
 
 From a checkout, the installer installs the latest published release when it can reach it and otherwise the checkout copy.
+
+### Temporarily disable the baseline
+
+Enable the session switch once, from this checkout:
+
+```bash
+# Personal installation:
+python3 scripts/install.py --session-switch --user
+
+# Or a project installation:
+python3 scripts/install.py --session-switch --into /path/to/project
+```
+
+Then start a **new session** without the baseline:
+
+```bash
+AISCB_DISABLE=1 claude
+AISCB_DISABLE=1 codex
+```
+
+Start normally to use the baseline again. Other instructions and permissions stay in place. In Codex, approve the new hooks with `/hooks` after setup. Check the session with `baseline?`; resuming an old conversation keeps its previous context.
+
+The switch affects only installations set up this way. If you have both a personal and a project installation, enable it for both. Derived baselines work too; separately loaded overlays and organization packages are not switched off. See [scope and troubleshooting](docs/session-switch.md).
+
+Available from this checkout; not yet included in the published Quick start.
 
 ### Claude Code
 

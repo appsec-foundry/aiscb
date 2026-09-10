@@ -15,6 +15,7 @@ CHECK_TESTS = tests/selfcheck.py \
               examples/organization-bundle/test_bundle.py \
               scripts/test_spec_guard.py \
               scripts/test_show_baseline_version.py \
+              scripts/test_session_switch.py \
               scripts/test_install.py
 
 ## check       validate the suite itself: no model calls, seconds

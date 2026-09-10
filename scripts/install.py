@@ -27,6 +27,8 @@ BASELINE = "secure-coding-baseline.md"
 VERSION_HOOK_DIR = ".aiscb"
 VERSION_HOOK_NAME = "show-baseline-version.py"
 INSTALLER_NAME = "install.py"
+SESSION_LOADER_NAME = "session-loader.md"
+SESSION_PARTS = 4
 PREVIOUS_DATA_DIR_NAME = "ai-secure-coding-baseline"
 INSTALLER_SOURCE = Path(__file__).resolve()
 # A checkout and the remote bundle keep this file in scripts/, with the baseline
@@ -51,6 +53,7 @@ KNOWN_HOOK_DIGESTS = (
     "768746c35676ebf701e7c43fce26ff000dd1f4754e7e060f6f280510e1cd0033",
     "f0475757fec0495b0558f0988751338169d1047e7ddbc27d59678d9c0f1ff91e",
     "7f957e239e7397587781c1498b85db20dad608c5ba1caebfa1d8696673370a9e",
+    "fc6fe42137868f7024df6cf340fa375380150ed5aa12eda2b3bee2cfae93eaa7",
 )
 COPILOT_VERSION_HOOK_NAME = "aiscb-baseline-version.json"
 PREVIOUS_COPILOT_VERSION_HOOK_NAME = "aisec-baseline-version.json"
@@ -497,6 +500,9 @@ def install_link(
 ) -> None:
     link = link_text(target, source, relative=relative)
     if target.is_symlink():
+        if _session_link(target, source):
+            report.append(f"in place {target} (session switch)")
+            return
         if Path(os.readlink(target)) == Path(link):
             report.append(f"in place {target}")
             return
@@ -717,6 +723,10 @@ def _without_helper_path(value: object) -> object:
 
 def _is_moved_version_hook(existing: object, entry: dict[str, object]) -> bool:
     """An entry this installer wrote for a helper that has since moved."""
+    # Session hooks carry part numbers and a validation command. Comparing only
+    # their shape would discard those arguments and accept customized commands.
+    if "--session-context" in json.dumps(entry) or "--session-check" in json.dumps(entry):
+        return existing == entry
     return (
         VERSION_HOOK_NAME in json.dumps(existing, ensure_ascii=False)
         and _without_helper_path(existing) == _without_helper_path(entry)
@@ -770,6 +780,216 @@ def _install_merged_version_hook(
 
 def _powershell_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
+
+
+def _session_loader(source: Path, helper: Path) -> bytes:
+    project = helper.parent != source.parent
+    location = BASELINE if project else str(source)
+    script = f"{VERSION_HOOK_DIR}/{VERSION_HOOK_NAME}" if project else str(helper)
+    command = f"python3 {shlex.quote(script)} --session-context --part"
+    return (
+        "# AI Secure Coding Baseline session loader\n\n"
+        "This installation uses a conditional loader. Before working, check for "
+        f"all {SESSION_PARTS} `aiscb-session-part` markers or an "
+        "`aiscb-session-disabled` marker for this installation in your context. "
+        f"Its baseline source is `{location}` (relative to the project root "
+        "for a project installation). Apply the supplied baseline parts when active.\n\n"
+        "If the markers are missing, the startup hook did not load. Run each of "
+        f"the following commands from the project root, for parts 0 through {SESSION_PARTS - 1}:\n\n"
+        f"```sh\n{command} 0\n{command} 1\n{command} 2\n{command} 3\n```\n\n"
+        "Use `py -3` instead of `python3` on Windows. Follow the returned "
+        "`additionalContext`; if any result has `continue: false`, a command "
+        "fails, or the output is incomplete, stop and report the loader failure. "
+        "Do not assume the baseline is disabled. A disabled result applies only "
+        "to this installation; keep all other instructions. Never alter "
+        "AISCB_DISABLE yourself to bypass the loader.\n"
+    ).encode()
+
+
+def _session_link(target: Path, source: Path) -> bool:
+    if not target.is_symlink():
+        return False
+    for directory in (source.parent, source.parent / VERSION_HOOK_DIR):
+        loader = directory / SESSION_LOADER_NAME
+        if target.resolve(strict=False) != loader.resolve(strict=False):
+            continue
+        if loader.is_symlink() or not loader.is_file():
+            return False
+        try:
+            return read_limited(loader, MAX_INSTRUCTION_BYTES) == _session_loader(
+                source, directory / VERSION_HOOK_NAME
+            )
+        except (OSError, ValueError):
+            return False
+    return False
+
+
+def _instruction_source(target: Path) -> Path:
+    resolved = target.resolve(strict=False)
+    if resolved.name == SESSION_LOADER_NAME:
+        directory = resolved.parent
+        if directory.name == VERSION_HOOK_DIR:
+            directory = directory.parent
+        source = directory / BASELINE
+        if _session_link(target, source):
+            return source
+    return resolved
+
+
+def _session_hook(tool: str, helper: Path, project: bool) -> dict[str, object]:
+    if project:
+        script = f"{VERSION_HOOK_DIR}/{VERSION_HOOK_NAME}"
+        command = (
+            f'python3 "${{CLAUDE_PROJECT_DIR}}/{script}"' if tool == "claude"
+            else f'python3 "$(git rev-parse --show-toplevel)/{script}"'
+        )
+        windows = f'py -3 "$(git rev-parse --show-toplevel)/{script}"'
+    else:
+        command = f"python3 {shlex.quote(str(helper))}"
+        windows = f"py -3 {_powershell_quote(str(helper))}"
+    handlers = []
+    for part in range(SESSION_PARTS):
+        suffix = f" --session-context --part {part}"
+        handler = {"type": "command", "command": command + suffix, "timeout": 5}
+        if tool == "codex":
+            handler.update(commandWindows=windows + suffix, additionalContextLimit=6000)
+        handlers.append(handler)
+    return {"matcher": "startup|resume|fork|clear|compact", "hooks": handlers}
+
+
+def _session_hook_path(tool: str, root: Path, home: Path | None) -> Path:
+    directory = (home or root) / f".{tool}"
+    return directory / ("settings.json" if tool == "claude" else "hooks.json")
+
+
+def _session_check_hook(tool: str, helper: Path, project: bool) -> dict[str, object]:
+    handler = dict(_session_hook(tool, helper, project)["hooks"][0])
+    for key in ("command", "commandWindows"):
+        if key in handler:
+            handler[key] = handler[key].replace("--session-context --part 0", "--session-check")
+    handler.pop("additionalContextLimit", None)
+    return {"hooks": [handler]}
+
+
+def _check_session_parents(path: Path, scope: Path) -> None:
+    """A repository link must not redirect setup into another tool's settings."""
+    for parent in path.parents:
+        if parent == scope:
+            return
+        if parent.is_symlink():
+            raise ValueError("a session installation directory is a symlink")
+    raise ValueError("session installation path is outside the selected scope")
+
+
+def install_session_switch(tools: list[str], root: Path, home: Path | None) -> list[str]:
+    """Opt in explicitly; migrate only exact managed links and import lines.
+
+    Prepare hooks before redirecting instructions. A failed preparation leaves
+    static instructions active. No files are changed when a session starts.
+    """
+    if not tools or any(tool not in {"claude", "codex"} for tool in tools):
+        return ["blocked session switch: choose claude and/or codex"]
+    report: list[str] = []
+    source = user_source(home) if home is not None else root / BASELINE
+    targets = user_targets(home) if home is not None else project_targets(root)
+    helper = version_hook_path(root, home)
+    loader = helper.parent / SESSION_LOADER_NAME
+    loader_content = _session_loader(source, helper)
+    plans = []
+    try:
+        if any(ord(char) < 32 or char == "`" for char in str(source) + str(helper)):
+            raise ValueError("path cannot be represented in loader instructions")
+        for path in (source, helper, loader):
+            _check_session_parents(path, home or root)
+        if source.exists():
+            if source.is_symlink():
+                raise ValueError("baseline source is a symlink")
+            baseline = read_baseline(source)
+        else:
+            baseline = bundled_baseline()
+        if len(baseline.content.decode("utf-8")) > SESSION_PARTS * 7000:
+            raise ValueError("baseline exceeds session context capacity")
+        if loader.is_symlink() or (loader.exists() and read_limited(loader, MAX_INSTRUCTION_BYTES) != loader_content):
+            raise ValueError("loader contains different content")
+        for tool in tools:
+            target = targets[tool][0][1]
+            for _, path in targets[tool]:
+                _check_session_parents(path, home or root)
+            if target.exists() or target.is_symlink():
+                if not _link_points_to(target, source) and not _session_link(target, source):
+                    raise ValueError("an instruction file is not an exact managed link")
+            path = _session_hook_path(tool, root, home)
+            _check_session_parents(path, home or root)
+            config, existed = _read_hook_config(path)
+            if config.get("disableAllHooks") is True:
+                raise ValueError("hooks are disabled in the selected settings")
+            hooks = config.setdefault("hooks", {})
+            if not isinstance(hooks, dict):
+                raise ValueError("invalid hooks configuration")
+            entries = hooks.setdefault("SessionStart", [])
+            if not isinstance(entries, list):
+                raise ValueError("invalid SessionStart hooks")
+            legacy = (_claude_version_hook if tool == "claude" else _codex_version_hook)(helper, home is None)
+            entry = _session_hook(tool, helper, home is None)
+            kept = []
+            for item in entries:
+                if _is_moved_version_hook(item, legacy) or item == entry:
+                    continue
+                if VERSION_HOOK_NAME in json.dumps(item):
+                    raise ValueError("a baseline hook was customized")
+                kept.append(item)
+            hooks["SessionStart"] = kept + [entry]
+            checks = hooks.setdefault("UserPromptSubmit", [])
+            check_entry = _session_check_hook(tool, helper, home is None)
+            if not isinstance(checks, list):
+                raise ValueError("invalid UserPromptSubmit hooks")
+            if any(VERSION_HOOK_NAME in json.dumps(item) and not _is_moved_version_hook(item, check_entry)
+                   for item in checks):
+                raise ValueError("a baseline check hook was customized")
+            hooks["UserPromptSubmit"] = [item for item in checks if not _is_moved_version_hook(item, check_entry)] + [check_entry]
+            import_plan = None
+            if home is not None and tool == "claude":
+                imported = targets[tool][1][1]
+                if imported.is_symlink():
+                    raise ValueError("CLAUDE.md is a symlink")
+                before = read_limited(imported, MAX_INSTRUCTION_BYTES).decode("utf-8") if imported.exists() else ""
+                # Keep every unrelated byte, including line endings and comments.
+                old, new = f"@{source}", f"@{target}"
+                lines = before.splitlines(keepends=True)
+                after = "".join(new + line[len(old):] if line.rstrip("\r\n") == old else line for line in lines)
+                if new not in after.splitlines():
+                    after += ("\n" if after and not after.endswith("\n") else "") + new + "\n"
+                import_plan = imported, after.encode()
+            plans.append((target, path, config, existed, import_plan))
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        return [
+            f"blocked session switch: {error}; "
+            "the static installation is unchanged"
+        ]
+    if place_baseline(source.parent, report, baseline.content, create_root=True) is None:
+        return report
+    if home is not None and _place_installer(home, report) is None:
+        return report
+    if _place_version_hook(root, home, report) is None:
+        return report
+    try:
+        if not loader.exists():
+            _write_new(loader, loader_content)
+        for target, path, config, existed, import_plan in plans:
+            _write_hook_config(path, config, existed)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # os.replace changes the link atomically, never the baseline it points to.
+            _atomic_symlink(target, Path(link_text(target, loader, relative=home is None)))
+            if import_plan:
+                imported, content = import_plan
+                if imported.exists():
+                    _atomic_replace(imported, content)
+                else:
+                    _write_new(imported, content)
+            report.append(f"enabled session switch for {target}; AISCB_DISABLE=1 applies to new sessions")
+    except OSError:
+        report.append("blocked session switch: could not finish writing; rerun setup before starting a session")
+    return report
 
 
 def _claude_version_hook(helper: Path, project: bool) -> dict[str, object]:
@@ -900,7 +1120,19 @@ def install_version_hooks(
     if helper is None:
         return report
     project = home is None
+    source = user_source(home) if home is not None else root / BASELINE
+    targets = user_targets(home) if home is not None else project_targets(root)
     for tool in tools:
+        if tool in {"claude", "codex"} and _session_link(targets[tool][0][1], source):
+            _install_merged_version_hook(
+                _session_hook_path(tool, root, home), "SessionStart",
+                _session_hook(tool, helper, project), report,
+            )
+            _install_merged_version_hook(
+                _session_hook_path(tool, root, home), "UserPromptSubmit",
+                _session_check_hook(tool, helper, project), report,
+            )
+            continue
         if tool == "claude":
             settings = (root / ".claude" / "settings.json") if project else (
                 home / ".claude" / "settings.json"
@@ -952,6 +1184,20 @@ def _version_hook_is_installed(tool: str, root: Path, home: Path | None) -> bool
 
     project = home is None
     try:
+        source = user_source(home) if home is not None else root / BASELINE
+        targets = user_targets(home) if home is not None else project_targets(root)
+        if tool in {"claude", "codex"} and _session_link(targets[tool][0][1], source):
+            config, _ = _read_hook_config(_session_hook_path(tool, root, home))
+            hooks = config.get("hooks")
+            if not isinstance(hooks, dict):
+                return False
+            starts = hooks.get("SessionStart")
+            checks = hooks.get("UserPromptSubmit")
+            return (
+                isinstance(starts, list) and isinstance(checks, list)
+                and _session_hook(tool, helper, project) in starts
+                and _session_check_hook(tool, helper, project) in checks
+            )
         if tool == "claude":
             path = (root / ".claude" / "settings.json") if project else (
                 home / ".claude" / "settings.json"
@@ -1386,9 +1632,12 @@ def installed_tools(
         matches = []
         for kind, target in actions:
             if kind == "link":
-                matches.append(_link_points_to(target, source))
+                matches.append(_link_points_to(target, source) or _session_link(target, source))
             else:
-                matches.append(_import_contains(target, source))
+                matches.append(_import_contains(target, source) or any(
+                    _session_link(link, source) and _import_contains(target, link)
+                    for action, link in actions if action == "link"
+                ))
         if all(matches):
             found.append(tool)
     return tuple(found)
@@ -1435,7 +1684,7 @@ def scan_user(home: Path, user_entry: object = None) -> list[Installation]:
 
     claude_link = targets["claude"][0][1]
     if claude_link.is_symlink():
-        source = claude_link.resolve(strict=False)
+        source = _instruction_source(claude_link)
         if _import_contains(
             targets["claude"][1][1], source
         ) or _import_contains(targets["claude"][1][1], claude_link):
@@ -1444,7 +1693,7 @@ def scan_user(home: Path, user_entry: object = None) -> list[Installation]:
     for tool in ("codex", "copilot"):
         link = targets[tool][0][1]
         if link.is_symlink():
-            source = link.resolve(strict=False)
+            source = _instruction_source(link)
             sources.setdefault(source, set()).add(tool)
 
     managed_path = user_source(home)
@@ -1680,6 +1929,15 @@ def _remove_version_hooks(root: Path, home: Path | None, report: list[str]) -> N
                     _copilot_version_config(helper, project),
                     report,
                 )
+    for tool in ("claude", "codex"):
+        _remove_merged_version_hook(
+            _session_hook_path(tool, root, home), "SessionStart",
+            _session_hook(tool, helper, home is None), report,
+        )
+        _remove_merged_version_hook(
+            _session_hook_path(tool, root, home), "UserPromptSubmit",
+            _session_check_hook(tool, helper, home is None), report,
+        )
     if helper.is_symlink() or not helper.is_file():
         return
     try:
@@ -1718,14 +1976,23 @@ def remove_installation(installation: Installation, report: list[str]) -> bool:
     root = installation.root
     home = None if project else installation.root
     targets = project_targets(root) if project else user_targets(root)
+    session_claude = _session_link(targets["claude"][0][1], installation.source)
     for actions in targets.values():
         for kind, target in actions:
             if kind == "link":
-                if _link_points_to(target, installation.source):
+                if _link_points_to(target, installation.source) or _session_link(target, installation.source):
                     target.unlink()
                     report.append(f"removed {target}")
             else:
                 _remove_import_line(target, installation.source, report)
+    if not project and session_claude:
+        _remove_import_line(targets["claude"][1][1], targets["claude"][0][1], report)
+    helper = version_hook_path(root, home)
+    loader = helper.parent / SESSION_LOADER_NAME
+    if loader.is_file() and not loader.is_symlink():
+        if read_limited(loader, MAX_INSTRUCTION_BYTES) == _session_loader(installation.source, helper):
+            loader.unlink()
+            report.append(f"removed {loader}")
     _remove_version_hooks(root, home, report)
     if _managed_source(installation):
         installation.source.unlink()
@@ -2861,7 +3128,15 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="fetch the signed release bundle, verify it, and run its guided setup",
     )
+    parser.add_argument(
+        "--session-switch", action="store_true",
+        help="opt in to AISCB_DISABLE=1 for new Claude/Codex sessions; migrate managed links only",
+    )
     args = parser.parse_args(argv)
+
+    if args.session_switch and (args.interactive or args.status or args.offline
+                               or args.uninstall or args.refresh_update_cache or args.update):
+        parser.error("--session-switch takes only claude/codex, --user or --into")
 
     if args.uninstall:
         if args.tools or args.status or args.interactive or args.offline or args.update:
@@ -2926,17 +3201,23 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.offline:
         parser.error("--offline is only valid with --interactive or --status")
-    tools = list(args.tools) or list(TOOLS)
+    tools = list(args.tools) or (["claude", "codex"] if args.session_switch else list(TOOLS))
     unknown = [tool for tool in tools if tool not in TOOLS]
     if unknown:
         parser.error(f"unknown tool {unknown[0]!r}; choose from {', '.join(TOOLS)}")
+    if args.session_switch and "copilot" in tools:
+        parser.error("--session-switch supports claude and codex only")
 
     root = args.into.resolve()
     if not args.user and (root == Path(root.anchor) or not root.is_dir()):
         parser.error("--into must be an existing non-root directory")
     home = Path.home() if args.user else None
-    for line in install(tools, root, home):
+    action = install_session_switch if args.session_switch else install
+    report = action(tools, root, home)
+    for line in report:
         print(line)
+    if args.session_switch and any(line.startswith("blocked") for line in report):
+        return 1
 
     state_path = registry_path(Path.home())
     registry, writable, note = load_registry_with_previous(Path.home(), state_path)

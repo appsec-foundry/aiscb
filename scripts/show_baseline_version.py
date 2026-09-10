@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -17,6 +18,8 @@ USER_DATA = Path(".local") / "share" / "aiscb"
 MAX_BASELINE_BYTES = 256 * 1024
 MAX_REGISTRY_BYTES = 128 * 1024
 CHECK_INTERVAL = 24 * 60 * 60
+SESSION_PARTS = 4
+SESSION_PART_CHARS = 7000
 SEMVER_TEXT = (
     r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
     r"(?:-(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
@@ -48,6 +51,53 @@ def baseline_id(path: Path) -> str:
     if len(matches) != 1:
         raise ValueError("installed baseline has no unique baseline ID")
     return matches[0].group("id")
+
+
+def session_context(part: int) -> dict:
+    """Load only this installation, with an explicit process-local opt-out.
+
+    Four bounded outputs keep the complete baseline below Claude's per-hook
+    character limit and Codex's configured context limit. No state is written.
+    A bad value or unreadable baseline stops the session instead of disabling it.
+    """
+    disabled = os.environ.get("AISCB_DISABLE", "0")
+    if disabled not in {"0", "1"}:
+        return {"continue": False, "stopReason": "AISCB_DISABLE must be 0 or 1."}
+    try:
+        path = baseline_path()
+        identifier = baseline_id(path)
+        with path.open("rb") as handle:
+            raw = handle.read(MAX_BASELINE_BYTES + 1)
+        if len(raw) > MAX_BASELINE_BYTES:
+            raise ValueError("baseline too large")
+        content = raw.decode("utf-8")
+        if len(content) > SESSION_PARTS * SESSION_PART_CHARS:
+            raise ValueError("baseline exceeds session context capacity")
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {"continue": False, "stopReason": "Could not load the AI Secure Coding Baseline; repair this installation."}
+    scope = str(path)
+    if disabled == "1":
+        message = f"AI Secure Coding Baseline disabled for this installation: {scope} (AISCB_DISABLE=1)."
+        context = (
+            f"aiscb-session-disabled: {scope}\n"
+            "This installation supplies no baseline rules for this session. "
+            "Other instruction sources still apply. Do not load this installation's "
+            "baseline unless the user explicitly requests it. A baseline already "
+            "in conversation history remains there; use a fresh session to exclude it."
+        )
+    else:
+        message = f"AI Secure Coding Baseline active: {identifier}"
+        context = (
+            f"aiscb-session-part: {part + 1}/{SESSION_PARTS}; source: {scope}\n"
+            "Apply the baseline supplied by these parts.\n\n"
+            + content[part * SESSION_PART_CHARS:(part + 1) * SESSION_PART_CHARS]
+        )
+    if len(context) >= 9500:
+        return {"continue": False, "stopReason": "Baseline context exceeds the hook output limit."}
+    result = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": context}}
+    if part == 0:
+        result["systemMessage"] = message
+    return result
 
 
 def release_order(identifier: str) -> tuple[str, tuple[int, ...]] | None:
@@ -120,12 +170,46 @@ def update_note(installed: str, helper_dir: Path, home: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--session-context", action="store_true",
+        help="load the baseline for a switchable installation (AISCB_DISABLE=1 opts out)",
+    )
+    parser.add_argument("--session-check", action="store_true",
+                        help="block a prompt when the session loader cannot supply valid context")
+    parser.add_argument("--part", type=int, choices=range(SESSION_PARTS))
+    parser.add_argument(
         "--output",
         choices=("message", "json"),
         default="message",
         help="plain startup banner or hook JSON with a visible system message",
     )
     args = parser.parse_args(argv)
+    if args.session_check:
+        if args.session_context or args.part is not None:
+            parser.error("--session-check takes no context or part option")
+        result = session_context(0)
+        if result.get("continue") is False:
+            print(json.dumps({"decision": "block", "reason": result["stopReason"],
+                              "continue": False, "stopReason": result["stopReason"]}))
+        else:
+            print("{}")
+        return 0
+    if args.session_context:
+        if args.part is None:
+            parser.error("--session-context requires --part")
+        result = session_context(args.part)
+        if args.part == 0 and "systemMessage" in result:
+            try:
+                note = update_note(
+                    baseline_id(baseline_path()), Path(__file__).resolve().parent, Path.home()
+                )
+            except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
+                note = ""
+            if note:
+                result["systemMessage"] += f"\n{note}"
+        print(json.dumps(result))
+        return 0
+    if args.part is not None:
+        parser.error("--part requires --session-context")
     try:
         installed = baseline_id(baseline_path())
     except (OSError, UnicodeDecodeError, ValueError):
