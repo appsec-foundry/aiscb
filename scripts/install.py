@@ -91,6 +91,9 @@ MAX_HOOK_CONFIG_BYTES = 128 * 1024
 MAX_PROJECTS = 200
 REGISTRY_SCHEMA = 1
 UPDATE_CHECK_KEY = "update_check"
+# The session notice checks for a release at most daily; the status names the
+# day of a recorded check only once it is older than this.
+RECENT_CHECK = 2 * 24 * 60 * 60
 QUICK_START_URL = f"https://github.com/{GITHUB_REPOSITORY}#quick-start"
 
 # A signed manifest lets an installed copy verify a later bundle without the
@@ -2523,8 +2526,12 @@ def _scope_names(installations: list[Installation]) -> str:
     return _join_words([_scope_name(item) for item in installations])
 
 
-def _latest_known(registry: dict[str, object]) -> tuple[str, str] | None:
-    """The release an earlier check recorded, with the day it was checked."""
+def _latest_known(registry: dict[str, object]) -> tuple[str, str | None] | None:
+    """The release an earlier check recorded, and the day of that check once it is old.
+
+    The session notice checks at most daily, so a check from the last two days
+    needs no day.
+    """
     section = registry.get(UPDATE_CHECK_KEY)
     if not isinstance(section, dict):
         return None
@@ -2534,51 +2541,53 @@ def _latest_known(registry: dict[str, object]) -> tuple[str, str] | None:
     if not isinstance(checked, int) or checked < 0:
         return None
     try:
+        if time.time() - checked < RECENT_CHECK:
+            return latest, None
         return latest, time.strftime("%Y-%m-%d", time.gmtime(checked))
     except (OverflowError, OSError, ValueError):
         return None
 
 
-def _version_phrase(
+def _version_state(
     installation: Installation,
     available: Baseline,
     released: Baseline | None,
-    latest_known: tuple[str, str] | None,
-) -> str:
+    latest_known: tuple[str, str | None] | None,
+) -> tuple[str, str]:
     """Say how current an installation is, never more than this run knows.
 
-    Only a release check in this run supports a plain "up to date"; otherwise
-    the phrase names the last recorded check and its day, or that none ran.
-    A file no tool loads gets no up-to-date claim, but keeps a pending update
-    visible because the menu still offers it.
+    Returns the symbol before each tool and the words after the version. A
+    release check in this run, or a recorded one from the last two days,
+    supports a plain "up to date"; an older check adds its day, and without
+    one the words say so. A file no tool loads gets no up-to-date claim, but
+    keeps a pending update visible because the menu still offers it.
     """
-    identifier = installation.baseline.baseline_id
     older = installation.baseline.version < available.version
     if installation.kind == "legacy-user" and not (
         installation.has_update(available) and older
     ):
-        return f"{identifier}, switch to a managed copy so updates reach it"
+        return "•", "switch to a managed copy so updates reach it"
     if not installation.baseline.is_official:
         if installation.baseline.name != OFFICIAL_NAME:
-            return f"{identifier}, setup leaves it unchanged"
-        return f"{identifier}, customized, setup leaves it unchanged"
+            return "•", "setup leaves it unchanged"
+        return "•", "customized, setup leaves it unchanged"
     if installation.kind == "unmanaged":
-        return f"{identifier}, setup leaves it unchanged"
+        return "•", "setup leaves it unchanged"
     if installation.has_update(available):
         if older:
-            phrase = f"{identifier}, update to {available.baseline_id} available"
+            phrase = f"update to {available.baseline_id} available"
         else:
-            phrase = f"{identifier}, differs from {available.baseline_id}"
+            phrase = f"differs from {available.baseline_id}"
         if _lacks_install_record(installation):
             phrase += ", needs confirmation and backup"
-        return phrase
+        return "↻", phrase
     if installation.baseline.version > available.version:
-        return f"{identifier}, newer than {available.baseline_id}"
+        return "•", f"newer than {available.baseline_id}"
     if not installation.tools:
-        return identifier
+        return "", ""
     if released is not None:
-        return f"{identifier}, up to date"
-    unknown = f"{identifier}, newest release not checked"
+        return "✓", "up to date"
+    unknown = ("•", "not checked")
     if latest_known is None:
         return unknown
     latest, checked_on = latest_known
@@ -2591,9 +2600,10 @@ def _version_phrase(
         newer = SemVer.parse(match.group("version")) > installation.baseline.version
     except ValueError:
         return unknown
+    since = f" as of {checked_on}" if checked_on else ""
     if newer:
-        return f"{identifier}, update to {latest} available (checked {checked_on})"
-    return f"{identifier}, up to date as of {checked_on}"
+        return "↻", f"update to {latest} available{since}"
+    return "✓", f"up to date{since}"
 
 
 def _session_notice_tools(installation: Installation) -> list[str]:
@@ -2686,14 +2696,18 @@ def _show_setup_status(
 
     def show(installation: Installation) -> None:
         output(f"\n{_scope_title(installation, home)}")
-        phrase = _version_phrase(installation, available, released, latest_known)
-        output(f"  {phrase}")
+        symbol, state = _version_state(installation, available, released, latest_known)
+        version = installation.baseline.baseline_id
         if not installation.tools:
-            output("  Not loaded by any tool")
+            words = f"{state}, not loaded by any tool" if state else "not loaded by any tool"
+            output(f"  {version} ({words})")
             return
-        output(f"  Loaded by {_join_labels(installation.tools)}")
+        width = max(len(TOOL_LABELS[tool]) for tool in installation.tools)
+        for tool in installation.tools:
+            output(f"  {symbol} {TOOL_LABELS[tool].ljust(width)}  {version} ({state})")
         if installation.kind not in {"user", "project"}:
             return
+        output("")
         dynamic, static = _loading_modes(installation)
         if dynamic and static:
             output(f"  Loading: dynamic for {_join_labels(dynamic)}, static for {_join_labels(static)}")

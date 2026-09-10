@@ -373,9 +373,9 @@ with tempfile.TemporaryDirectory() as tmp:
     check("status check marks current and outdated installations",
           status_result == 0
           and f"\nProject {install.display_path(project.resolve())}" in status_output
-          and f"  {bundled.baseline_id}, newest release not checked" in status_output
+          and f"  • Codex  {bundled.baseline_id} (not checked)" in status_output
           and any(line.startswith(
-              f"  aiscb-0.0.1, update to {bundled.baseline_id} available")
+              f"  ↻ Codex  aiscb-0.0.1 (update to {bundled.baseline_id} available")
               for line in status_output),
           str(status_output))
     check("status check is read-only", not state.exists(), str(state))
@@ -1106,12 +1106,15 @@ with tempfile.TemporaryDirectory() as tmp:
 
 # --- the guided dialog names each change -----------------------------------
 
-CHECKED = 1789000000
+CHECKED_RECENTLY = int(time.time())
+# Older than the two days a plain "up to date" covers.
+CHECKED = CHECKED_RECENTLY - 30 * 24 * 60 * 60
 CHECKED_ON = time.strftime("%Y-%m-%d", time.gmtime(CHECKED))
 
 
 def user_scope(home: Path, tools: list[str], *, notice: bool,
-               update_notice: bool = False, latest: str | None = None) -> Path:
+               update_notice: bool = False, latest: str | None = None,
+               checked: int = CHECKED) -> Path:
     """Install for the user with a registry record; return the registry path."""
     install.install(tools, home, home)
     if notice:
@@ -1121,7 +1124,7 @@ def user_scope(home: Path, tools: list[str], *, notice: bool,
     install.record_installation(registry, user, trusted=True)
     section: dict[str, object] = {"enabled": update_notice}
     if latest is not None:
-        section.update(latest=latest, checked=CHECKED)
+        section.update(latest=latest, checked=checked)
     registry[install.UPDATE_CHECK_KEY] = section
     state = home.parent / "state.json"
     install.save_registry(state, registry)
@@ -1172,27 +1175,29 @@ with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
     home.mkdir()
     state = user_scope(home, ["claude", "codex"], notice=True,
-                       latest=bundled.baseline_id)
+                       latest=bundled.baseline_id, checked=CHECKED_RECENTLY)
     original_origin = install.LOCAL_ORIGIN
     install.LOCAL_ORIGIN = "installed copy"
     try:
         result, output, prompts = guided(home, state, [])
     finally:
         install.LOCAL_ORIGIN = original_origin
-    check("the status names the user scope, its tools, and both notices",
-          "\nYour user account (all projects)" in output
-          and f"  {bundled.baseline_id}, up to date as of {CHECKED_ON}" in output
-          and "  Loaded by Claude Code and Codex" in output
-          and "  Session notice: on" in output
-          and output[output.index("  Session notice: on") + 1]
-              == "  Update notice: off, so you won't hear about new versions"
+    start = output.index("\nYour user account (all projects)")
+    check("the status lists each tool with its version, then the settings",
+          output[start + 1:start + 7] == [
+              f"  ✓ Claude Code  {bundled.baseline_id} (up to date)",
+              f"  ✓ Codex        {bundled.baseline_id} (up to date)",
+              "",
+              "  Loading: static, always active",
+              "  Session notice: on",
+              "  Update notice: off, so you won't hear about new versions",
+          ]
           and "This directory is not a project, so only the user-wide setup applies."
               in output,
           str(output))
     check("an installed copy points to the signed update, not to a fresh check",
           any(line.startswith("Check for a new version: python3 ")
-              and line.endswith(" --update") for line in output)
-          and not any(line.endswith(", up to date") for line in output),
+              and line.endswith(" --update") for line in output),
           str(output))
     check("each menu entry names the one change it makes",
           result == 0
@@ -1217,7 +1222,7 @@ with tempfile.TemporaryDirectory() as tmp:
     state = user_scope(home, ["codex"], notice=False)
     _result, output, _prompts = guided(home, state, [])
     check("without any release check the status says so",
-          f"  {bundled.baseline_id}, newest release not checked" in output
+          f"  • Codex  {bundled.baseline_id} (not checked)" in output
           and f"Online check skipped; this copy has {bundled.baseline_id}" in output
           and "  Session notice: off" in output
           and not any("Update notice" in line for line in output),
@@ -1226,11 +1231,32 @@ with tempfile.TemporaryDirectory() as tmp:
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
     home.mkdir()
+    state = user_scope(home, ["codex"], notice=False, latest=bundled.baseline_id)
+    _result, output, _prompts = guided(home, state, [])
+    check("an older release check names its day",
+          f"  ✓ Codex  {bundled.baseline_id} (up to date as of {CHECKED_ON})"
+          in output
+          and not any(line.endswith("(up to date)") for line in output),
+          str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
     state = user_scope(home, ["codex"], notice=False, latest="aiscb-99.0.0")
     _result, output, _prompts = guided(home, state, [])
-    check("a newer release from an earlier check is named with its date",
-          f"  {bundled.baseline_id}, update to aiscb-99.0.0 available "
-          f"(checked {CHECKED_ON})" in output, str(output))
+    check("a newer release from an older check is named with its day",
+          f"  ↻ Codex  {bundled.baseline_id} (update to aiscb-99.0.0 available "
+          f"as of {CHECKED_ON})" in output, str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    state = user_scope(home, ["codex"], notice=False, latest="aiscb-99.0.0",
+                       checked=CHECKED_RECENTLY)
+    _result, output, _prompts = guided(home, state, [])
+    check("a newer release from a recent check needs no day",
+          f"  ↻ Codex  {bundled.baseline_id} (update to aiscb-99.0.0 available)"
+          in output, str(output))
 
 # --- the guided setup offers the agents it finds ----------------------------
 
@@ -1389,7 +1415,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("an installation stays manageable when no agent is found",
           result == 0
           and output[1] == "No coding agent found on this computer."
-          and "  Loaded by Codex" in output
+          and f"  • Codex  {bundled.baseline_id} (not checked)" in output
           and menu(output) == [
               "  1. load dynamically for Codex...",
               "  2. enable session notice...",
@@ -1412,9 +1438,9 @@ with tempfile.TemporaryDirectory() as tmp:
         _result, output, _prompts = guided(home, state, [], check_online=True)
     finally:
         install.fetch_release_baseline = original_fetch
-    check("only a check in this run supports a plain up to date",
+    check("a check in this run supports a plain up to date",
           f"Newest release: {bundled.baseline_id} (checked online just now)" in output
-          and f"  {bundled.baseline_id}, up to date" in output, str(output))
+          and f"  ✓ Codex  {bundled.baseline_id} (up to date)" in output, str(output))
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
@@ -3114,9 +3140,11 @@ with tempfile.TemporaryDirectory() as tmp:
     user_title = "\nYour user account (all projects)"
     lines = status_rows()
     check("a status block names the tools that load the installation",
-          "  Loaded by Claude Code" in block(lines, user_title), str(lines))
+          f"  • Claude Code  {bundled.baseline_id} (not checked)"
+          in block(lines, user_title), str(lines))
     check("a second user copy shows its path",
-          "  Loaded by Codex" in block(
+          f"  • Codex  {bundled.baseline_id} "
+          "(switch to a managed copy so updates reach it)" in block(
               lines, f"{user_title}, linked to {install.display_path(copy)}"),
           str(lines))
 
@@ -3124,7 +3152,7 @@ with tempfile.TemporaryDirectory() as tmp:
     (home / ".codex" / "AGENTS.md").unlink()
     entries = block(status_rows(), user_title)
     check("an installation no tool loads claims no up-to-date state",
-          entries[:2] == [f"  {bundled.baseline_id}", "  Not loaded by any tool"],
+          entries[:1] == [f"  {bundled.baseline_id} (not loaded by any tool)"],
           str(entries))
 
     install.user_source(home).write_bytes(bundled.content.replace(
@@ -3132,9 +3160,9 @@ with tempfile.TemporaryDirectory() as tmp:
     ))
     entries = block(status_rows(), user_title)
     check("an unused installation still shows the update the menu offers",
-          "  Not loaded by any tool" in entries
-          and any(f"update to {bundled.baseline_id} available" in line
-                  for line in entries),
+          any(line.startswith(
+              f"  aiscb-0.0.1 (update to {bundled.baseline_id} available")
+              and line.endswith(", not loaded by any tool)") for line in entries),
           str(entries))
 
 print(f"\ninstall: {'ok' if not failures else f'{failures} failures'}")
