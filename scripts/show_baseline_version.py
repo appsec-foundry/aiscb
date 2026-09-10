@@ -144,27 +144,42 @@ def refresh_in_background(checked: object, installer: Path) -> None:
 
 
 def update_note(installed: str, helper_dir: Path, home: Path) -> str:
-    """Name the newer release the installer cached and where the update is described.
+    """Describe the cached release check without claiming a check that never ran.
 
-    The note is a pointer, never a command: it lands in an agent's session,
-    and the update runs from a terminal and takes effect in the next session.
+    A newer-release note is a pointer, never a command: it lands in an agent's
+    session, and the update runs from a terminal and takes effect in the next
+    session.
     """
     section = read_update_check(home / REGISTRY)
     if section is None:
-        return ""
+        return "update status not checked"
     installer = installer_path(helper_dir, home)
     if section.get("enabled") is True and installer is not None:
         refresh_in_background(section.get("checked"), installer)
     latest = section.get("latest")
     if not isinstance(latest, str):
-        return ""
+        return "update status not checked"
     published = release_order(latest)
     current = release_order(installed)
     if published is None or current is None:
-        return ""
-    if published[0] != current[0] or published[1] <= current[1]:
-        return ""
-    return f"Update {latest[len(published[0]) + 1:]} available: {UPDATE_GUIDE}"
+        return "update status not checked"
+    checked = section.get("checked")
+    checked_on = (
+        time.strftime("%Y-%m-%d", time.gmtime(checked))
+        if isinstance(checked, int) and not isinstance(checked, bool) and 0 <= checked
+        else None
+    )
+    date = f" (checked {checked_on})" if checked_on else ""
+    if published[0] != current[0]:
+        return "update status not checked"
+    if published[1] > current[1]:
+        return (
+            f"update {latest[len(published[0]) + 1:]} available{date}: "
+            f"{UPDATE_GUIDE}"
+        )
+    if checked_on:
+        return f"up to date (checked {checked_on})"
+    return "update status not checked"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -203,9 +218,9 @@ def main(argv: list[str] | None = None) -> int:
                     baseline_id(baseline_path()), Path(__file__).resolve().parent, Path.home()
                 )
             except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
-                note = ""
+                note = "update status not checked"
             if note:
-                result["systemMessage"] += f"\n{note}"
+                result["systemMessage"] += f" — {note}"
         print(json.dumps(result))
         return 0
     if args.part is not None:
@@ -219,9 +234,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         note = update_note(installed, Path(__file__).resolve().parent, Path.home())
     except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
-        note = ""
+        note = "update status not checked"
     if note:
-        message = f"{message}\n{note}"
+        message = f"{message} — {note}"
 
     if args.output == "json":
         print(json.dumps({"systemMessage": message}))

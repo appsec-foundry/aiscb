@@ -270,12 +270,10 @@ with tempfile.TemporaryDirectory() as tmp:
     check("the shared hook helper reports the installed baseline ID",
           json_banner.returncode == 0
           and "Baseline active:" in json.loads(json_banner.stdout)["systemMessage"]
-          and json.loads(json_banner.stdout)["systemMessage"].endswith(
-              install.bundled_baseline().baseline_id
-          )
-          and plain_banner.stdout.strip().endswith(
-              install.bundled_baseline().baseline_id
-          ), json_banner.stderr or plain_banner.stderr)
+          and install.bundled_baseline().baseline_id
+          in json.loads(json_banner.stdout)["systemMessage"]
+          and install.bundled_baseline().baseline_id in plain_banner.stdout,
+          json_banner.stderr or plain_banner.stderr)
     again = install.install_version_hooks(list(install.TOOLS), root, None)
     check("installing the version hooks twice is idempotent",
           all(line.startswith("in place") for line in again), str(again))

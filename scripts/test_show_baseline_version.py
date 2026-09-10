@@ -175,29 +175,41 @@ def registry_layout(section: object) -> dict[str, object]:
 
 
 def check_update_note(failures: list[str]) -> None:
-    """Only a genuinely newer release of this baseline is announced."""
-    silent = [
-        ("the same version", {"latest": VALID_ID}),
-        ("an older release", {"latest": "aiscb-0.1.9"}),
+    """The banner distinguishes current, newer, and unchecked releases."""
+    checked = 1_789_027_200
+    checked_on = time.strftime("%Y-%m-%d", time.gmtime(checked))
+    current = [
+        ("the same version", {"latest": VALID_ID, "checked": checked}),
+        ("an older release", {"latest": "aiscb-0.1.9", "checked": checked}),
+    ]
+    for label, section in current:
+        code, out, _ = call(registry_layout(section))
+        if code != 0 or f"up to date (checked {checked_on})" not in out:
+            failures.append(f"{label}: expected current status, got {out[:160]!r}")
+
+    unchecked = [
+        ("a version without a check time", {"latest": VALID_ID}),
         ("another baseline's name", {"latest": "acme-9.9.9"}),
         ("a value that is not a version", {"latest": "; rm -rf /"}),
         ("a missing version", {"enabled": False}),
         ("a section that is not an object", "aiscb-9.9.9"),
     ]
-    for label, section in silent:
+    for label, section in unchecked:
         code, out, _ = call(registry_layout(section))
-        if code != 0 or "Update" in out:
-            failures.append(f"{label}: expected no note, got {out[:160]!r}")
+        if code != 0 or "update status not checked" not in out:
+            failures.append(f"{label}: expected unchecked status, got {out[:160]!r}")
 
-    code, out, _ = call(registry_layout({"latest": "aiscb-0.2.0"}))
-    if code != 0 or "Update 0.2.0" not in out:
+    code, out, _ = call(registry_layout(
+        {"latest": "aiscb-0.2.0", "checked": checked}
+    ))
+    if code != 0 or f"update 0.2.0 available (checked {checked_on})" not in out:
         failures.append(f"a newer release must be announced: {out[:160]!r}")
     if "https://github.com/appsec-foundry/aiscb#update" not in out:
         failures.append(f"the note must link the update guide: {out[:160]!r}")
     if "python3" in out or "curl" in out:
         failures.append(f"no installer means no command: {out[:160]!r}")
 
-    root = build({**registry_layout({"latest": "aiscb-0.2.0"}),
+    root = build({**registry_layout({"latest": "aiscb-0.2.0", "checked": checked}),
                   "scripts/install.py": "raise SystemExit(0)\n"})
     _code, out, _err = call_in(root)
     if "https://github.com/appsec-foundry/aiscb#update" not in out:
@@ -213,10 +225,8 @@ def check_update_note(failures: list[str]) -> None:
         ("an oversized registry", json.dumps({"schema": 1, "pad": "x" * 200_000})),
     ):
         code, out, _ = call({**ABOVE, REGISTRY_FILE: payload})
-        if code != 0 or "Update" in out:
-            failures.append(
-                f"{label}: expected a plain banner, got {code} {out[:160]!r}"
-            )
+        if code != 0 or "update status not checked" not in out:
+            failures.append(f"{label}: expected unchecked status, got {code} {out[:160]!r}")
 
 
 def check_background_refresh(failures: list[str]) -> None:
