@@ -40,7 +40,7 @@ If the optional startup hook is installed, it reports a newer release and links 
 python3 ~/.local/share/aiscb/install.py --update
 ```
 
-The command verifies the release's signed bundle before anything runs, then starts the guided setup, which also offers the update to registered projects. Details are under [Later updates without a checkout](#later-updates-without-a-checkout). The new baseline takes effect in the next session. If the update is refused, or there is no user-level install, run the current [Quick start](#quick-start).
+The command verifies the release's signed bundle before anything runs, then starts the guided setup, which also offers the update to the project in the current directory and looks nowhere else. Details are under [Later updates without a checkout](#later-updates-without-a-checkout). The new baseline takes effect in the next session. If the update is refused, or there is no user-level install, run the current [Quick start](#quick-start).
 
 ## Why this exists
 
@@ -107,7 +107,7 @@ python3 ~/.local/share/aiscb/install.py --interactive
 
 `--update` looks up the latest release, downloads its bundle manifest and signature, and checks the signature with `ssh-keygen` against the release key the installed copy carries. Only then does it download the baseline, the installer, and the startup hook, compare each file's size and SHA-256 with the manifest, and start the guided setup of the verified bundle. Nothing is written outside a temporary directory before these checks pass. A release that is not newer than the installed baseline changes nothing.
 
-The update is refused when the installed copy cannot verify the release, for example on an installation from before aiscb-0.1.14, which carries no release key yet, or after the release key was rotated. In that case run the current [Quick start](#quick-start) again, or install from a reviewed clone with `make setup ARGS=--offline`.
+An installer from before aiscb-0.1.14 does not know `--update`; from that version on, the update is refused when the installed copy cannot verify the release, for example after the release key was rotated. In that case run the current [Quick start](#quick-start) again, or install from a reviewed clone with `make setup ARGS=--offline`.
 
 ### From a repository clone
 
@@ -157,6 +157,14 @@ Claude Code does **not** load `AGENTS.md` automatically. Use one of its own inst
   ```
 
 - **Organization:** deploy it as a managed-policy `CLAUDE.md`. See the [organization setup](https://code.claude.com/docs/en/admin-setup).
+
+To run one session without a user-level baseline, start Claude Code without its user settings:
+
+```bash
+claude --setting-sources project,local
+```
+
+This skips everything under `~/.claude`, including `settings.json` with its hooks and permissions, for that session only. A baseline installed in the project still loads.
 
 ### GitHub Copilot
 
