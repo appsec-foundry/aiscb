@@ -373,10 +373,14 @@ with tempfile.TemporaryDirectory() as tmp:
     check("status check marks current and outdated installations",
           status_result == 0
           and f"\nProject {install.display_path(project.resolve())}" in status_output
-          and f"  • Codex  {bundled.baseline_id} (not checked)" in status_output
+          and f"  • Codex           {bundled.baseline_id} (not checked)" in status_output
           and any(line.startswith(
-              f"  ↻ Codex  aiscb-0.0.1 (update to {bundled.baseline_id} available")
+              f"  ↻ Codex           aiscb-0.0.1 (update to {bundled.baseline_id} available")
               for line in status_output),
+          str(status_output))
+    check("status lists found agents a scope does not load as not set up",
+          status_output.count("  – Claude Code     not set up") == 2
+          and status_output.count("  – GitHub Copilot  not set up") == 2,
           str(status_output))
     check("status check is read-only", not state.exists(), str(state))
 
@@ -683,7 +687,8 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("guided setup reports incomplete tool installation as an error",
           result == 2
-          and "  ! Claude Code incomplete" in output
+          and f"  ! Claude Code not configured, blocked at {install.display_path(claude_link)}"
+              in output
           and output[-1] == "\nSetup finished with unresolved items."
           and not (home / ".claude" / "settings.json").exists(),
           str(output))
@@ -1184,9 +1189,10 @@ with tempfile.TemporaryDirectory() as tmp:
         install.LOCAL_ORIGIN = original_origin
     start = output.index("\nYour user account (all projects)")
     check("the status lists each tool with its version, then the settings",
-          output[start + 1:start + 7] == [
-              f"  ✓ Claude Code  {bundled.baseline_id} (up to date)",
-              f"  ✓ Codex        {bundled.baseline_id} (up to date)",
+          output[start + 1:start + 8] == [
+              f"  ✓ Claude Code     {bundled.baseline_id} (up to date)",
+              f"  ✓ Codex           {bundled.baseline_id} (up to date)",
+              "  – GitHub Copilot  not set up",
               "",
               "  Loading: static, always active",
               "  Session notice: on",
@@ -1222,7 +1228,7 @@ with tempfile.TemporaryDirectory() as tmp:
     state = user_scope(home, ["codex"], notice=False)
     _result, output, _prompts = guided(home, state, [])
     check("without any release check the status says so",
-          f"  • Codex  {bundled.baseline_id} (not checked)" in output
+          f"  • Codex           {bundled.baseline_id} (not checked)" in output
           and f"Online check skipped; this copy has {bundled.baseline_id}" in output
           and "  Session notice: off" in output
           and not any("Update notice" in line for line in output),
@@ -1234,7 +1240,7 @@ with tempfile.TemporaryDirectory() as tmp:
     state = user_scope(home, ["codex"], notice=False, latest=bundled.baseline_id)
     _result, output, _prompts = guided(home, state, [])
     check("an older release check names its day",
-          f"  ✓ Codex  {bundled.baseline_id} (up to date as of {CHECKED_ON})"
+          f"  ✓ Codex           {bundled.baseline_id} (up to date as of {CHECKED_ON})"
           in output
           and not any(line.endswith("(up to date)") for line in output),
           str(output))
@@ -1245,7 +1251,7 @@ with tempfile.TemporaryDirectory() as tmp:
     state = user_scope(home, ["codex"], notice=False, latest="aiscb-99.0.0")
     _result, output, _prompts = guided(home, state, [])
     check("a newer release from an older check is named with its day",
-          f"  ↻ Codex  {bundled.baseline_id} (update to aiscb-99.0.0 available "
+          f"  ↻ Codex           {bundled.baseline_id} (update to aiscb-99.0.0 available "
           f"as of {CHECKED_ON})" in output, str(output))
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -1255,7 +1261,7 @@ with tempfile.TemporaryDirectory() as tmp:
                        checked=CHECKED_RECENTLY)
     _result, output, _prompts = guided(home, state, [])
     check("a newer release from a recent check needs no day",
-          f"  ↻ Codex  {bundled.baseline_id} (update to aiscb-99.0.0 available)"
+          f"  ↻ Codex           {bundled.baseline_id} (update to aiscb-99.0.0 available)"
           in output, str(output))
 
 # --- the guided setup offers the agents it finds ----------------------------
@@ -1427,6 +1433,11 @@ with tempfile.TemporaryDirectory() as tmp:
         ("claude", "codex"), lambda: guided(home, state, []))
     check("adding tools offers only the agents that were found",
           menu(output)[0] == "  1. add to Claude Code", str(output))
+    check("the status names only found agents as not set up",
+          "  – Claude Code  not set up" in output
+          and not any(line.endswith("not set up") and "Copilot" in line
+                      for line in output),
+          str(output))
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
@@ -1440,7 +1451,7 @@ with tempfile.TemporaryDirectory() as tmp:
         install.fetch_release_baseline = original_fetch
     check("a check in this run supports a plain up to date",
           f"Newest release: {bundled.baseline_id} (checked online just now)" in output
-          and f"  ✓ Codex  {bundled.baseline_id} (up to date)" in output, str(output))
+          and f"  ✓ Codex           {bundled.baseline_id} (up to date)" in output, str(output))
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
@@ -2722,7 +2733,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("an absolute path is used as given",
           install._path_from_answer(str(home / "x"), home) == home / "x")
 
-# --- instruction files that cannot be joined safely ------------------------
+# --- joining an existing instruction file ----------------------------------
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -2748,10 +2759,46 @@ with tempfile.TemporaryDirectory() as tmp:
     foreign.write_text("# someone else's instructions\n", encoding="utf-8")
     report = []
     install.install_import_line(foreign, source, report)
-    check("an existing instruction file keeps its content and names the manual step",
-          any("add the line" in line for line in report)
-          and foreign.read_text(encoding="utf-8") == "# someone else's instructions\n",
+    check("an existing instruction file keeps its content and gains the import line",
+          f"updated {foreign}: appended the import line" in report
+          and foreign.read_text(encoding="utf-8")
+              == f"# someone else's instructions\n@{source}\n",
           str(report))
+
+    unterminated = root / "UNTERMINATED.md"
+    unterminated.write_text("# no final newline", encoding="utf-8")
+    install.install_import_line(unterminated, source, [])
+    check("the appended import line starts on a line of its own",
+          unterminated.read_text(encoding="utf-8")
+              == f"# no final newline\n@{source}\n",
+          unterminated.read_text(encoding="utf-8"))
+
+    kept = root / "KEPT.md"
+    kept.write_text("# linked instructions\n", encoding="utf-8")
+    linked = root / "LINKED.md"
+    linked.symlink_to(kept)
+    report = []
+    install.install_import_line(linked, source, report)
+    check("an instruction symlink is not edited through and names the manual step",
+          any("is a symlink" in line and "add the line" in line for line in report)
+          and kept.read_text(encoding="utf-8") == "# linked instructions\n",
+          str(report))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp)
+    claude_md = home / ".claude" / "CLAUDE.md"
+    claude_md.parent.mkdir()
+    claude_md.write_text("# My rules\n", encoding="utf-8")
+    install.install(["claude"], home, home)
+    joined = claude_md.read_text(encoding="utf-8")
+    managed = [item for item in install.scan_user(home, {}) if item.kind == "user"]
+    for item in managed:
+        install.remove_installation(item, [])
+    check("setup joins an existing user CLAUDE.md and removal restores it exactly",
+          joined == f"# My rules\n@{install.user_source(home)}\n"
+          and len(managed) == 1 and "claude" in managed[0].tools
+          and claude_md.read_text(encoding="utf-8") == "# My rules\n",
+          joined)
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)

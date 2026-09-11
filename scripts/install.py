@@ -545,15 +545,25 @@ def install_import_line(
     line = f"@{source}"
     if target.exists():
         try:
-            lines = _instruction_lines(target)
+            content = read_limited(target, MAX_INSTRUCTION_BYTES).decode("utf-8")
         except (OSError, UnicodeDecodeError, ValueError):
             report.append(f"blocked {target}: cannot safely read existing file")
             return
         accepted_lines = {line, *(f"@{item}" for item in accepted_sources)}
-        if any(item in lines for item in accepted_lines):
+        if any(item in content.splitlines() for item in accepted_lines):
             report.append(f"in place {target}")
-        else:
-            report.append(f"blocked {target}: exists — add the line {line!r} by hand")
+            return
+        # Uninstall never edits through a symlink, so setup must not either.
+        if target.is_symlink():
+            report.append(f"blocked {target}: is a symlink — add the line {line!r} by hand")
+            return
+        separator = "\n" if content and not content.endswith("\n") else ""
+        try:
+            _atomic_replace(target, f"{content}{separator}{line}\n".encode())
+        except OSError:
+            report.append(f"blocked {target}: cannot append the import line")
+            return
+        report.append(f"updated {target}: appended the import line")
         return
     if target.is_symlink():
         report.append(f"blocked {target}: is a broken symlink")
@@ -1017,7 +1027,7 @@ def _enable_session_switch(
         link = targets[tool][0][1]
         if tool not in tools or not (_link_points_to(link, source) or _session_link(link, source)):
             continue
-        # Setup leaves an existing CLAUDE.md to the user; the switch must not add the import.
+        # Where setup left the Claude import to the user, the switch must not add it.
         if home is not None and tool == "claude" and not any(
             _import_contains(targets[tool][1][1], item) for item in (source, link)
         ):
@@ -2673,6 +2683,7 @@ def _show_setup_status(
     current_root: Path | None,
     registry: dict[str, object],
     released: Baseline | None,
+    agents: tuple[str, ...],
 ) -> None:
     current_resolved = (
         current_root.resolve(strict=False) if current_root is not None else None
@@ -2702,9 +2713,15 @@ def _show_setup_status(
             words = f"{state}, not loaded by any tool" if state else "not loaded by any tool"
             output(f"  {version} ({words})")
             return
-        width = max(len(TOOL_LABELS[tool]) for tool in installation.tools)
+        missing = (
+            [tool for tool in agents if tool not in installation.tools]
+            if installation.kind in {"user", "project"} else []
+        )
+        width = max(len(TOOL_LABELS[tool]) for tool in (*installation.tools, *missing))
         for tool in installation.tools:
             output(f"  {symbol} {TOOL_LABELS[tool].ljust(width)}  {version} ({state})")
+        for tool in missing:
+            output(f"  – {TOOL_LABELS[tool].ljust(width)}  not set up")
         if installation.kind not in {"user", "project"}:
             return
         output("")
@@ -3070,6 +3087,8 @@ def _remove_interactively(
 def _verify_baseline_tools(
     selected_tools: list[str],
     installed: Installation | None,
+    targets: dict[str, list[tuple[str, Path]]],
+    report: list[str],
     output: Callable[[str], None],
 ) -> bool:
     configured = set(installed.tools) if installed is not None else set()
@@ -3078,9 +3097,18 @@ def _verify_baseline_tools(
     for tool in selected_tools:
         if tool in configured:
             output(f"  ✓ {TOOL_LABELS[tool]} configured")
-        else:
-            output(f"  ! {TOOL_LABELS[tool]} incomplete")
-            incomplete = True
+            continue
+        blocked = next(
+            (
+                path
+                for _kind, path in targets[tool]
+                if any(line.startswith(f"blocked {path}:") for line in report)
+            ),
+            None,
+        )
+        where = f", blocked at {display_path(blocked)}" if blocked else ""
+        output(f"  ! {TOOL_LABELS[tool]} not configured{where}")
+        incomplete = True
     return incomplete
 
 
@@ -3145,7 +3173,7 @@ def _add_tools_interactively(
         output(f"  {line}")
     installed = _rescan(installation, registry)
     _record_current_scope(registry, installed, available)
-    incomplete = _verify_baseline_tools(tools, installed, output)
+    incomplete = _verify_baseline_tools(tools, installed, targets, report, output)
     added = [tool for tool in tools if installed is not None and tool in installed.tools]
     if added and _session_notice_tools(installation):
         output("\nAdding the session notice, as for the other tools:")
@@ -3220,7 +3248,9 @@ def _install_project_interactively(
     entry = projects.get(str(root)) if isinstance(projects, dict) else None
     installed = scan_project(root, entry if isinstance(entry, dict) else {})
     _record_current_scope(registry, installed, available)
-    incomplete = _verify_baseline_tools(tools, installed, output)
+    incomplete = _verify_baseline_tools(
+        tools, installed, project_targets(root), report, output
+    )
     hook_incomplete, hooks_configured = _offer_session_notice(
         installed, input_fn, output
     )
@@ -3342,7 +3372,9 @@ def _install_user_interactively(
     ]
     if managed:
         _record_current_scope(registry, managed[0], available)
-        incomplete = _verify_baseline_tools(tools, managed[0], output)
+        incomplete = _verify_baseline_tools(
+            tools, managed[0], user_targets(home), report, output
+        )
         hook_incomplete, hooks_configured = _offer_session_notice(
             managed[0], input_fn, output
         )
@@ -3350,7 +3382,7 @@ def _install_user_interactively(
         if (hooks_configured or switched) and not update_check_enabled(registry):
             _offer_update_notice(registry, input_fn, output)
         return True, update_incomplete or incomplete or hook_incomplete
-    _verify_baseline_tools(tools, None, output)
+    _verify_baseline_tools(tools, None, user_targets(home), report, output)
     return changed, True
 
 
@@ -3435,7 +3467,8 @@ def interactive_setup(
     if registry_note:
         output(registry_note)
     _show_setup_status(
-        output, installations, available, home, project_root, registry, released
+        output, installations, available, home, project_root, registry, released,
+        agents,
     )
 
     reviewed_updates: set[Path] = set()
@@ -3646,7 +3679,8 @@ def installation_status(
         output(registry_note)
     installations = discover_installations(home, registry, current_root)
     _show_setup_status(
-        output, installations, available, home, current_root, registry, released
+        output, installations, available, home, current_root, registry, released,
+        found_agents(home),
     )
     return 0
 

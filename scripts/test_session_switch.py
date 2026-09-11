@@ -280,15 +280,28 @@ class SessionSwitchTests(unittest.TestCase):
             self.assertFalse(install._version_hook_is_installed("codex", self.project, None))
 
     def test_switch_never_adds_a_claude_import_setup_left_to_the_user(self):
+        own = self.home / "dotfiles" / "CLAUDE.md"
+        own.parent.mkdir()
+        own.write_text("OWN_RULES\n")
+        claude = self.home / ".claude" / "CLAUDE.md"
+        claude.parent.mkdir()
+        claude.symlink_to(own)
+        report = install.install(["claude"], self.project, self.home)
+        install._enable_session_switch(["claude"], self.project, self.home,
+                                       install.user_source(self.home), report)
+        self.assertTrue(any("add the line" in line for line in report), report)
+        self.assertEqual(own.read_text(), "OWN_RULES\n")
+        self.assertFalse((self.home / ".claude" / "settings.json").exists())
+
+    def test_switch_moves_the_import_setup_appended_to_a_claude_md(self):
         claude = self.home / ".claude" / "CLAUDE.md"
         claude.parent.mkdir()
         claude.write_text("OWN_RULES\n")
         report = install.install(["claude"], self.project, self.home)
         install._enable_session_switch(["claude"], self.project, self.home,
                                        install.user_source(self.home), report)
-        self.assertTrue(any("add the line" in line for line in report), report)
-        self.assertEqual(claude.read_text(), "OWN_RULES\n")
-        self.assertFalse((self.home / ".claude" / "settings.json").exists())
+        link = install.user_targets(self.home)["claude"][0][1]
+        self.assertEqual(claude.read_text(), f"OWN_RULES\n@{link}\n", report)
 
     def test_static_loading_restores_links_import_and_notice(self):
         install.install(["claude", "codex", "copilot"], self.project, self.home)
