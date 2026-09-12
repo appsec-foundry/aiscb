@@ -436,7 +436,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("status check marks current and outdated installations",
           status_result == 0
-          and f"\nProject {install.display_path(project.resolve())}" in status_output
+          and f"\nLocal directory {install.display_path(project.resolve())}" in status_output
           and f"  • Codex           {bundled.baseline_id} (not checked)" in status_output
           and any(line.startswith(
               f"  ↻ Codex           aiscb-0.0.1 (update to {bundled.baseline_id} available")
@@ -609,7 +609,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("guided setup explains its purpose and progress",
           output[0] == "AI Secure Coding Baseline setup"
           and "\nYour user account: not installed" in output
-          and f"\nProject {install.display_path(project.resolve())}: not installed"
+          and f"\nLocal directory {install.display_path(project.resolve())}: not installed"
               in output
           and "\nApplying user-wide setup:" in output
           and "\nVerifying baseline setup:" in output
@@ -1033,7 +1033,7 @@ with tempfile.TemporaryDirectory() as tmp:
           and not any("Update project" in prompt for prompt in prompts)
           and "\nWhat would you like to do?" in output
           and "  1. install for your user account..." in output
-          and any(line.startswith("  2. install in project ") for line in output),
+          and any(line.startswith("  2. install in local directory ") for line in output),
           f"prompts={prompts!r}, output={output!r}")
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -1069,11 +1069,11 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("the user-first menu clearly offers the current project",
           result == 0
-          and f"\nProject {install.display_path(project.resolve())}: not installed"
+          and f"\nLocal directory {install.display_path(project.resolve())}: not installed"
               in output
           and f"  1. update to {bundled.baseline_id}" in output
           and "  2. add to more tools (Claude Code, GitHub Copilot)..." in output
-          and any(line.startswith("  3. install in project ")
+          and any(line.startswith("  3. install in local directory ")
                   and str(project) in line for line in output),
           str(output))
     check("configuring the current project does not silently update another scope",
@@ -1130,7 +1130,7 @@ with tempfile.TemporaryDirectory() as tmp:
           and install.read_baseline(project / install.BASELINE).digest
               != bundled.digest
           and str(project) not in "\n".join(output)
-          and output[-1] == f"\nYour user account and project "
+          and output[-1] == f"\nYour user account and local directory "
               f"{install.display_path(active.resolve())} now use {bundled.baseline_id}.",
           f"prompts={prompts!r}, output={output!r}")
 
@@ -1457,9 +1457,9 @@ with tempfile.TemporaryDirectory() as tmp:
     check("in a project without agents Enter does not install anything",
           result == 0
           and output[1] == "No coding agent found on this computer, so only the "
-                           "project setup applies."
+                           "local setup applies."
           and menu(output) == [
-              f"  1. install in project {install.display_path(project.resolve())}...",
+              f"  1. install in local directory {install.display_path(project.resolve())}...",
               "  2. exit",
           ]
           and prompts == ["Choice [2]: "],
@@ -1559,8 +1559,10 @@ with tempfile.TemporaryDirectory() as tmp:
               in output
           and f"  AI Secure Coding Baseline active: {bundled.baseline_id}" in output
           and "Codex asks you once to approve it with /hooks." in output
-          and prompts[1:] == ["Enable session notice? [Y/n] ",
-                              "Enable update notice? [y/N] "]
+          and prompts[1:] == [
+              "Install startup hooks and show the session status line? [Y/n] ",
+              "Enable update notice? [y/N] ",
+          ]
           and install._version_hook_is_installed("claude", home, home)
           and install._version_hook_is_installed("codex", home, home)
           and not update_notice_enabled(state),
@@ -1600,8 +1602,10 @@ with tempfile.TemporaryDirectory() as tmp:
                                       source)
           and any(line.endswith("approve its hooks in Codex with /hooks")
                   for line in output)
-          and prompts[3:] == ["Enable session notice? [Y/n] ",
-                              "Enable update notice? [y/N] "],
+          and prompts[3:] == [
+              "Install startup hooks and show the session status line? [Y/n] ",
+              "Enable update notice? [y/N] ",
+          ],
           f"output={output!r}, prompts={prompts!r}")
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -1630,7 +1634,11 @@ with tempfile.TemporaryDirectory() as tmp:
     check("the loading question is left out without Claude Code or Codex",
           result == 0
           and not any(line.startswith("\nHow should") for line in output)
-          and prompts == ["Choice [1]: ", "Enable session notice? [Y/n] "],
+          and prompts == [
+              "Choice [1]: ",
+              "Install startup hooks and show the session status line? [Y/n] ",
+          ]
+          and not (home / ".copilot" / "hooks").exists(),
           f"output={output!r}, prompts={prompts!r}")
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -1737,7 +1745,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("only the user installation offers loading and notice choices",
           output.count("  Loading: static, always active") == 1
           and menu(output) == [
-              "  1. add to more tools in project (Claude Code, GitHub Copilot)...",
+              f"  1. add to more tools in local directory {install.display_path(project.resolve())} (Claude Code, GitHub Copilot)...",
               "  2. load dynamically for Codex...",
               "  3. enable session notice...",
               "  4. remove...",
@@ -1763,7 +1771,7 @@ with tempfile.TemporaryDirectory() as tmp:
     _result, output, prompts = with_agents(
         (), lambda: project_setup(home, state, project, ["1", "n"]))
     check("startup hooks an earlier setup added to a project are offered for removal",
-          menu(output)[0] == "  1. remove startup hooks from project..."
+          menu(output)[0] == f"  1. remove startup hooks from local directory {install.display_path(project.resolve())}..."
           and prompts[1:] == ["Remove the startup hooks? [Y/n] "],
           f"output={output!r}, prompts={prompts!r}")
     check("declining keeps the project's dynamic loading and notice",
@@ -1835,15 +1843,77 @@ with tempfile.TemporaryDirectory() as tmp:
             offered[where.name] = menu(output)[0]
     finally:
         os.chdir(previous_cwd)
-    check("a directory without Git is offered as a project, and Enter changes nothing",
+    check("a directory without Git is offered locally, and Enter changes nothing",
           offered["plain"]
-              == f"  1. install in project {install.display_path(plain.resolve())}..."
+              == f"  1. install in local directory {install.display_path(plain.resolve())}..."
           and not any(plain.iterdir()),
           str(offered))
     check("a subdirectory of a repository offers the repository root",
           offered["sub"]
               == f"  1. install in project {install.display_path(repo.resolve())}...",
           str(offered))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    parent = home / "ai-baseline-check"
+    local = parent / "1"
+    sibling = parent / "2"
+    for directory in (local, sibling):
+        directory.mkdir(parents=True)
+    state = home / "state.json"
+    previous_cwd = Path.cwd()
+
+    def setup_here(answers: list[str]) -> tuple[int, list[str]]:
+        replies = iter(answers)
+        output: list[str] = []
+        result = install.interactive_setup(
+            home=home, input_fn=lambda _prompt: next(replies),
+            output=output.append, check_online=False, state_path=state,
+        )
+        return result, output
+
+    try:
+        os.chdir(local)
+        result, output = setup_here(["3"])
+        shown = install.display_path(local.resolve())
+        check("an empty directory offers only user-wide setup, local setup here, and exit",
+              result == 0
+              and menu(output) == [
+                  "  1. install for your user account...",
+                  f"  2. install in local directory {shown}...",
+                  "  3. exit",
+              ]
+              and f"\nLocal directory {shown}: not installed" in output
+              and not any("project" in line.lower() for line in output)
+              and not any(local.iterdir()),
+              str(output))
+        result, output = setup_here(["2", ""])
+        installed = install.scan_project(local)
+        check("local setup installs every tool in 1 without installing in its parent, sibling, or user scope",
+              result == 0 and installed is not None
+              and installed.tools == install.TOOLS
+              and install._copy_matches(local / ".claude" / "rules" / install.BASELINE,
+                                        local / install.BASELINE)
+              and all(install._link_points_to(target, local / install.BASELINE) for target in (
+                  local / "AGENTS.md", local / ".github" / "copilot-instructions.md"))
+              and set(parent.iterdir()) == {local, sibling}
+              and not any(sibling.iterdir())
+              and not install.scan_user(home, {})
+              and not (local / ".codex" / "hooks.json").exists()
+              and not (local / ".claude" / "settings.json").exists(),
+              str(output))
+        result, output = setup_here(["3"])
+        check("an installed non-Git directory keeps its local label and removal target",
+              result == 0
+              and f"\nLocal directory {shown}" in output
+              and menu(output) == [
+                  "  1. install for your user account...",
+                  f"  2. remove from local directory {shown}...",
+                  "  3. exit",
+              ],
+              str(output))
+    finally:
+        os.chdir(previous_cwd)
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
@@ -1924,14 +1994,14 @@ with tempfile.TemporaryDirectory() as tmp:
           and menu(output)[0] == f"  1. update to {bundled.baseline_id}..."
           and "\nUpdate:" in output
           and "  1. your user account" in output
-          and f"  2. project {shown}" in output
+          and f"  2. local directory {shown}" in output
           and "  3. both" in output
           and prompts == ["Choice [1]: ", "Choice [3]: "]
           and install.read_baseline(install.user_source(home)).digest
               != bundled.digest
           and install.read_baseline(project / install.BASELINE).digest
               == bundled.digest
-          and output[-1] == f"\nProject {shown} now uses {bundled.baseline_id}.",
+          and output[-1] == f"\nLocal directory {shown} now uses {bundled.baseline_id}.",
           f"output={output!r}, prompts={prompts!r}")
 
 setup_script = install.REPO / "setup.sh"
@@ -2837,7 +2907,9 @@ for artifact in (install.INSTALLER_NAME, install.VERSION_HOOK_NAME):
                 output = []
                 code = with_agents(("codex",), lambda: install.interactive_setup(
                     home=home, current_root=home, check_online=False,
-                    input_fn=lambda prompt: "n" if "Enable session notice" in prompt else "",
+                    input_fn=lambda prompt: (
+                        "n" if "startup hooks and show the session status line" in prompt else ""
+                    ),
                     output=output.append,
                 ))
                 expected_code = 2

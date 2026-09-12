@@ -30,7 +30,7 @@ echo 'da9c76e3b743d2f2a4d41954c2483ed358c55a626ab216c909171cd81f9e2552  aiscb-se
 bash aiscb-setup.sh
 ```
 
-Choose the tools when prompted. For installation from a clone or by hand, see [Using it](#using-it). Claude Code users can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
+Choose installation for your user account or a local directory, then the tools. Outside Git, the local target is the current directory; inside a Git repository, it is the detected project root. For installation from a clone or by hand, see [Using it](#using-it). Claude Code users can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
 
 ## Update
 
@@ -130,7 +130,7 @@ make help                              # list available commands
 
 Guided setup changes only the user installation or current project you select. The current project is the nearest Git repository root above the current directory, otherwise the directory itself; your home directory never counts. It keeps existing instruction files and other configured tools. Overwriting an edited baseline creates a backup and requires confirmation; uninstall also previews its changes and defaults to no.
 
-The optional session notice of the user installation shows the active `baseline-id` and release status. Codex requires you to trust a new or changed hook with `/hooks`.
+The guided user installation asks before installing startup hooks that show the active `baseline-id` and release status at session start; the default answer enables both. Codex requires you to trust a new or changed hook with `/hooks`.
 
 The update notice is off by default. When enabled, it checks `api.github.com` at most daily but never installs automatically. A checkout installs the latest release when available; `ARGS=--offline` uses the checkout copy and skips release checks.
 

@@ -236,7 +236,7 @@ class Installation:
     @property
     def label(self) -> str:
         if self.kind == "project":
-            return f"project {display_path(self.root)}"
+            return _local_scope_name(self.root)
         if self.kind == "user":
             return "user-wide"
         if self.kind == "legacy-user":
@@ -2595,6 +2595,16 @@ def _path_from_answer(answer: str, home: Path) -> Path:
     return candidate.resolve()
 
 
+def _is_git_root(root: Path) -> bool:
+    marker = root / ".git"
+    return marker.is_file() or (marker.is_dir() and (marker / "HEAD").is_file())
+
+
+def _local_scope_name(root: Path) -> str:
+    kind = "project" if _is_git_root(root) else "local directory"
+    return f"{kind} {display_path(root)}"
+
+
 def _detect_project_root(location: Path, home: Path) -> Path | None:
     """The nearest repository root, an installation here, or else this directory.
 
@@ -2605,10 +2615,7 @@ def _detect_project_root(location: Path, home: Path) -> Path | None:
     for candidate in (location, *location.parents):
         if candidate in stops:
             break
-        git_marker = candidate / ".git"
-        if git_marker.is_file() or (
-            git_marker.is_dir() and (git_marker / "HEAD").is_file()
-        ):
+        if _is_git_root(candidate):
             return candidate
         if candidate == location and scan_project(candidate, {}) is not None:
             return candidate
@@ -2641,7 +2648,7 @@ def _sentence(text: str) -> str:
 
 def _scope_name(installation: Installation) -> str:
     if installation.kind == "project":
-        return f"project {display_path(installation.root)}"
+        return _local_scope_name(installation.root)
     if installation.kind == "legacy-user":
         return f"your user account (linked to {display_path(installation.source)})"
     return "your user account"
@@ -2770,10 +2777,10 @@ def _scope_title(installation: Installation, home: Path) -> str:
     if installation.kind == "legacy-user":
         return f"Your user account (all projects), linked to {source}"
     if installation.kind == "project":
-        return f"Project {display_path(installation.root)}"
+        return _sentence(_local_scope_name(installation.root))
     if installation.root.resolve(strict=False) == home.resolve(strict=False):
         return f"Your user account: manual file {source}"
-    return f"Project {display_path(installation.root)}: manual file {source}"
+    return f"{_sentence(_local_scope_name(installation.root))}: manual file {source}"
 
 
 def _release_line(
@@ -2880,7 +2887,7 @@ def _show_setup_status(
     if current_root is not None and not any(
         item.kind == "project" for item in current
     ):
-        output(f"\nProject {display_path(current_root)}: not installed")
+        output(f"\n{_sentence(_local_scope_name(current_root))}: not installed")
     for installation in current + other:
         show(installation)
 
@@ -3082,7 +3089,9 @@ def _offer_session_notice(
     output(f"  AI Secure Coding Baseline active: {installation.baseline.baseline_id}")
     if "codex" in tools:
         output("Codex asks you once to approve it with /hooks.")
-    if not ask_yes_no(input_fn, "Enable session notice?", True, output):
+    if not ask_yes_no(
+        input_fn, "Install startup hooks and show the session status line?", True, output
+    ):
         return False, False
     home = None if installation.kind == "project" else installation.root
     for line in install_version_hooks(tools, installation.root, home):
@@ -3319,7 +3328,7 @@ def _add_tools_interactively(
     project = installation.kind == "project"
     root = installation.root
     home = None if project else root
-    output("\nApplying project setup:" if project else "\nApplying user-wide setup:")
+    output("\nApplying local setup:" if project else "\nApplying user-wide setup:")
     result = install(
         tools, root if project else Path.cwd(), home, content=available.content
     )
@@ -3401,7 +3410,7 @@ def _install_project_interactively(
         return changed, update_incomplete
     # A project loads the baseline statically; startup hooks stay with the user
     # installation.
-    output("\nApplying project setup:")
+    output("\nApplying local setup:")
     result = install(tools, root, None, content=available.content)
     for line in result.messages:
         output(f"  {line}")
@@ -3606,7 +3615,7 @@ def interactive_setup(
     if agents:
         output("Coding agents found: " + ", ".join(AGENT_LABELS[tool] for tool in agents))
     elif project_root is not None and not user_items:
-        output("No coding agent found on this computer, so only the project setup applies.")
+        output("No coding agent found on this computer, so only the local setup applies.")
     else:
         output("No coding agent found on this computer.")
 
@@ -3677,11 +3686,11 @@ def interactive_setup(
     if project_root is not None:
         if project_scope is None or not project_scope.tools:
             actions.append(
-                (f"install in project {display_path(project_root)}...", "project")
+                (f"install in {_local_scope_name(project_root)}...", "project")
             )
         elif missing_project:
             actions.append(
-                (_add_label(missing_project, " in project"), "project_add")
+                (_add_label(missing_project, f" in {_local_scope_name(project_root)}"), "project_add")
             )
     dynamic, static = _loading_modes(user_scope) if user_scope is not None else ([], [])
     if dynamic and static:
@@ -3699,7 +3708,7 @@ def interactive_setup(
         actions.append(("enable session notice...", "user_notice"))
     # Earlier setups could add startup hooks to a project; offer to take them out.
     if project_scope is not None and _startup_hook_tools(project_scope):
-        actions.append(("remove startup hooks from project...", "project_hooks"))
+        actions.append((f"remove startup hooks from {_local_scope_name(project_scope.root)}...", "project_hooks"))
     if any(_session_notice_tools(scope) for scope in notice_scopes):
         if update_check_enabled(registry):
             actions.append(("disable update notice", "notice_off"))
