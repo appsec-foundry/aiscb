@@ -163,7 +163,7 @@ Claude Code does **not** load `AGENTS.md` automatically. Use one of its own inst
 
   If `AGENTS.md` already contains the rules, import it with `@AGENTS.md`.
 
-- **Project without `CLAUDE.md`:** place or symlink the baseline at `.claude/rules/secure-coding-baseline.md`.
+- **Project without `CLAUDE.md`:** copy the baseline to `.claude/rules/secure-coding-baseline.md`. Claude Code skips a symlink there when a session starts in a subdirectory.
 
 - **User:** import it from `~/.claude/CLAUDE.md` with an absolute path:
 

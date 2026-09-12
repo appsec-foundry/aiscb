@@ -406,7 +406,9 @@ def latest_available(check_online: bool) -> tuple[Baseline, str, Baseline | None
 
 def project_targets(root: Path) -> dict[str, list[tuple[str, Path]]]:
     return {
-        "claude": [("link", root / ".claude" / "rules" / BASELINE)],
+        # A copy, not a link: Claude Code skips a linked rule whose target lies
+        # outside the directory a session starts in.
+        "claude": [("copy", root / ".claude" / "rules" / BASELINE)],
         "codex": [("link", root / "AGENTS.md")],
         "copilot": [("link", root / ".github" / "copilot-instructions.md")],
     }
@@ -530,6 +532,50 @@ def install_link(
     report.append(f"linked {target} -> {link}")
 
 
+def install_copy(
+    target: Path,
+    source: Path,
+    report: list[str],
+    root: Path,
+    *,
+    previous: bytes | None = None,
+) -> None:
+    """Place a real copy, which Claude Code also reads from subdirectories.
+
+    A link from an earlier setup becomes a copy, and a copy of the previous
+    baseline follows an update. Any other content stays untouched.
+    """
+    if any((root / parent).is_symlink()
+           for parent in target.relative_to(root).parents if parent != Path(".")):
+        report.append(f"blocked {target}: a directory on its path is a symlink")
+        return
+    content = read_limited(source, MAX_BASELINE_BYTES)
+    if target.is_symlink():
+        if _session_link(target, source):
+            report.append(f"in place {target} (session switch)")
+        elif _link_points_to(target, source):
+            _atomic_replace(target, content)
+            report.append(f"updated {target}: replaced the link with a copy")
+        else:
+            report.append(f"blocked {target}: points elsewhere, remove it first")
+        return
+    if target.exists():
+        try:
+            current = read_limited(target, MAX_BASELINE_BYTES) if target.is_file() else None
+        except (OSError, ValueError):
+            current = None
+        if current == content:
+            report.append(f"in place {target}")
+        elif current is not None and current == previous:
+            _atomic_replace(target, content)
+            report.append(f"updated {target}")
+        else:
+            report.append(f"blocked {target}: differs from {source.name}, replace it by hand")
+        return
+    _write_new(target, content)
+    report.append(f"copied {source.name} to {target}")
+
+
 def _instruction_lines(target: Path) -> list[str]:
     content = read_limited(target, MAX_INSTRUCTION_BYTES)
     return content.decode("utf-8").splitlines()
@@ -605,6 +651,8 @@ def install(
         for kind, target in actions:
             if kind == "link":
                 install_link(target, source, report, relative=relative)
+            elif kind == "copy":
+                install_copy(target, source, report, root)
             else:
                 accepted_sources = (
                     (targets[tool][0][1],) if home is not None and tool == "claude"
@@ -938,7 +986,7 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
             for _, path in targets[tool]:
                 _check_session_parents(path, home or root)
             if target.exists() or target.is_symlink():
-                if not _link_points_to(target, source) and not _session_link(target, source):
+                if not _managed_entry(targets[tool][0][0], target, source):
                     raise ValueError("an instruction file is not an exact managed link")
             path = _session_hook_path(tool, root, home)
             _check_session_parents(path, home or root)
@@ -1065,7 +1113,9 @@ def install_static_loading(tools: list[str], root: Path, home: Path | None) -> l
             target = targets[tool][0][1]
             for _, path in targets[tool]:
                 _check_session_parents(path, home or root)
-            if _link_points_to(target, source):
+            if _link_points_to(target, source) or (
+                targets[tool][0][0] == "copy" and _copy_matches(target, source)
+            ):
                 report.append(f"in place {target}")
                 continue
             if not _session_link(target, source):
@@ -1118,8 +1168,11 @@ def install_static_loading(tools: list[str], root: Path, home: Path | None) -> l
         ]
     try:
         for tool, target, path, config, existed, import_plan, notice in plans:
-            # os.replace changes the link atomically, never the baseline it points to.
-            _atomic_symlink(target, Path(link_text(target, source, relative=project)))
+            # os.replace swaps the entry atomically, never the file a link points to.
+            if targets[tool][0][0] == "copy":
+                _atomic_replace(target, read_limited(source, MAX_BASELINE_BYTES))
+            else:
+                _atomic_symlink(target, Path(link_text(target, source, relative=project)))
             if import_plan:
                 _atomic_replace(*import_plan)
             if config:
@@ -1761,6 +1814,28 @@ def _link_points_to(target: Path, source: Path) -> bool:
     )
 
 
+def _copy_matches(target: Path, source: Path) -> bool:
+    """Whether target is a regular file with exactly the baseline's content."""
+    if target.is_symlink() or not target.is_file():
+        return False
+    try:
+        return read_limited(target, MAX_BASELINE_BYTES) == read_limited(
+            source, MAX_BASELINE_BYTES
+        )
+    except (OSError, ValueError):
+        return False
+
+
+def _managed_entry(kind: str, target: Path, source: Path) -> bool:
+    """Whether a link or copy entry is one this installer placed for source.
+
+    A link from before copies still counts: it loads from the project root.
+    """
+    if _link_points_to(target, source) or _session_link(target, source):
+        return True
+    return kind == "copy" and _copy_matches(target, source)
+
+
 def _import_contains(target: Path, source: Path) -> bool:
     if not target.is_file():
         return False
@@ -1779,8 +1854,8 @@ def installed_tools(
             continue
         matches = []
         for kind, target in actions:
-            if kind == "link":
-                matches.append(_link_points_to(target, source) or _session_link(target, source))
+            if kind in {"link", "copy"}:
+                matches.append(_managed_entry(kind, target, source))
             else:
                 matches.append(_import_contains(target, source) or any(
                     _session_link(link, source) and _import_contains(target, link)
@@ -1814,7 +1889,7 @@ def scan_unmanaged_project_files(root: Path) -> list[Installation]:
         target = actions[0][1]
         if target.is_symlink() or not target.is_file():
             continue
-        if target.resolve(strict=False) == central:
+        if target.resolve(strict=False) == central or _copy_matches(target, root / BASELINE):
             continue
         try:
             baseline = read_baseline(target)
@@ -2127,8 +2202,8 @@ def remove_installation(installation: Installation, report: list[str]) -> bool:
     session_claude = _session_link(targets["claude"][0][1], installation.source)
     for actions in targets.values():
         for kind, target in actions:
-            if kind == "link":
-                if _link_points_to(target, installation.source) or _session_link(target, installation.source):
+            if kind in {"link", "copy"}:
+                if _managed_entry(kind, target, installation.source):
                     target.unlink()
                     report.append(f"removed {target}")
             else:
@@ -2313,6 +2388,11 @@ def update_installation(
         report.append(f"backed up {installation.source} to {backup}")
 
     _atomic_replace(installation.source, available.content)
+    if installation.kind == "project" and "claude" in installation.tools:
+        install_copy(
+            project_targets(installation.root)["claude"][0][1], installation.source,
+            report, installation.root, previous=installation.baseline.content,
+        )
     if installation.baseline.version == available.version:
         report.append(
             f"replaced differing {installation.baseline.baseline_id} content "

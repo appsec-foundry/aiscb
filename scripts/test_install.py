@@ -46,8 +46,9 @@ with tempfile.TemporaryDirectory() as tmp:
 
     baseline = root / install.BASELINE
     check("the project gets the real baseline", baseline.is_file())
-    check("Claude reads it from .claude/rules",
-          (root / ".claude" / "rules" / install.BASELINE).is_symlink())
+    rule = root / ".claude" / "rules" / install.BASELINE
+    check("Claude reads a real copy from .claude/rules, also from subdirectories",
+          not rule.is_symlink() and rule.read_bytes() == baseline.read_bytes())
     check("the AGENTS.md tools read it from the root",
           (root / "AGENTS.md").is_symlink())
     check("Copilot reads it from .github",
@@ -93,6 +94,69 @@ with tempfile.TemporaryDirectory() as tmp:
     check("invalid baseline content blocks tool links",
           not (root / "AGENTS.md").exists()
           and any("not a valid baseline" in line for line in report), str(report))
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    run(root, "codex")
+    rule = root / ".claude" / "rules" / install.BASELINE
+    rule.parent.mkdir(parents=True)
+    rule.symlink_to(Path("..") / ".." / install.BASELINE)
+    check("a rule link from an earlier setup still counts as installed",
+          "claude" in install.scan_project(root).tools)
+    report = run(root, "claude")
+    check("setup replaces that link with a copy",
+          not rule.is_symlink()
+          and rule.read_bytes() == (root / install.BASELINE).read_bytes()
+          and any("replaced the link with a copy" in line for line in report),
+          str(report))
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    rule = root / ".claude" / "rules" / install.BASELINE
+    rule.parent.mkdir(parents=True)
+    rule.write_text("# our own rules\n")
+    report = run(root, "claude")
+    check("a rule file with other content survives untouched",
+          rule.read_text() == "# our own rules\n"
+          and any(line.startswith(f"blocked {rule}") for line in report), str(report))
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp) / "project"
+    outside = Path(tmp) / "outside"
+    root.mkdir()
+    outside.mkdir()
+    (root / ".claude").symlink_to(outside)
+    report = run(root, "claude")
+    check("setup never copies through a symlinked .claude directory",
+          not any(outside.iterdir())
+          and any("a directory on its path is a symlink" in line for line in report),
+          str(report))
+
+with tempfile.TemporaryDirectory() as tmp:
+    current = install.bundled_baseline()
+    older = current.content.replace(current.baseline_id.encode(), b"aiscb-0.1.13", 1)
+    kept = Path(tmp) / "kept"
+    for root in (Path(tmp) / "managed", kept):
+        root.mkdir()
+        (root / install.BASELINE).write_bytes(older)
+        run(root, "claude")
+    (kept / ".claude" / "rules" / install.BASELINE).write_text("# edited copy\n")
+    reports = {}
+    for root in (Path(tmp) / "managed", kept):
+        reports[root.name], _updated = install.update_installation(
+            install.scan_project(root, {}), current, True)
+    managed_rule = Path(tmp) / "managed" / ".claude" / "rules" / install.BASELINE
+    kept_rule = kept / ".claude" / "rules" / install.BASELINE
+    check("an update carries the Claude copy along",
+          managed_rule.read_bytes() == current.content, str(reports["managed"]))
+    check("an edited copy survives the update",
+          kept_rule.read_text() == "# edited copy\n", str(reports["kept"]))
+    removed: list[str] = []
+    for root in (Path(tmp) / "managed", kept):
+        install.remove_installation(install.scan_project(root, {}), removed)
+    check("uninstall removes the unchanged copy and keeps the edited one",
+          not managed_rule.exists() and kept_rule.read_text() == "# edited copy\n",
+          str(removed))
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp)
@@ -1553,8 +1617,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a project loads statically and asks nothing about startup hooks",
           result == 0
           and prompts == ["Choice [2]: ", "Tools (comma-separated; Enter = all): "]
-          and install._link_points_to(project / ".claude" / "rules" / install.BASELINE,
-                                      project / install.BASELINE)
+          and install._copy_matches(project / ".claude" / "rules" / install.BASELINE,
+                                    project / install.BASELINE)
           and install._link_points_to(project / "AGENTS.md", project / install.BASELINE)
           and not (project / ".claude" / "settings.json").exists()
           and not (project / ".codex").exists()
@@ -1714,10 +1778,9 @@ with tempfile.TemporaryDirectory() as tmp:
     config = json.loads(settings.read_text())
     check("removing them returns the project to static loading",
           result == 0
+          and install._copy_matches(project / ".claude" / "rules" / install.BASELINE, source)
           and all(install._link_points_to(target, source) for target in (
-              project / ".claude" / "rules" / install.BASELINE,
-              project / "AGENTS.md",
-              project / ".github" / "copilot-instructions.md"))
+              project / "AGENTS.md", project / ".github" / "copilot-instructions.md"))
           and not any(install._version_hook_is_installed(tool, project, None)
                       for tool in install.TOOLS)
           and not (project / ".codex" / "hooks.json").exists()
