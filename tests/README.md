@@ -25,6 +25,7 @@ or code where a fixed check is insufficient.
 | `make check` | 0 | 0 | 0 |
 | `make test-fast` | 6 | 0 | 1 |
 | `make test-organization` | 4 | 0 | 1 |
+| `make test-confirmation` | 9 | 9 | 2 |
 | `make test-smoke` | 2 | 6 | 2 |
 | `make test-quick` | 24 | 72 | 2 |
 | `make test` | 162 | 324 | 2 |
@@ -39,6 +40,7 @@ Inspect the matrix without starting an assistant:
 ```bash
 make test-fast ARGS=--dry-run
 make test-organization ARGS=--dry-run
+python3 tests/design_confirmation.py --dry-run
 make dry-run ARGS="--requirements aiscb-REPORT-001"
 ```
 
@@ -85,6 +87,56 @@ Results and fixtures remain in the temporary directory printed at completion.
 A failed or incomplete case makes this target return a nonzero exit status.
 The baseline requirement catalog describes the main suite; these organization
 integration cases are separate and make no claim of a baseline effect.
+
+## Design confirmation dialogs
+
+`make test-confirmation` checks `aiscb-OM-005` and `aiscb-ATTR-001` against
+the three-digit email-login planning prompt. It offers Claude's native
+`AskUserQuestion` through a test permission host, then captures the actual
+tool call and question. A separate run removes that tool to check text fallback.
+The other runs simulate silence, timeout, an unsubmitted preselection, and
+explicit acceptance. The host never authorizes another tool.
+A sixth case checks a secure automated, persistent-secret design: attribution
+belongs in the explanation, no separate aiscb footer is appended, and the
+Security note stays reserved for qualifying residual risks.
+Three browser HTTP Basic cases use the risk explicitly named in
+`aiscb-AUTH-001`: text fallback, an unanswered dialog, and an accepted choice.
+They separate risk recognition from the choice of confirmation mechanism.
+
+```bash
+make test-confirmation
+make test-confirmation ARGS="--cases unavailable,timeout --judge-votes 3"
+make test-confirmation ARGS=--isolated-profile
+make test-confirmation ARGS="--isolated-profile --cases basic-unavailable,basic-silence,basic-accepted"
+```
+
+The adapter uses the CLI's bidirectional control protocol as used by the
+[official Agent SDK](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/query.py).
+The [Claude hooks reference](https://code.claude.com/docs/en/hooks#pretooluse-decision-control)
+explains why a non-interactive run needs a permission host to offer this tool.
+No additional SDK package is required. CLI versions that do not offer the
+expected tool or complete the protocol produce incomplete evidence, not a pass.
+
+Structural checks distinguish a real question-tool request from prose saying
+a dialog was used. A model judge assesses the question's risk, alternative,
+cost, and whether the assistant waits or proceeds appropriately. Missing or
+unclear judge results do not pass. `make check` tests the adapter and checker
+against synthetic good and faulty streams without calling a model.
+
+The two preflight runs must show no baseline in the control session and the
+current baseline in the baseline session. The nine cases then run once with
+the baseline; this is targeted compliance evidence, not a measured baseline
+effect. Evidence stays in the printed temporary directory. The test simulates
+dialog outcomes: it does not render a terminal UI, measure real timeout timers,
+or establish behavior in Codex, Copilot, or other tools.
+
+If a user-level baseline contaminates the control run, `--isolated-profile`
+uses a private temporary [CLAUDE_CONFIG_DIR](https://code.claude.com/docs/en/env-vars)
+for both test arms and the judge. It links the existing Linux `.credentials.json` for the CLI to read,
+without reading its values in the harness or changing user instructions.
+The temporary profile is removed after the run, including on errors. This
+option requires a file-based CLI login; it does not configure a new login or
+support the macOS Keychain. The two baseline preflights still apply.
 
 ## What the local checks establish
 

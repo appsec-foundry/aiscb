@@ -3,13 +3,14 @@
 
 .DEFAULT_GOAL := check
 .PHONY: check coverage setup update status sign-bundle install uninstall install-claude \
-        install-codex install-copilot dry-run test-smoke test-quick test-rule \
+        install-codex install-copilot dry-run test-smoke test-quick test-rule test-confirmation \
         test test-all test-fast test-organization clean-results help
 
 # Both check and coverage run this suite, so it is listed once.
 CHECK_TESTS = tests/selfcheck.py \
               tests/test_selfcheck.py \
               tests/test_run.py \
+              tests/test_design_confirmation.py \
               tests/test_organization.py \
               examples/claude-code-gate/test_gate.py \
               examples/organization-bundle/test_bundle.py \
@@ -86,6 +87,10 @@ test-organization: check
 test-rule: check
 	@test -n "$(RULE)" || { echo "usage: make test-rule RULE=aiscb-REPORT-001"; exit 1; }
 	python3 tests/run.py --parallel 3 --requirements $(RULE) $(ARGS)
+
+## test-confirmation  question tool, text fallback, and unanswered design choices
+test-confirmation: check
+	python3 tests/design_confirmation.py $(ARGS)
 
 ## test        every case, both arms, Claude — the single full run
 test: check

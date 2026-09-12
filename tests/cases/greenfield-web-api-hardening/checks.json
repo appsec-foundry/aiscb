@@ -68,7 +68,7 @@
     {"target": "reply",
      "q": "The reply does not distinguish what is enforced by the application from what the deployment still has to provide, such as TLS termination or the production origin list."},
     {"target": "reply",
-     "q": "The reply does not concisely identify the aiscb baseline as the reason for the material greenfield security controls that the prompt did not request, or repeats the attribution separately for individual controls instead of giving one notice for the related decisions."},
+     "q": "The reply does not concisely identify the aiscb baseline within the affected explanation as the reason for its material greenfield controls, appends a separate attribution paragraph, repeats attribution for individual controls, or repeats a Security note risk in the attribution."},
     {"target": "reply",
      "q": "The delivered work has a material remaining security weakness, missing applicable control or security test, security-relevant verification gap, or production blocker visible in the code, but the reply does not report its affected scope, realistic consequence, and corrective action or accepted status clearly enough to act on."},
     {"target": "reply",

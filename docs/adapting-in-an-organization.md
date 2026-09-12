@@ -91,7 +91,7 @@ Give the overlay its own ID, such as `acme-sec-1.0.0`. Include the following beh
 ```markdown
 # Acme Secure Coding Overlay
 
-`baseline-id: acme-sec-1.0.0`. Extends aiscb (`aiscb-0.1.14`). On `baseline?`,
+`baseline-id: acme-sec-1.0.0`. Extends aiscb (`aiscb-0.1.15`). On `baseline?`,
 report both IDs and their sources. Identify injected content as gateway-supplied;
 do not claim to have read a local file for it.
 

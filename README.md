@@ -58,8 +58,8 @@ Each rule names a mechanism: "Authorize on the server" is actionable; "be securi
 - **Greenfield application or component** (`aiscb-OM-002`): Build applicable controls, secure configuration, and tests in from the start. Integrate new components with the application's existing mechanisms.
 - **Mixed request** (`aiscb-OM-003`): Complete allowed parts, refuse only forbidden parts, and offer a safe alternative.
 - **Explicit override** (`aiscb-OM-004`): Use a compliant path when one meets the goal. Weakening a control requires an explanation and explicit confirmation; exposing real secrets or harming third-party systems remains forbidden.
-- **Secure design decision** (`aiscb-OM-005`): A materially riskier design requires an explanation of the risk, alternative, and cost, followed by explicit confirmation.
-- **Baseline attribution** (`aiscb-ATTR-001`): Name aiscb when it materially determines controls, a safer path, a refusal, or a security confirmation.
+- **Secure design decision** (`aiscb-OM-005`): A materially riskier design requires an explanation of the risk, alternative, and cost, followed by explicit confirmation through an available selection dialog or a direct question. A preselection, timeout, or silence is not acceptance.
+- **Baseline attribution** (`aiscb-ATTR-001`): Name aiscb within the affected explanation or confirmation question when it materially determines the work. Do not append a separate attribution paragraph; the closing Security note is reserved for residual risks.
 
 ### Non-negotiable rules
 
@@ -247,9 +247,9 @@ For Claude Code, an [appsec-advisor](https://github.com/appsec-foundry/appsec-ad
 
 ### Verify it loaded
 
-Ask `baseline?`; the answer should include `aiscb-0.1.14` and its source file. This confirms only that the baseline is in context.
+Ask `baseline?`; the answer should include `aiscb-0.1.15` and its source file. This confirms only that the baseline is in context.
 
-- `aiscb-0.1.14`: this baseline.
+- `aiscb-0.1.15`: this baseline.
 
 If more than one baseline is loaded, the answer lists each one. Claude Code can also show loaded files with `/context` or `/memory`.
 
@@ -257,7 +257,7 @@ If more than one baseline is loaded, the answer lists each one. Claude Code can 
 
 You may add internal rules, approved stacks, and review policies while retaining attribution. Keep existing rule-group IDs for traceability, but give the derived baseline its own [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) ID:
 
-- `aiscb-0.1.14+acme`: a version derived from aiscb.
+- `aiscb-0.1.15+acme`: a version derived from aiscb.
 - `acme-sec-1.0.0`: an independent baseline.
 
 Alternatively, keep organization rules in a [separate file](docs/adapting-in-an-organization.md). Application requirements belong in tests, CI, review gates, and runtime controls, not in the baseline.
@@ -274,7 +274,7 @@ These resources neither certify aiscb nor define its coverage. Check time-sensit
 
 ## Development
 
-`secure-coding-baseline.md` is the normative product. At 19.9 KB, or 4,003 tokens, it remains within its roughly 4,100-token budget. It is not formally certified.
+`secure-coding-baseline.md` is the normative product. At 20.4 KB (20,354 bytes), or 4,090 tokens (`o200k_base`), it remains within its roughly 4,100-token budget. It is not formally certified.
 
 [`specs/requirements.md`](specs/requirements.md) maps rule groups to tests. Behavior changes follow the workflow in [`specs/README.md`](specs/README.md); editorial and repository-only changes need no change specification.
 

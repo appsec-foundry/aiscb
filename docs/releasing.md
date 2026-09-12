@@ -81,6 +81,7 @@ Replace the previous version number in:
   `make check` fails until it names the new release
 - `scripts/test_show_baseline_version.py`: `VALID_ID` and the invalid-UTF-8
   test case
+- `scripts/test_session_switch.py`: the source ID in the derived-baseline test
 - `scripts/test_install.py`: the "Switch to a managed copy of ..." question
 
 ### 3. Sign the bundle

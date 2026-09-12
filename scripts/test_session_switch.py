@@ -195,7 +195,7 @@ class SessionSwitchTests(unittest.TestCase):
 
     def test_derived_baseline_and_separate_overlay(self):
         source = self.project / install.BASELINE
-        derived = install.SOURCE.read_text().replace("aiscb-0.1.14", "acme-sec-1.0.0+team")
+        derived = install.SOURCE.read_text().replace("aiscb-0.1.15", "acme-sec-1.0.0+team")
         source.write_text(derived)
         overlay = self.project / ".claude" / "rules" / "organization.md"
         overlay.parent.mkdir(parents=True)
