@@ -8,15 +8,20 @@ instructions from conversation history.
 
 ## Scope
 
-Setup supports Claude Code and Codex at user and project level. Guided setup
+Setup supports Claude Code and Codex in the user installation. Guided setup
 asks how they load the baseline; static loading is the default, and tools added
 later load it the way the installation already does. For an existing
 installation, guided setup shows how it loads the baseline and switches it
 either way; returning to static loading keeps the session notice. The
-`--session-switch` command only switches to dynamic loading; add `claude` or
-`codex` to it to select one tool. Existing installer-managed links are
-migrated; foreign links, combined instruction files, and customized loader
+`--session-switch --user` command only switches to dynamic loading; add
+`claude` or `codex` to it to select one tool. Existing installer-managed links
+are migrated; foreign links, combined instruction files, and customized loader
 hooks are refused. Other instructions and permissions are preserved.
+
+A project installation always loads the baseline statically, so the variable
+leaves it active. If an earlier version set up dynamic loading or the session
+notice in a project, guided setup offers to remove those startup hooks. A
+customized hook blocks the removal and leaves dynamic loading intact.
 
 A derived baseline works when it is the managed `secure-coding-baseline.md`
 file with one valid `baseline-id`. Separate overlays remain active. The
@@ -27,9 +32,10 @@ remain active.
 
 ## If the baseline still appears
 
-- Check both installation scopes and any manual imports.
+- Check for a project installation, which always loads the baseline, and for
+  manual imports.
 - Look for `blocked session switch` in the setup output, fix the named cause,
-  and run `install.py --session-switch` again.
+  and run `install.py --session-switch --user` again.
 - Start a new conversation instead of resuming one.
 - In Codex, trust the new hooks with `/hooks`. After a helper update, review
   its changed code and renew trust when Codex requests it.

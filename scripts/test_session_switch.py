@@ -258,7 +258,9 @@ class SessionSwitchTests(unittest.TestCase):
     def test_cli_setup_and_invalid_combinations(self):
         env = {"PATH": os.environ["PATH"], "HOME": str(self.home)}
         argv = [sys.executable, str(install.INSTALLER_SOURCE), "--session-switch"]
-        for flags in (["copilot"], ["--status"], ["--interactive"], ["--update"], ["--offline"]):
+        # Without --user it would target the project, which loads statically.
+        for flags in ([], ["--into", str(self.project)], ["copilot"], ["--status"],
+                      ["--interactive"], ["--update"], ["--offline"]):
             before = self.snapshot()
             result = subprocess.run(argv + flags, cwd=self.project, env=env,
                                     capture_output=True, text=True, timeout=10)

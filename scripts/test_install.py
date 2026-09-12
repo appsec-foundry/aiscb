@@ -772,13 +772,13 @@ with tempfile.TemporaryDirectory() as tmp:
           not any("up to date" in line and "not installed" in line
                   for line in output), str(output[:12]))
     check("existing installations expose removal but no unnecessary update action",
-          "  5. remove..." in output
+          "  3. remove..." in output
           and not any(line.startswith("  1. update to") for line in output)
           and not any("registered project" in line for line in output),
           str(output))
     check("a setup with nothing left to do defaults to leaving",
           result == 0
-          and prompts == ["Choice [6]: "]
+          and prompts == ["Choice [4]: "]
           and output[-1] == "No changes made.",
           f"prompts={prompts!r}, last={output[-1]!r}")
     prompts = []
@@ -786,7 +786,7 @@ with tempfile.TemporaryDirectory() as tmp:
     result = install.interactive_setup(
         home=home,
         input_fn=lambda prompt: prompts.append(prompt) or (
-            "5" if len(prompts) == 1 else ""),
+            "3" if len(prompts) == 1 else ""),
         output=output.append,
         check_online=False,
         state_path=state,
@@ -794,7 +794,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("removal from two scopes asks which one and cancels on Enter",
           result == 0
-          and prompts == ["Choice [6]: ", "Choice (Enter = cancel): "]
+          and prompts == ["Choice [4]: ", "Choice (Enter = cancel): "]
           and "\nRemove from:" in output
           and "  1. your user account" in output
           and "  3. both" in output
@@ -1549,13 +1549,16 @@ with tempfile.TemporaryDirectory() as tmp:
     home.mkdir()
     project.mkdir()
     result, output, prompts = with_agents((), lambda: project_setup(
-        home, home.parent / "state.json", project, ["1", "1,2", "2", "n"]))
-    check("a project can load the baseline dynamically",
+        home, home.parent / "state.json", project, ["1", "1,2"]))
+    check("a project loads statically and asks nothing about startup hooks",
           result == 0
-          and install._session_link(project / ".claude" / "rules" / install.BASELINE,
-                                    project / install.BASELINE)
-          and install._session_link(project / "AGENTS.md", project / install.BASELINE)
-          and prompts[3:] == ["Enable update notice? [y/N] "],
+          and prompts == ["Choice [2]: ", "Tools (comma-separated; Enter = all): "]
+          and install._link_points_to(project / ".claude" / "rules" / install.BASELINE,
+                                      project / install.BASELINE)
+          and install._link_points_to(project / "AGENTS.md", project / install.BASELINE)
+          and not (project / ".claude" / "settings.json").exists()
+          and not (project / ".codex").exists()
+          and not (project / install.VERSION_HOOK_DIR).exists(),
           f"output={output!r}, prompts={prompts!r}")
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -1670,12 +1673,87 @@ with tempfile.TemporaryDirectory() as tmp:
     install.install(["codex"], project, None)
     _result, output, _prompts = with_agents(
         ("codex",), lambda: project_setup(home, state, project, []))
-    check("the project scope offers its own loading switch",
-          output.count("  Loading: static, always active") == 2
-          and any(entry.endswith(". load dynamically for Codex...")
-                  for entry in menu(output))
-          and any(entry.endswith(". load dynamically for Codex in project...")
-                  for entry in menu(output)),
+    check("only the user installation offers loading and notice choices",
+          output.count("  Loading: static, always active") == 1
+          and menu(output) == [
+              "  1. add to more tools in project (Claude Code, GitHub Copilot)...",
+              "  2. load dynamically for Codex...",
+              "  3. enable session notice...",
+              "  4. remove...",
+              "  5. exit",
+          ],
+          str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    project = Path(tmp) / "project"
+    project.mkdir()
+    state = home.parent / "state.json"
+    source = project / install.BASELINE
+    install.install(list(install.TOOLS), project, None)
+    install.install_session_switch(["claude", "codex"], project, None)
+    install.install_version_hooks(["copilot"], project, None)
+    settings = project / ".claude" / "settings.json"
+    config = json.loads(settings.read_text())
+    other_hook = {"hooks": [{"type": "command", "command": "echo OTHER_HOOK"}]}
+    config["hooks"]["SessionStart"].append(other_hook)
+    settings.write_text(json.dumps(config))
+    _result, output, prompts = with_agents(
+        (), lambda: project_setup(home, state, project, ["1", "n"]))
+    check("startup hooks an earlier setup added to a project are offered for removal",
+          menu(output)[0] == "  1. remove startup hooks from project..."
+          and prompts[1:] == ["Remove the startup hooks? [Y/n] "],
+          f"output={output!r}, prompts={prompts!r}")
+    check("declining keeps the project's dynamic loading and notice",
+          install._session_link(project / "AGENTS.md", source)
+          and install._version_hook_is_installed("copilot", project, None),
+          str(output))
+    result, output, prompts = with_agents(
+        (), lambda: project_setup(home, state, project, ["1", ""]))
+    config = json.loads(settings.read_text())
+    check("removing them returns the project to static loading",
+          result == 0
+          and all(install._link_points_to(target, source) for target in (
+              project / ".claude" / "rules" / install.BASELINE,
+              project / "AGENTS.md",
+              project / ".github" / "copilot-instructions.md"))
+          and not any(install._version_hook_is_installed(tool, project, None)
+                      for tool in install.TOOLS)
+          and not (project / ".codex" / "hooks.json").exists()
+          and not list((project / install.VERSION_HOOK_DIR).glob("*"))
+          and output[-1]
+              == "\nThe project loads the baseline statically, without startup hooks.",
+          f"output={output!r}, prompts={prompts!r}")
+    check("and keeps every hook the installer did not add",
+          config["hooks"] == {"SessionStart": [other_hook]}, str(config))
+    _result, output, _prompts = with_agents(
+        (), lambda: project_setup(home, state, project, []))
+    check("a project without startup hooks shows no loading or notice lines",
+          not any(line.startswith(("  Loading:", "  Session notice:")) for line in output)
+          and not any("startup hooks" in entry for entry in menu(output)),
+          str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    home.mkdir()
+    project = Path(tmp) / "project"
+    project.mkdir()
+    source = project / install.BASELINE
+    install.install(list(install.TOOLS), project, None)
+    install.install_session_switch(["claude"], project, None)
+    settings = project / ".claude" / "settings.json"
+    config = json.loads(settings.read_text())
+    config["hooks"]["SessionStart"][0]["hooks"][0]["timeout"] = 9
+    settings.write_text(json.dumps(config))
+    before = settings.read_text()
+    result, output, _prompts = with_agents((), lambda: project_setup(
+        home, home.parent / "state.json", project, ["1", ""]))
+    check("a customized startup hook blocks the removal and keeps dynamic loading whole",
+          result == 2
+          and any("blocked static loading" in line for line in output)
+          and install._session_link(project / ".claude" / "rules" / install.BASELINE, source)
+          and settings.read_text() == before,
           str(output))
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -2383,7 +2461,7 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     state = sandbox / "state.json"
     install.save_registry(state, registry)
-    answers = iter(["7", "3", "y"])
+    answers = iter(["5", "3", "y"])
     output = []
     result = install.interactive_setup(
         home=home,

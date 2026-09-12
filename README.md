@@ -129,20 +129,16 @@ make help                              # list available commands
 
 Guided setup changes only the user installation or current project you select. It keeps existing instruction files and other configured tools. Overwriting an edited baseline creates a backup and requires confirmation; uninstall also previews its changes and defaults to no.
 
-The optional session notice shows the active `baseline-id` and release status. Codex requires you to trust a new or changed hook with `/hooks`.
+The optional session notice of the user installation shows the active `baseline-id` and release status. Codex requires you to trust a new or changed hook with `/hooks`.
 
 The update notice is off by default. When enabled, it checks `api.github.com` at most daily but never installs automatically. A checkout installs the latest release when available; `ARGS=--offline` uses the checkout copy and skips release checks.
 
 ### Temporarily disable the baseline
 
-Guided setup asks how Claude Code and Codex load the baseline. Static loading, the default, always loads it. Dynamic loading lets you start a session without it but depends on startup hooks. Run guided setup again to see how an installation loads the baseline and to switch it either way. Without guided setup, switch an existing installation to dynamic loading once from this checkout:
+For your user installation, guided setup asks how Claude Code and Codex load the baseline. Static loading, the default, always loads it. Dynamic loading lets you start a session without it but depends on startup hooks. Run guided setup again to see how the installation loads the baseline and to switch it either way. Without guided setup, switch it to dynamic loading once from this checkout:
 
 ```bash
-# Personal installation:
 python3 scripts/install.py --session-switch --user
-
-# Or a project installation:
-python3 scripts/install.py --session-switch --into /path/to/project
 ```
 
 Then start a **new session** without the baseline:
@@ -152,7 +148,7 @@ AISCB_DISABLE=1 claude
 AISCB_DISABLE=1 codex
 ```
 
-Start normally to restore the baseline. Other instructions and permissions remain active. The switch affects only installations where you enabled it; enable both personal and project installations if both exist. It does not disable separate overlays or organization packages. Start a new conversation, then check with `baseline?`. See [scope and troubleshooting](docs/session-switch.md).
+Start normally to restore the baseline. Other instructions and permissions remain active. A project installation always loads the baseline statically, so `AISCB_DISABLE=1` leaves it active; guided setup offers to remove startup hooks an earlier version added to a project. The switch does not disable separate overlays or organization packages. Start a new conversation, then check with `baseline?`. See [scope and troubleshooting](docs/session-switch.md).
 
 ### Claude Code
 

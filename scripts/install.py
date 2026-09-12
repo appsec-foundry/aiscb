@@ -2641,6 +2641,13 @@ def _loading_modes(installation: Installation) -> tuple[list[str], list[str]]:
     return dynamic, [tool for tool in tools if tool not in dynamic]
 
 
+def _startup_hook_tools(installation: Installation) -> list[str]:
+    """The tools of a managed installation that load or announce it through startup hooks."""
+    dynamic, _static = _loading_modes(installation)
+    notice = _session_notice_tools(installation)
+    return [tool for tool in TOOLS if tool in dynamic or tool in notice]
+
+
 def _scope_title(installation: Installation, home: Path) -> str:
     source = display_path(installation.source)
     if installation.kind == "user":
@@ -2726,6 +2733,9 @@ def _show_setup_status(
         for tool in missing:
             output(f"  – {TOOL_LABELS[tool].ljust(width)}  not set up")
         if installation.kind not in {"user", "project"}:
+            return
+        # A project always loads statically; only hooks from earlier setups need a line.
+        if installation.kind == "project" and not _startup_hook_tools(installation):
             return
         output("")
         dynamic, static = _loading_modes(installation)
@@ -3019,6 +3029,32 @@ def _change_loading_interactively(
     return True, len(changed) < len(tools), f"{_join_labels(changed)} now {verb} the baseline {mode}."
 
 
+def _remove_project_hooks_interactively(
+    installation: Installation,
+    input_fn: Callable[[str], str],
+    output: Callable[[str], None],
+) -> tuple[bool, bool, str | None]:
+    """Return a project to static loading without the startup hooks earlier setups added."""
+    before = _startup_hook_tools(installation)
+    output("\nSetup no longer adds startup hooks to projects. Without them the project")
+    output("loads the baseline statically in every session and shows no session notice.")
+    output("The session notice stays available for your user account.")
+    if not ask_yes_no(input_fn, "Remove the startup hooks?", True, output):
+        return False, False, None
+    output("\nRemoving startup hooks:")
+    dynamic, _static = _loading_modes(installation)
+    report = install_static_loading(dynamic, installation.root, None) if dynamic else []
+    # A refused switch leaves dynamic loading in place, which still needs its hooks.
+    if not any(line.startswith("blocked") for line in report):
+        _remove_version_hooks(installation.root, None, report)
+    for line in report:
+        output(f"  {line}")
+    after = _startup_hook_tools(installation)
+    if after:
+        return after != before, True, None
+    return True, False, "The project loads the baseline statically, without startup hooks."
+
+
 def _set_update_notice(registry: dict[str, object], enabled: bool) -> None:
     section = registry.get(UPDATE_CHECK_KEY)
     section = section if isinstance(section, dict) else {}
@@ -3152,7 +3188,7 @@ def _add_tools_interactively(
     input_fn: Callable[[str], str],
     output: Callable[[str], None],
 ) -> tuple[bool, bool, str | None]:
-    """Link more tools to an installation; they inherit its session notice."""
+    """Link more tools to an installation; a user installation passes on its hooks."""
     tools: list[str] | None = list(missing)
     if len(missing) > 1:
         tools = choose_tools(
@@ -3168,9 +3204,12 @@ def _add_tools_interactively(
     report = install(
         tools, root if project else Path.cwd(), home, content=available.content
     )
-    # Added tools load the baseline the way the installation already does.
+    # Added tools load the baseline the way a user installation already does;
+    # a project gets no startup hooks.
     targets = project_targets(root) if project else user_targets(root)
-    if any(_session_link(targets[tool][0][1], installation.source) for tool in ("claude", "codex")):
+    if not project and any(
+        _session_link(targets[tool][0][1], installation.source) for tool in ("claude", "codex")
+    ):
         _enable_session_switch(tools, root, home, installation.source, report)
     for line in report:
         output(f"  {line}")
@@ -3178,7 +3217,7 @@ def _add_tools_interactively(
     _record_current_scope(registry, installed, available)
     incomplete = _verify_baseline_tools(tools, installed, targets, report, output)
     added = [tool for tool in tools if installed is not None and tool in installed.tools]
-    if added and _session_notice_tools(installation):
+    if added and not project and _session_notice_tools(installation):
         output("\nAdding the session notice, as for the other tools:")
         for line in install_version_hooks(added, root, home):
             output(f"  {line}")
@@ -3240,11 +3279,10 @@ def _install_project_interactively(
     if not tools:
         output("Setup cancelled.")
         return changed, update_incomplete
-    dynamic = _choose_dynamic_loading(tools, input_fn, output)
+    # A project loads the baseline statically; startup hooks stay with the user
+    # installation.
     output("\nApplying project setup:")
     report = install(tools, root, None, content=available.content)
-    if dynamic:
-        _enable_session_switch(tools, root, None, root / BASELINE, report)
     for line in report:
         output(f"  {line}")
     projects = registry.get("projects", {})
@@ -3254,16 +3292,7 @@ def _install_project_interactively(
     incomplete = _verify_baseline_tools(
         tools, installed, project_targets(root), report, output
     )
-    hook_incomplete, hooks_configured = _offer_session_notice(
-        installed, input_fn, output
-    )
-    switched = any(line.startswith("enabled session switch") for line in report)
-    if (hooks_configured or switched) and not update_check_enabled(registry):
-        _offer_update_notice(registry, input_fn, output)
-    return (
-        changed or installed is not None,
-        update_incomplete or incomplete or hook_incomplete,
-    )
+    return changed or installed is not None, update_incomplete or incomplete
 
 
 def _install_user_interactively(
@@ -3530,28 +3559,23 @@ def interactive_setup(
             actions.append(
                 (_add_label(missing_project, " in project"), "project_add")
             )
-    for scope, where, key in (
-        (user_scope, "", "user_loading"),
-        (project_scope, " in project", "project_loading"),
+    dynamic, static = _loading_modes(user_scope) if user_scope is not None else ([], [])
+    if dynamic and static:
+        both = [tool for tool in TOOLS if tool in dynamic + static]
+        actions.append((f"change how {_join_labels(both)} load the baseline...", "user_loading"))
+    elif static:
+        actions.append((f"load dynamically for {_join_labels(static)}...", "user_loading"))
+    elif dynamic:
+        actions.append((f"load statically for {_join_labels(dynamic)}...", "user_loading"))
+    if (
+        user_scope is not None
+        and user_scope.tools
+        and len(_session_notice_tools(user_scope)) < len(user_scope.tools)
     ):
-        dynamic, static = _loading_modes(scope) if scope is not None else ([], [])
-        if dynamic and static:
-            both = [tool for tool in TOOLS if tool in dynamic + static]
-            actions.append((f"change how {_join_labels(both)} load the baseline{where}...", key))
-        elif static:
-            actions.append((f"load dynamically for {_join_labels(static)}{where}...", key))
-        elif dynamic:
-            actions.append((f"load statically for {_join_labels(dynamic)}{where}...", key))
-    for scope, where, key in (
-        (user_scope, "", "user_notice"),
-        (project_scope, " in project", "project_notice"),
-    ):
-        if (
-            scope is not None
-            and scope.tools
-            and len(_session_notice_tools(scope)) < len(scope.tools)
-        ):
-            actions.append((f"enable session notice{where}...", key))
+        actions.append(("enable session notice...", "user_notice"))
+    # Earlier setups could add startup hooks to a project; offer to take them out.
+    if project_scope is not None and _startup_hook_tools(project_scope):
+        actions.append(("remove startup hooks from project...", "project_hooks"))
     if any(_session_notice_tools(scope) for scope in notice_scopes):
         if update_check_enabled(registry):
             actions.append(("disable update notice", "notice_off"))
@@ -3618,17 +3642,20 @@ def interactive_setup(
         action_changed, action_incomplete, message = _add_tools_interactively(
             project_scope, missing_project, available, registry, input_fn, output
         )
-    elif chosen in {"user_loading", "project_loading"}:
+    elif chosen == "user_loading":
         action_changed, action_incomplete, message = _change_loading_interactively(
-            user_scope if chosen == "user_loading" else project_scope, input_fn, output
+            user_scope, input_fn, output
         )
-    elif chosen in {"user_notice", "project_notice"}:
-        scope = user_scope if chosen == "user_notice" else project_scope
+    elif chosen == "user_notice":
         action_incomplete, action_changed = _offer_session_notice(
-            scope, input_fn, output
+            user_scope, input_fn, output
         )
         if action_changed and not update_check_enabled(registry):
             _offer_update_notice(registry, input_fn, output)
+    elif chosen == "project_hooks" and project_scope is not None:
+        action_changed, action_incomplete, message = _remove_project_hooks_interactively(
+            project_scope, input_fn, output
+        )
     elif chosen == "notice_on":
         action_changed = _offer_update_notice(registry, input_fn, output)
         message = "Update notice enabled."
@@ -3796,13 +3823,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--session-switch", action="store_true",
-        help="opt in to AISCB_DISABLE=1 for new Claude/Codex sessions; migrate managed links only",
+        help="with --user, opt in to AISCB_DISABLE=1 for new Claude/Codex sessions; "
+             "migrate managed links only",
     )
     args = parser.parse_args(argv)
 
     if args.session_switch and (args.interactive or args.status or args.offline
                                or args.uninstall or args.refresh_update_cache or args.update):
-        parser.error("--session-switch takes only claude/codex, --user or --into")
+        parser.error("--session-switch takes only claude/codex and --user")
+    if args.session_switch and not args.user:
+        parser.error(
+            "--session-switch applies to the user installation; add --user "
+            "(a project loads the baseline statically)"
+        )
 
     if args.uninstall:
         if args.tools or args.status or args.interactive or args.offline or args.update:
