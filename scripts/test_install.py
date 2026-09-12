@@ -3187,8 +3187,11 @@ with tempfile.TemporaryDirectory() as tmp:
     user_title = "\nYour user account (all projects)"
     lines = status_rows()
     check("a status block names the tools that load the installation",
-          f"  • Claude Code  {bundled.baseline_id} (not checked)"
+          f"  • Claude Code     {bundled.baseline_id} (not checked)"
           in block(lines, user_title), str(lines))
+    check("a tool another user copy loads is not listed as not set up",
+          not any(line.startswith("  – Codex") for line in block(lines, user_title)),
+          str(lines))
     check("a second user copy shows its path",
           f"  • Codex  {bundled.baseline_id} "
           "(switch to a managed copy so updates reach it)" in block(

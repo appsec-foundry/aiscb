@@ -2692,8 +2692,10 @@ def _show_setup_status(
     current: list[Installation] = []
     user: list[Installation] = []
     other: list[Installation] = []
+    loaded: dict[Path, set[str]] = {}
     for installation in installations:
         root = installation.root.resolve(strict=False)
+        loaded.setdefault(root, set()).update(installation.tools)
         if installation.kind in {"user", "legacy-user"}:
             user.append(installation)
         elif installation.kind == "unmanaged" and root == home_resolved:
@@ -2714,7 +2716,8 @@ def _show_setup_status(
             output(f"  {version} ({words})")
             return
         missing = (
-            [tool for tool in agents if tool not in installation.tools]
+            [tool for tool in agents
+             if tool not in loaded[installation.root.resolve(strict=False)]]
             if installation.kind in {"user", "project"} else []
         )
         width = max(len(TOOL_LABELS[tool]) for tool in (*installation.tools, *missing))
