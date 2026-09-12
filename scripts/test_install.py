@@ -2803,6 +2803,11 @@ REJECTED_ARGUMENTS = [
     ("--refresh-update-cache with another mode",
      ["--refresh-update-cache", "--status"]),
     ("--uninstall with tools", ["--uninstall", "codex"]),
+    ("--interactive into a missing directory",
+     ["--interactive", "--into", "/nonexistent-aiscb-directory"]),
+    ("--interactive into the filesystem root", ["--interactive", "--into", "/"]),
+    ("--update with --into", ["--update", "--into", "."]),
+    ("--refresh-update-cache with --into", ["--refresh-update-cache", "--into", "."]),
 ]
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -2836,6 +2841,29 @@ with tempfile.TemporaryDirectory() as tmp:
     check("guided setup refuses to run without a terminal",
           completed.returncode == 2 and "needs a terminal" in completed.stderr,
           completed.stderr[:200])
+
+    class Terminal:
+        def isatty(self) -> bool:
+            return True
+
+    seen: list[object] = []
+    original_setup, original_stdin = install.interactive_setup, sys.stdin
+    install.interactive_setup = lambda **kwargs: seen.append(kwargs["current_root"]) or 0
+    sys.stdin = Terminal()
+    try:
+        install.main(["--interactive", "--offline", "--into", str(project)])
+        install.main(["--interactive", "--offline"])
+    finally:
+        install.interactive_setup, sys.stdin = original_setup, original_stdin
+    check("guided setup takes the directory --into names, else the current one",
+          seen == [project, None], str(seen))
+    output = []
+    with_agents(("claude",), lambda: install.interactive_setup(
+        home=home, input_fn=lambda _prompt: "2", output=output.append,
+        check_online=False, state_path=sandbox / "home-state.json", current_root=home))
+    check("guided setup into the home directory offers no project",
+          "This directory is not a project, so only the user-wide setup applies." in output
+          and not any("in project" in line for line in output), str(output))
 
     completed = cli(["codex", "--into", str(project)], home)
     check("a project install from the command line succeeds",

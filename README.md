@@ -116,6 +116,7 @@ From a clone, use `./setup.sh` or the equivalent `make` targets:
 ```bash
 ./setup.sh                             # guided setup and updates, without make
 make setup                             # guided setup and updates
+make setup ARGS="--into <path>"        # guided setup for another directory
 make status                            # read-only installation status
 make install                           # all supported tools in this project
 make install-claude                    # one tool only

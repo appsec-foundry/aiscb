@@ -3537,7 +3537,10 @@ def interactive_setup(
     if not location.is_dir():
         raise ValueError("current location must be an existing directory")
     project_root = location if explicit_project else _detect_project_root(location, home)
-    if project_root is not None and project_root == Path(project_root.anchor):
+    # Even a directory named explicitly is no project when it is home or the root.
+    if project_root is not None and project_root in {
+        Path(project_root.anchor), home.resolve(strict=False)
+    }:
         project_root = None
     discovered = discover_installations(home, registry, project_root)
     home_resolved = home.resolve(strict=False)
@@ -3878,7 +3881,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--into",
         type=Path,
-        default=Path.cwd(),
+        default=None,
         help="project directory (default: the current one)",
     )
     parser.add_argument(
@@ -3928,16 +3931,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.uninstall:
         if args.tools or args.status or args.interactive or args.offline or args.update:
             parser.error("--uninstall takes only --user or --into")
-        return uninstall(home=Path.home(), root=args.into, user=args.user)
+        return uninstall(home=Path.home(), root=args.into or Path.cwd(), user=args.user)
 
     if args.refresh_update_cache:
         if (args.tools or args.user or args.status or args.interactive
-                or args.offline or args.uninstall or args.update):
+                or args.offline or args.uninstall or args.update
+                or args.into is not None):
             parser.error("--refresh-update-cache takes no other arguments")
         return refresh_update_cache(home=Path.home())
 
     if args.update:
-        if args.tools or args.user or args.status or args.interactive or args.offline:
+        if (args.tools or args.user or args.status or args.interactive or args.offline
+                or args.into is not None):
             parser.error("--update takes no other arguments")
         if not sys.stdin.isatty():
             parser.error("the update runs the guided setup and needs a terminal")
@@ -3952,6 +3957,10 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(
                 "--interactive cannot be combined with tools, --user, or --status"
             )
+        if args.into is not None and (
+            args.into.resolve() == Path(args.into.resolve().anchor) or not args.into.is_dir()
+        ):
+            parser.error("--into must be an existing non-root directory")
         if not sys.stdin.isatty():
             parser.error(
                 "the guided setup needs a terminal; run it from one, or install "
@@ -3959,7 +3968,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         try:
             check_online = _interactive_check_online(args.offline)
-            return interactive_setup(home=Path.home(), check_online=check_online)
+            return interactive_setup(
+                home=Path.home(), check_online=check_online, current_root=args.into
+            )
         except (EOFError, KeyboardInterrupt):
             print("\nSetup cancelled.", file=sys.stderr)
             return 130
@@ -3989,7 +4000,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.session_switch and "copilot" in tools:
         parser.error("--session-switch supports claude and codex only")
 
-    root = args.into.resolve()
+    root = (args.into or Path.cwd()).resolve()
     if not args.user and (root == Path(root.anchor) or not root.is_dir()):
         parser.error("--into must be an existing non-root directory")
     home = Path.home() if args.user else None
