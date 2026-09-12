@@ -37,7 +37,7 @@ def check(name: str, condition: bool, detail: str = "") -> None:
 
 
 def run(root: Path, *tools: str) -> list[str]:
-    return install.install(list(tools) or list(install.TOOLS), root, None)
+    return install.install(list(tools) or list(install.TOOLS), root, None).messages
 
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -160,7 +160,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp)
-    report = install.install(list(install.TOOLS), home, home)
+    report = install.install(list(install.TOOLS), home, home).messages
     source = install.user_source(home)
     check("user installs keep a managed baseline outside the checkout",
           source.is_file() and source.resolve() != install.SOURCE.resolve())
@@ -557,7 +557,7 @@ with tempfile.TemporaryDirectory() as tmp:
         item for item in install.scan_user(home) if item.kind == "legacy-user"
     ]
     report, migrated = install.migrate_legacy_user(matches[0], bundled)
-    install_report = install.install(["claude"], home, home)
+    install_report = install.install(["claude"], home, home).messages
     hook_report = install.install_version_hooks(["claude"], home, home)
     managed = [item for item in install.scan_user(home) if item.kind == "user"]
     check("Claude legacy links migrate to managed user storage",
@@ -2366,7 +2366,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp)
-    report = install.install(["claude"], home, home)
+    report = install.install(["claude"], home, home).messages
     placed = install.user_data_root(home) / install.INSTALLER_NAME
     check("a user install places the installer beside the baseline",
           placed.is_file()
@@ -2385,7 +2385,7 @@ with tempfile.TemporaryDirectory() as tmp:
           and "--update" in standalone.stdout,
           standalone.stderr or standalone.stdout)
     placed.write_bytes(b"# an outdated installer copy\n")
-    again = install.install(["claude"], home, home)
+    again = install.install(["claude"], home, home).messages
     check("an outdated installer copy is replaced",
           placed.read_bytes() == install.INSTALLER_SOURCE.read_bytes()
           and any(line.startswith("updated") and install.INSTALLER_NAME in line
@@ -2396,7 +2396,7 @@ with tempfile.TemporaryDirectory() as tmp:
     placed = install.user_data_root(home) / install.INSTALLER_NAME
     placed.parent.mkdir(parents=True)
     placed.symlink_to(home / "elsewhere.py")
-    report = install.install(["claude"], home, home)
+    report = install.install(["claude"], home, home).messages
     check("a symlinked installer copy is refused",
           any("is a symlink" in line and install.INSTALLER_NAME in line
               for line in report), str(report))
@@ -2789,6 +2789,95 @@ def cli(args: list[str], home: Path, cwd: Path | None = None):
         capture_output=True, text=True, timeout=60, env=environment,
         cwd=str(cwd) if cwd else None, stdin=subprocess.DEVNULL,
     )
+
+
+# A required file can fail while the other tools install successfully. The
+# exit status must describe the whole request, and a retry must remain safe.
+for relative in (
+    install.BASELINE,
+    "AGENTS.md",
+    f".claude/rules/{install.BASELINE}",
+    ".github/copilot-instructions.md",
+):
+    with tempfile.TemporaryDirectory() as tmp:
+        sandbox = Path(tmp)
+        home, project = sandbox / "home", sandbox / "project"
+        home.mkdir()
+        project.mkdir()
+        blocked = project / relative
+        blocked.parent.mkdir(parents=True, exist_ok=True)
+        own_content = b"Existing project instructions.\n"
+        blocked.write_bytes(own_content)
+        completed = cli(["--into", str(project)], home)
+        check(f"a blocked {relative} makes the direct installation fail",
+              completed.returncode == 1
+              and "unresolved items" in completed.stdout
+              and blocked.read_bytes() == own_content,
+              completed.stdout + completed.stderr)
+        blocked.unlink()
+        retried = cli(["--into", str(project)], home)
+        repeated = cli(["--into", str(project)], home)
+        installed = install.scan_project(project, {})
+        check(f"resolving {relative} allows a successful, repeatable installation",
+              retried.returncode == repeated.returncode == 0
+              and installed is not None and installed.tools == install.TOOLS,
+              retried.stdout + repeated.stdout)
+
+for artifact in (install.INSTALLER_NAME, install.VERSION_HOOK_NAME):
+    for guided in (False, True):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            blocked = install.user_data_root(home) / artifact
+            blocked.parent.mkdir(parents=True)
+            if artifact == install.INSTALLER_NAME:
+                blocked.mkdir()
+            else:
+                blocked.write_bytes(b"# locally maintained helper\n")
+            if guided:
+                output = []
+                code = with_agents(("codex",), lambda: install.interactive_setup(
+                    home=home, current_root=home, check_online=False,
+                    input_fn=lambda prompt: "n" if "Enable session notice" in prompt else "",
+                    output=output.append,
+                ))
+                expected_code = 2
+                text = "\n".join(output)
+            else:
+                completed = cli(["--user", "codex"], home)
+                code, expected_code = completed.returncode, 1
+                text = completed.stdout + completed.stderr
+            preserved = (blocked.is_dir() if artifact == install.INSTALLER_NAME else
+                         blocked.read_bytes() == b"# locally maintained helper\n")
+            check(f"{'guided' if guided else 'direct'} setup reports a blocked {artifact} despite a configured tool",
+                  code == expected_code and preserved
+                  and (home / ".codex" / "AGENTS.md").is_symlink()
+                  and "unresolved items" in text and "Setup complete." not in text,
+                  text)
+            if artifact == install.INSTALLER_NAME:
+                blocked.rmdir()
+            else:
+                blocked.unlink()
+            repaired = cli(["--user", "codex"], home)
+            check(f"retry installs the missing {artifact} successfully",
+                  repaired.returncode == 0 and blocked.is_file(),
+                  repaired.stdout + repaired.stderr)
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp)
+    install.install(["codex"], home, home)
+    updater = install.user_data_root(home) / install.INSTALLER_NAME
+    updater.unlink()
+    updater.mkdir()
+    output = []
+    answers = iter(["1", "copilot"])
+    code = install.interactive_setup(
+        home=home, current_root=home, check_online=False,
+        input_fn=lambda _prompt: next(answers), output=output.append,
+    )
+    check("adding a tool also reports a blocked required installer",
+          code == 2 and updater.is_dir()
+          and (home / ".copilot" / "copilot-instructions.md").is_symlink()
+          and output[-1] == "\nSetup finished with unresolved items.", str(output))
 
 
 REJECTED_ARGUMENTS = [

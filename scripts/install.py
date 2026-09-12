@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import total_ordering
 from pathlib import Path
 from typing import Callable
@@ -255,6 +255,18 @@ class Installation:
                 )
             )
         )
+
+
+@dataclass
+class SetupResult:
+    """Keep required-file failures separate from their user-facing messages."""
+
+    messages: list[str] = field(default_factory=list)
+    blocked_paths: list[Path] = field(default_factory=list)
+
+    @property
+    def incomplete(self) -> bool:
+        return bool(self.blocked_paths)
 
 
 def display_path(path: Path) -> str:
@@ -511,25 +523,26 @@ def install_link(
     report: list[str],
     *,
     relative: bool,
-) -> None:
+) -> bool:
     link = link_text(target, source, relative=relative)
     if target.is_symlink():
         if _session_link(target, source):
             report.append(f"in place {target} (session switch)")
-            return
+            return True
         if Path(os.readlink(target)) == Path(link):
             report.append(f"in place {target}")
-            return
+            return True
         report.append(f"blocked {target}: points elsewhere, remove it first")
-        return
+        return False
     if target.exists():
         report.append(
             f"blocked {target}: exists — append {source.name} to it by hand"
         )
-        return
+        return False
     target.parent.mkdir(parents=True, exist_ok=True)
     target.symlink_to(link)
     report.append(f"linked {target} -> {link}")
+    return True
 
 
 def install_copy(
@@ -539,7 +552,7 @@ def install_copy(
     root: Path,
     *,
     previous: bytes | None = None,
-) -> None:
+) -> bool:
     """Place a real copy, which Claude Code also reads from subdirectories.
 
     A link from an earlier setup becomes a copy, and a copy of the previous
@@ -548,7 +561,7 @@ def install_copy(
     if any((root / parent).is_symlink()
            for parent in target.relative_to(root).parents if parent != Path(".")):
         report.append(f"blocked {target}: a directory on its path is a symlink")
-        return
+        return False
     content = read_limited(source, MAX_BASELINE_BYTES)
     if target.is_symlink():
         if _session_link(target, source):
@@ -558,7 +571,8 @@ def install_copy(
             report.append(f"updated {target}: replaced the link with a copy")
         else:
             report.append(f"blocked {target}: points elsewhere, remove it first")
-        return
+            return False
+        return True
     if target.exists():
         try:
             current = read_limited(target, MAX_BASELINE_BYTES) if target.is_file() else None
@@ -571,9 +585,11 @@ def install_copy(
             report.append(f"updated {target}")
         else:
             report.append(f"blocked {target}: differs from {source.name}, replace it by hand")
-        return
+            return False
+        return True
     _write_new(target, content)
     report.append(f"copied {source.name} to {target}")
+    return True
 
 
 def _instruction_lines(target: Path) -> list[str]:
@@ -587,36 +603,37 @@ def install_import_line(
     report: list[str],
     *,
     accepted_sources: tuple[Path, ...] = (),
-) -> None:
+) -> bool:
     line = f"@{source}"
     if target.exists():
         try:
             content = read_limited(target, MAX_INSTRUCTION_BYTES).decode("utf-8")
         except (OSError, UnicodeDecodeError, ValueError):
             report.append(f"blocked {target}: cannot safely read existing file")
-            return
+            return False
         accepted_lines = {line, *(f"@{item}" for item in accepted_sources)}
         if any(item in content.splitlines() for item in accepted_lines):
             report.append(f"in place {target}")
-            return
+            return True
         # Uninstall never edits through a symlink, so setup must not either.
         if target.is_symlink():
             report.append(f"blocked {target}: is a symlink — add the line {line!r} by hand")
-            return
+            return False
         separator = "\n" if content and not content.endswith("\n") else ""
         try:
             _atomic_replace(target, f"{content}{separator}{line}\n".encode())
         except OSError:
             report.append(f"blocked {target}: cannot append the import line")
-            return
+            return False
         report.append(f"updated {target}: appended the import line")
-        return
+        return True
     if target.is_symlink():
         report.append(f"blocked {target}: is a broken symlink")
-        return
+        return False
     target.parent.mkdir(parents=True, exist_ok=True)
     _write_new(target, f"{line}\n".encode())
     report.append(f"wrote {target}")
+    return True
 
 
 def install(
@@ -625,8 +642,9 @@ def install(
     home: Path | None,
     *,
     content: bytes | None = None,
-) -> list[str]:
-    report: list[str] = []
+) -> SetupResult:
+    result = SetupResult()
+    report = result.messages
     if home is not None:
         targets = user_targets(home)
         source = place_baseline(
@@ -638,10 +656,14 @@ def install(
         source = place_baseline(root, report, content)
         relative = True
     if source is None:
-        return report
+        result.blocked_paths.append(
+            user_source(home) if home is not None else root / BASELINE
+        )
+        return result
     if home is not None:
-        _place_installer(home, report)
-        _place_version_hook(root, home, report)
+        artifacts = _place_user_artifacts(root, home)
+        report.extend(artifacts.messages)
+        result.blocked_paths.extend(artifacts.blocked_paths)
 
     for tool in tools:
         actions = targets[tool]
@@ -650,21 +672,33 @@ def install(
             continue
         for kind, target in actions:
             if kind == "link":
-                install_link(target, source, report, relative=relative)
+                configured = install_link(target, source, report, relative=relative)
             elif kind == "copy":
-                install_copy(target, source, report, root)
+                configured = install_copy(target, source, report, root)
             else:
                 accepted_sources = (
                     (targets[tool][0][1],) if home is not None and tool == "claude"
                     else ()
                 )
-                install_import_line(
+                configured = install_import_line(
                     target,
                     source,
                     report,
                     accepted_sources=accepted_sources,
                 )
-    return report
+            if not configured:
+                result.blocked_paths.append(target)
+    return result
+
+
+def _place_user_artifacts(root: Path, home: Path) -> SetupResult:
+    """Installation and update require both bundled user-level commands."""
+    result = SetupResult()
+    if _place_installer(home, result.messages) is None:
+        result.blocked_paths.append(user_data_root(home) / INSTALLER_NAME)
+    if _place_version_hook(root, home, result.messages) is None:
+        result.blocked_paths.append(version_hook_path(root, home))
+    return result
 
 
 def _place_installer(home: Path, report: list[str]) -> Path | None:
@@ -2414,30 +2448,23 @@ def update_installation(
     )
 
 
-def _refresh_updated_artifacts(
-    installation: Installation, report: list[str]
-) -> bool:
+def _refresh_updated_artifacts(installation: Installation) -> SetupResult:
     """Refresh the bundled installer/helper that belong to an updated scope.
 
     User installations always carry both files. Project installations carry
     only the helper, and only after a startup hook or session switch placed it.
-    Return whether a bundled artifact could not be refreshed.
+    Report required artifacts that could not be refreshed.
     """
-    incomplete = False
     if installation.kind in {"user", "legacy-user"}:
-        if _place_installer(installation.root, report) is None:
-            incomplete = True
-        if _place_version_hook(
-            installation.root, installation.root, report
-        ) is None:
-            incomplete = True
-    elif installation.kind == "project":
+        return _place_user_artifacts(installation.root, installation.root)
+    result = SetupResult()
+    if installation.kind == "project":
         helper = version_hook_path(installation.root, None)
         if (helper.exists() or helper.is_symlink()) and _place_version_hook(
-            installation.root, None, report
+            installation.root, None, result.messages
         ) is None:
-            incomplete = True
-    return incomplete
+            result.blocked_paths.append(helper)
+    return result
 
 
 def _read_answer(input_fn: Callable[[str], str], prompt: str) -> str:
@@ -2901,12 +2928,12 @@ def _apply_update(
     registry: dict[str, object],
     output: Callable[[str], None],
 ) -> tuple[bool, bool]:
-    report: list[str] = []
-    artifact_incomplete = _refresh_updated_artifacts(installation, report)
+    artifacts = _refresh_updated_artifacts(installation)
+    report = artifacts.messages
     artifact_changed = any(
         line.startswith(("added ", "updated ")) for line in report
     )
-    if artifact_incomplete:
+    if artifacts.incomplete:
         for line in report:
             output(f"  {line}")
         return artifact_changed, True
@@ -3215,12 +3242,12 @@ def _verify_baseline_tools(
     selected_tools: list[str],
     installed: Installation | None,
     targets: dict[str, list[tuple[str, Path]]],
-    report: list[str],
+    result: SetupResult,
     output: Callable[[str], None],
 ) -> bool:
     configured = set(installed.tools) if installed is not None else set()
     output("\nVerifying baseline setup:")
-    incomplete = False
+    incomplete = result.incomplete
     for tool in selected_tools:
         if tool in configured:
             output(f"  ✓ {TOOL_LABELS[tool]} configured")
@@ -3229,13 +3256,17 @@ def _verify_baseline_tools(
             (
                 path
                 for _kind, path in targets[tool]
-                if any(line.startswith(f"blocked {path}:") for line in report)
+                if path in result.blocked_paths
             ),
             None,
         )
         where = f", blocked at {display_path(blocked)}" if blocked else ""
         output(f"  ! {TOOL_LABELS[tool]} not configured{where}")
         incomplete = True
+    tool_paths = {path for tool in selected_tools for _kind, path in targets[tool]}
+    for path in result.blocked_paths:
+        if path not in tool_paths:
+            output(f"  ! Required file unavailable: {display_path(path)}")
     return incomplete
 
 
@@ -3289,9 +3320,10 @@ def _add_tools_interactively(
     root = installation.root
     home = None if project else root
     output("\nApplying project setup:" if project else "\nApplying user-wide setup:")
-    report = install(
+    result = install(
         tools, root if project else Path.cwd(), home, content=available.content
     )
+    report = result.messages
     # Added tools load the baseline the way a user installation already does;
     # a project gets no startup hooks.
     targets = project_targets(root) if project else user_targets(root)
@@ -3303,7 +3335,7 @@ def _add_tools_interactively(
         output(f"  {line}")
     installed = _rescan(installation, registry)
     _record_current_scope(registry, installed, available)
-    incomplete = _verify_baseline_tools(tools, installed, targets, report, output)
+    incomplete = _verify_baseline_tools(tools, installed, targets, result, output)
     added = [tool for tool in tools if installed is not None and tool in installed.tools]
     if added and not project and _session_notice_tools(installation):
         output("\nAdding the session notice, as for the other tools:")
@@ -3370,15 +3402,15 @@ def _install_project_interactively(
     # A project loads the baseline statically; startup hooks stay with the user
     # installation.
     output("\nApplying project setup:")
-    report = install(tools, root, None, content=available.content)
-    for line in report:
+    result = install(tools, root, None, content=available.content)
+    for line in result.messages:
         output(f"  {line}")
     projects = registry.get("projects", {})
     entry = projects.get(str(root)) if isinstance(projects, dict) else None
     installed = scan_project(root, entry if isinstance(entry, dict) else {})
     _record_current_scope(registry, installed, available)
     incomplete = _verify_baseline_tools(
-        tools, installed, project_targets(root), report, output
+        tools, installed, project_targets(root), result, output
     )
     return changed or installed is not None, update_incomplete or incomplete
 
@@ -3477,7 +3509,8 @@ def _install_user_interactively(
         return changed, update_incomplete
     dynamic = _choose_dynamic_loading(tools, input_fn, output)
     output("\nApplying user-wide setup:")
-    report = install(tools, Path.cwd(), home, content=available.content)
+    result = install(tools, Path.cwd(), home, content=available.content)
+    report = result.messages
     if dynamic:
         _enable_session_switch(tools, Path.cwd(), home, user_source(home), report)
     for line in report:
@@ -3493,7 +3526,7 @@ def _install_user_interactively(
     if managed:
         _record_current_scope(registry, managed[0], available)
         incomplete = _verify_baseline_tools(
-            tools, managed[0], user_targets(home), report, output
+            tools, managed[0], user_targets(home), result, output
         )
         hook_incomplete, hooks_configured = _offer_session_notice(
             managed[0], input_fn, output
@@ -3502,7 +3535,7 @@ def _install_user_interactively(
         if (hooks_configured or switched) and not update_check_enabled(registry):
             _offer_update_notice(registry, input_fn, output)
         return True, update_incomplete or incomplete or hook_incomplete
-    _verify_baseline_tools(tools, None, user_targets(home), report, output)
+    _verify_baseline_tools(tools, None, user_targets(home), result, output)
     return changed, True
 
 
@@ -4004,11 +4037,16 @@ def main(argv: list[str] | None = None) -> int:
     if not args.user and (root == Path(root.anchor) or not root.is_dir()):
         parser.error("--into must be an existing non-root directory")
     home = Path.home() if args.user else None
-    action = install_session_switch if args.session_switch else install
-    report = action(tools, root, home)
+    if args.session_switch:
+        report = install_session_switch(tools, root, home)
+        incomplete = any(line.startswith("blocked") for line in report)
+    else:
+        result = install(tools, root, home)
+        report = result.messages
+        incomplete = result.incomplete
     for line in report:
         print(line)
-    if args.session_switch and any(line.startswith("blocked") for line in report):
+    if args.session_switch and incomplete:
         return 1
 
     state_path = registry_path(Path.home())
@@ -4018,7 +4056,9 @@ def main(argv: list[str] | None = None) -> int:
     if writable:
         _register_noninteractive(registry, root, home)
         save_registry(state_path, registry)
-    return 0
+    if incomplete:
+        print("Installation finished with unresolved items.")
+    return 1 if incomplete else 0
 
 
 if __name__ == "__main__":

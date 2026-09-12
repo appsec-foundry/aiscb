@@ -288,7 +288,7 @@ class SessionSwitchTests(unittest.TestCase):
         claude = self.home / ".claude" / "CLAUDE.md"
         claude.parent.mkdir()
         claude.symlink_to(own)
-        report = install.install(["claude"], self.project, self.home)
+        report = install.install(["claude"], self.project, self.home).messages
         install._enable_session_switch(["claude"], self.project, self.home,
                                        install.user_source(self.home), report)
         self.assertTrue(any("add the line" in line for line in report), report)
@@ -299,7 +299,7 @@ class SessionSwitchTests(unittest.TestCase):
         claude = self.home / ".claude" / "CLAUDE.md"
         claude.parent.mkdir()
         claude.write_text("OWN_RULES\n")
-        report = install.install(["claude"], self.project, self.home)
+        report = install.install(["claude"], self.project, self.home).messages
         install._enable_session_switch(["claude"], self.project, self.home,
                                        install.user_source(self.home), report)
         link = install.user_targets(self.home)["claude"][0][1]
