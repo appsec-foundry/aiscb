@@ -622,13 +622,11 @@ with tempfile.TemporaryDirectory() as tmp:
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
     home = sandbox / "home"
-    plain = sandbox / "plain-directory"
     home.mkdir()
-    plain.mkdir()
     previous_cwd = Path.cwd()
     output = []
     try:
-        os.chdir(plain)
+        os.chdir(home)
         result = install.interactive_setup(
             home=home,
             input_fn=lambda _prompt: "2",
@@ -638,7 +636,7 @@ with tempfile.TemporaryDirectory() as tmp:
         )
     finally:
         os.chdir(previous_cwd)
-    check("project setup is hidden outside a detected project",
+    check("project setup is hidden in the home directory",
           result == 0
           and "This directory is not a project, so only the user-wide setup applies."
               in output
@@ -1211,11 +1209,10 @@ def guided(home: Path, state: Path, answers: list[str], *,
         prompts.append(prompt)
         return next(replies, "")
 
-    plain = home.parent / "plain"
-    plain.mkdir(exist_ok=True)
+    # Only the home directory is outside every project; any other directory counts.
     previous_cwd = Path.cwd()
     try:
-        os.chdir(plain)
+        os.chdir(home)
         result = install.interactive_setup(
             home=home, input_fn=reply, output=output.append,
             check_online=check_online, state_path=state,
@@ -1818,6 +1815,35 @@ with tempfile.TemporaryDirectory() as tmp:
           and install._session_link(project / ".claude" / "rules" / install.BASELINE, source)
           and settings.read_text() == before,
           str(output))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    plain = Path(tmp) / "plain"
+    repo = Path(tmp) / "repo"
+    for directory in (home, plain, repo / "sub", repo / ".git"):
+        directory.mkdir(parents=True)
+    (repo / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+    offered: dict[str, str] = {}
+    previous_cwd = Path.cwd()
+    try:
+        for where in (plain, repo / "sub"):
+            output: list[str] = []
+            os.chdir(where)
+            with_agents((), lambda: install.interactive_setup(
+                home=home, input_fn=lambda _prompt: "", output=output.append,
+                check_online=False, state_path=home.parent / "state.json"))
+            offered[where.name] = menu(output)[0]
+    finally:
+        os.chdir(previous_cwd)
+    check("a directory without Git is offered as a project, and Enter changes nothing",
+          offered["plain"]
+              == f"  1. install in project {install.display_path(plain.resolve())}..."
+          and not any(plain.iterdir()),
+          str(offered))
+    check("a subdirectory of a repository offers the repository root",
+          offered["sub"]
+              == f"  1. install in project {install.display_path(repo.resolve())}...",
+          str(offered))
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"

@@ -2568,8 +2568,16 @@ def _path_from_answer(answer: str, home: Path) -> Path:
     return candidate.resolve()
 
 
-def _detect_project_root(location: Path) -> Path | None:
+def _detect_project_root(location: Path, home: Path) -> Path | None:
+    """The nearest repository root, an installation here, or else this directory.
+
+    Neither the home directory nor the filesystem root is ever a project: files
+    placed there would land in the user's own tool settings.
+    """
+    stops = {home.resolve(strict=False), Path(location.anchor)}
     for candidate in (location, *location.parents):
+        if candidate in stops:
+            break
         git_marker = candidate / ".git"
         if git_marker.is_file() or (
             git_marker.is_dir() and (git_marker / "HEAD").is_file()
@@ -2577,7 +2585,7 @@ def _detect_project_root(location: Path) -> Path | None:
             return candidate
         if candidate == location and scan_project(candidate, {}) is not None:
             return candidate
-    return None
+    return None if location in stops else location
 
 
 def _is_previous_managed_user(installation: Installation) -> bool:
@@ -3528,7 +3536,7 @@ def interactive_setup(
     location = (current_root or Path.cwd()).resolve()
     if not location.is_dir():
         raise ValueError("current location must be an existing directory")
-    project_root = location if explicit_project else _detect_project_root(location)
+    project_root = location if explicit_project else _detect_project_root(location, home)
     if project_root is not None and project_root == Path(project_root.anchor):
         project_root = None
     discovered = discover_installations(home, registry, project_root)
