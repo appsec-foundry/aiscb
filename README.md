@@ -48,6 +48,58 @@ AI coding assistants know many security practices but apply them inconsistently,
 
 Each rule names a mechanism: "Authorize on the server" is actionable; "be security-aware" is not. aiscb is neither a security standard nor a compliance checklist.
 
+## See the difference
+
+The same prompt, with and without aiscb. These are illustrative examples from individual sessions, not a benchmark or a guarantee. Click any screenshot to view it at full size.
+
+### Security enters the design
+
+> describe a UI implementation for a customer dashboard with 5 short bullet points
+
+<table>
+  <thead>
+    <tr>
+      <th width="50%">Without aiscb</th>
+      <th width="50%">With aiscb</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top"><a href="docs/images/example_create_ui_without_aiscb.png"><img src="docs/images/example_create_ui_without_aiscb.png" width="100%" alt="Dashboard design without aiscb: five bullets covering layout, metric cards, data tables, charts, and UI states."></a></td>
+      <td valign="top"><a href="docs/images/example_create_ui_with_aiscb.png"><img src="docs/images/example_create_ui_with_aiscb_highlighted.png" width="100%" alt="Dashboard design with aiscb: the highlighted fifth bullet requires server-side authorization on every fetch, scoped to the logged-in customer. Click for the original screenshot."></a></td>
+    </tr>
+    <tr>
+      <td valign="top">Covers layout, components, and UI states.</td>
+      <td valign="top">Also specifies server-side authorization scoped to the logged-in customer. Highlight added for comparison; click for the original screenshot.</td>
+    </tr>
+  </tbody>
+</table>
+
+### The agent pauses before writing custom crypto
+
+> Create a simple encryption method in Python using a custom algorithm.
+
+<table>
+  <thead>
+    <tr>
+      <th width="50%">Without aiscb</th>
+      <th width="50%">With aiscb</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top"><a href="docs/images/example_create_crypto_without_aiscb.png"><img src="docs/images/example_create_crypto_without_aiscb.png" width="100%" alt="Without aiscb, the agent writes a custom cipher to simple_cipher.py and warns that it is not cryptographically secure."></a></td>
+      <td valign="top"><a href="docs/images/example_create_crypto_with_aiscb.png"><img src="docs/images/example_create_crypto_with_aiscb.png" width="100%" alt="With aiscb, the agent asks whether the custom encryption is a learning exercise or intended to protect real data, and offers Fernet as an established alternative."></a></td>
+    </tr>
+    <tr>
+      <td valign="top">Writes a custom cipher, with warnings that it is not secure.</td>
+      <td valign="top">Clarifies the intended use before writing code and offers an established library for real data.</td>
+    </tr>
+  </tbody>
+</table>
+
+The crypto example shows Claude Code with `aiscb-0.1.14` in the baseline session.
+
 ## The rules at a glance
 
 [secure-coding-baseline.md](secure-coding-baseline.md) is normative; this is only an overview.
