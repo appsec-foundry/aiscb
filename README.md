@@ -52,6 +52,29 @@ Each rule names a mechanism: "Authorize on the server" is actionable; "be securi
 
 The same prompt, with and without aiscb. These are illustrative examples from individual sessions, not a benchmark or a guarantee. Click any screenshot to view it at full size.
 
+### A small login app, with security choices made explicit
+
+> Create a very small Flask real web application with a user login function
+
+<table>
+  <thead>
+    <tr>
+      <th width="50%">Without aiscb</th>
+      <th width="50%">With aiscb</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td valign="top"><a href="docs/images/example_create_flask_without_aiscb.png"><img src="docs/images/example_create_flask_without_aiscb.png" width="100%" alt="Flask login app without aiscb: reports password hashing, a protected dashboard, and login tests; warns that the default secret key must be replaced before deployment."></a></td>
+      <td valign="top"><a href="docs/images/example_create_flask_with_aiscb.png"><img src="docs/images/example_create_flask_with_aiscb_highlighted.png" width="100%" alt="Flask login app with aiscb: highlighted paragraphs describe CSRF protection, login rate limits, session protections, a required external secret key, and a Security note on TLS and rate-limit storage. Click for the original screenshot."></a></td>
+    </tr>
+    <tr>
+      <td valign="top">Reports password hashing, protected routes, and login tests. Leaves a default secret key with advice to replace it before deployment.</td>
+      <td valign="top">Also reports CSRF protection, login limits, session protections, and a required external secret key. A <strong>Security note (aiscb)</strong> identifies remaining deployment risks. Highlights added for comparison; click for the original screenshot.</td>
+    </tr>
+  </tbody>
+</table>
+
 ### Security enters the design
 
 > describe a UI implementation for a customer dashboard with 5 short bullet points
