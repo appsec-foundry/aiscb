@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import install
 import show_baseline_version as helper
@@ -105,14 +106,20 @@ class SessionSwitchTests(unittest.TestCase):
         other_hook = {"hooks": [{"type": "command", "command": "echo OTHER_HOOK"}]}
         config["hooks"]["SessionStart"].append(other_hook)
         settings.write_text(json.dumps(config))
-        copilot_before = (self.home / ".copilot" / "copilot-instructions.md").readlink()
+        copilot = (
+            self.home
+            / ".copilot"
+            / "instructions"
+            / install.VSCODE_INSTRUCTIONS_NAME
+        )
+        copilot_before = copilot.read_bytes()
         self.setup_switch(user=True)
         self.assertIn(b"OTHER_USER_RULE\r\n", claude.read_bytes())
         self.assertNotIn(original_import.encode(), claude.read_bytes())
         config = json.loads(settings.read_text())
         self.assertEqual(config["permissions"], {"deny": ["Bash(curl *)"]})
         self.assertIn(other_hook, config["hooks"]["SessionStart"])
-        self.assertEqual((self.home / ".copilot" / "copilot-instructions.md").readlink(), copilot_before)
+        self.assertEqual(copilot.read_bytes(), copilot_before)
         found = install.scan_user(self.home, {})
         self.assertEqual(found[0].tools, ("claude", "codex", "copilot"))
         before = self.snapshot()
@@ -179,11 +186,38 @@ class SessionSwitchTests(unittest.TestCase):
             self.assertTrue(report[0].startswith("blocked"))
             self.assertEqual(self.snapshot(), before)
 
+    def test_user_switch_refuses_a_symlinked_agent_config_root(self):
+        source = install.user_source(self.home)
+        source.parent.mkdir(parents=True)
+        source.write_bytes(install.SOURCE.read_bytes())
+        outside = self.root / "outside-claude-config"
+        outside.mkdir()
+        (outside / install.BASELINE).symlink_to(source)
+        (outside / "CLAUDE.md").write_text(f"@{source}\n")
+        configured = self.home / "claude-config"
+        configured.symlink_to(outside)
+        before = self.snapshot()
+        with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(configured)}):
+            report = install.install_session_switch(
+                ["claude"], self.project, self.home
+            )
+        self.assertTrue(report[0].startswith("blocked session switch"), report)
+        self.assertIn("directory is a symlink", report[0])
+        self.assertEqual(self.snapshot(), before)
+
     def test_static_installation_ignores_switch(self):
         install.install(["codex"], self.project, None)
         target = self.project / "AGENTS.md"
         self.assertEqual(target.read_text(), install.SOURCE.read_text())
         self.assertFalse(install._session_link(target, self.project / install.BASELINE))
+
+    def test_static_loading_accepts_a_symlink_fallback_copy(self):
+        with patch.object(Path, "symlink_to", side_effect=OSError("not permitted")):
+            install.install(["codex"], self.project, None)
+        target = self.project / "AGENTS.md"
+        report = install.install_static_loading(["codex"], self.project, None)
+        self.assertFalse(any(line.startswith("blocked") for line in report), report)
+        self.assertTrue(install._copy_matches(target, self.project / install.BASELINE))
 
     def test_missing_hook_has_explicit_loader_fallback(self):
         self.setup_switch()
@@ -354,7 +388,7 @@ class SessionSwitchTests(unittest.TestCase):
         (self.project / ".claude" / "settings.json").unlink()
         report = install.install_static_loading(["claude"], self.project, None)
         self.assertFalse(any(line.startswith("blocked") for line in report), report)
-        self.assertTrue(install._copy_matches(rule, source))
+        self.assertTrue(install._link_points_to(rule, source))
         self.assertFalse(loader.exists())
         self.assertTrue(install._version_hook_is_installed("codex", self.project, None))
         self.assertFalse(install._version_hook_is_installed("claude", self.project, None))

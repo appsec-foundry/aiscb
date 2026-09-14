@@ -16,6 +16,7 @@ import tempfile
 import time
 import urllib.error
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
@@ -47,8 +48,8 @@ with tempfile.TemporaryDirectory() as tmp:
     baseline = root / install.BASELINE
     check("the project gets the real baseline", baseline.is_file())
     rule = root / ".claude" / "rules" / install.BASELINE
-    check("Claude reads a real copy from .claude/rules, also from subdirectories",
-          not rule.is_symlink() and rule.read_bytes() == baseline.read_bytes())
+    check("Claude reads the baseline through its supported rules symlink",
+          rule.is_symlink() and rule.resolve() == baseline.resolve())
     check("the AGENTS.md tools read it from the root",
           (root / "AGENTS.md").is_symlink())
     check("Copilot reads it from .github",
@@ -97,17 +98,17 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
-    run(root, "codex")
+    run(root, "claude")
     rule = root / ".claude" / "rules" / install.BASELINE
-    rule.parent.mkdir(parents=True)
-    rule.symlink_to(Path("..") / ".." / install.BASELINE)
-    check("a rule link from an earlier setup still counts as installed",
+    rule.unlink()
+    rule.write_bytes((root / install.BASELINE).read_bytes())
+    check("a rule copy from an earlier setup still counts as installed",
           "claude" in install.scan_project(root).tools)
     report = run(root, "claude")
-    check("setup replaces that link with a copy",
+    check("setup keeps the exact earlier copy",
           not rule.is_symlink()
           and rule.read_bytes() == (root / install.BASELINE).read_bytes()
-          and any("replaced the link with a copy" in line for line in report),
+          and any("copy fallback" in line for line in report),
           str(report))
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -127,9 +128,22 @@ with tempfile.TemporaryDirectory() as tmp:
     outside.mkdir()
     (root / ".claude").symlink_to(outside)
     report = run(root, "claude")
-    check("setup never copies through a symlinked .claude directory",
+    check("setup never writes through a symlinked .claude directory",
           not any(outside.iterdir())
           and any("a directory on its path is a symlink" in line for line in report),
+          str(report))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp) / "home"
+    outside = Path(tmp) / "outside"
+    home.mkdir()
+    outside.mkdir()
+    (home / ".copilot").symlink_to(outside)
+    report = install.install(["copilot"], home, home).messages
+    check("user setup never writes through a symlinked .copilot directory",
+          not any(outside.iterdir())
+          and sum("a directory on its path is a symlink" in line
+                  for line in report) == 1,
           str(report))
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -140,6 +154,9 @@ with tempfile.TemporaryDirectory() as tmp:
         root.mkdir()
         (root / install.BASELINE).write_bytes(older)
         run(root, "claude")
+        rule = root / ".claude" / "rules" / install.BASELINE
+        rule.unlink()
+        rule.write_bytes(older)
     (kept / ".claude" / "rules" / install.BASELINE).write_text("# edited copy\n")
     reports = {}
     for root in (Path(tmp) / "managed", kept):
@@ -170,9 +187,91 @@ with tempfile.TemporaryDirectory() as tmp:
           f"@{source}" in (home / ".claude" / "CLAUDE.md").read_text().splitlines())
     check("Codex's user instructions read the managed baseline",
           (home / ".codex" / "AGENTS.md").resolve() == source.resolve(), str(report))
-    check("Copilot's user instructions read the managed baseline",
-          (home / ".copilot" / "copilot-instructions.md").resolve()
-          == source.resolve(), str(report))
+    vscode = home / ".copilot" / "instructions" / install.VSCODE_INSTRUCTIONS_NAME
+    check("Copilot CLI and VS Code get shared always-on user instructions",
+          vscode.read_bytes() == install.VSCODE_INSTRUCTIONS_HEADER + source.read_bytes(),
+          str(report))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp)
+    configured = {
+        "CLAUDE_CONFIG_DIR": str(home / "profiles" / "claude"),
+        "CODEX_HOME": str(home / "profiles" / "codex"),
+        "COPILOT_HOME": str(home / "profiles" / "copilot"),
+    }
+    with patch.dict(os.environ, configured):
+        report = install.install(list(install.TOOLS), home, home).messages
+        hook_report = install.install_version_hooks(list(install.TOOLS), home, home)
+        found = install.scan_user(home)
+    check("user installs honor every agent configuration directory",
+          (home / "profiles" / "claude" / install.BASELINE).exists()
+          and (home / "profiles" / "codex" / "AGENTS.md").exists()
+          and install._vscode_copy_matches(
+              home / "profiles" / "copilot" / "instructions"
+              / install.VSCODE_INSTRUCTIONS_NAME,
+              install.user_source(home),
+          )
+          and install._vscode_copy_matches(
+              home / ".copilot" / "instructions"
+              / install.VSCODE_INSTRUCTIONS_NAME,
+              install.user_source(home),
+          )
+          and found and found[0].tools == install.TOOLS,
+          str(report))
+    check("user hooks honor every agent configuration directory",
+          (home / "profiles" / "claude" / "settings.json").is_file()
+          and (home / "profiles" / "codex" / "hooks.json").is_file()
+          and (home / "profiles" / "copilot" / "hooks"
+               / install.COPILOT_VERSION_HOOK_NAME).is_file(),
+          str(hook_report))
+    removed: list[str] = []
+    with patch.dict(os.environ, configured):
+        install.remove_installation(found[0], removed)
+    check("uninstall honors every agent configuration directory",
+          not (home / "profiles" / "claude" / install.BASELINE).exists()
+          and not (home / "profiles" / "codex" / "AGENTS.md").exists()
+          and not (home / "profiles" / "copilot" / "instructions"
+                   / install.VSCODE_INSTRUCTIONS_NAME).exists()
+          and not (home / ".copilot" / "instructions"
+                   / install.VSCODE_INSTRUCTIONS_NAME).exists(),
+          str(removed))
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    override = root / "AGENTS.override.md"
+    override.write_text("# temporary override\n")
+    report = run(root, "codex")
+    check("a project Codex override blocks an ineffective installation",
+          not (root / "AGENTS.md").exists()
+          and any(str(override) in line and "overrides" in line for line in report),
+          str(report))
+    override.unlink()
+    run(root, "codex")
+    override.write_text("# later override\n")
+    check("status stops claiming Codex loads a shadowed AGENTS.md",
+          "codex" not in install.scan_project(root, {}).tools)
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp)
+    override = home / ".codex" / "AGENTS.override.md"
+    override.parent.mkdir()
+    override.write_text("# global override\n")
+    report = install.install(["codex"], home, home).messages
+    check("a global Codex override blocks an ineffective installation",
+          not (home / ".codex" / "AGENTS.md").exists()
+          and any(str(override) in line and "overrides" in line for line in report),
+          str(report))
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    with patch.object(Path, "symlink_to", side_effect=OSError("not permitted")):
+        report = run(root, "codex")
+    target = root / "AGENTS.md"
+    check("a failed symlink falls back to an exact managed copy",
+          target.is_file() and not target.is_symlink()
+          and target.read_bytes() == (root / install.BASELINE).read_bytes()
+          and "codex" in install.scan_project(root, {}).tools,
+          str(report))
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp)
@@ -184,6 +283,20 @@ with tempfile.TemporaryDirectory() as tmp:
           len(found) == 1
           and found[0].kind == "unmanaged"
           and found[0].tools == ("codex",))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp)
+    current = install.bundled_baseline()
+    older = current.content.replace(current.baseline_id.encode(), b"aiscb-0.1.13", 1)
+    install.install(["copilot"], home, home, content=older)
+    previous = [item for item in install.scan_user(home) if item.kind == "user"][0]
+    report, updated = install.update_installation(previous, current, True)
+    vscode = home / ".copilot" / "instructions" / install.VSCODE_INSTRUCTIONS_NAME
+    check("a user update refreshes the VS Code instruction copy",
+          updated is not None
+          and vscode.read_bytes()
+              == install.VSCODE_INSTRUCTIONS_HEADER + current.content,
+          str(report))
 
 with tempfile.TemporaryDirectory() as tmp:
     state = Path(tmp) / "installations.json"
@@ -299,7 +412,9 @@ with tempfile.TemporaryDirectory() as tmp:
           helper.is_file()
           and "SessionStart" in claude_config["hooks"]
           and "SessionStart" in codex_config["hooks"]
-          and "sessionStart" in copilot_config["hooks"], str(hook_report))
+          and "sessionStart" in copilot_config["hooks"]
+          and "--output copilot" in copilot_config["hooks"]["sessionStart"][0]["bash"],
+          str(hook_report))
     check("the Claude hook merge preserves existing settings",
           claude_config.get("permissions")
           == {"ask": ["Edit(/specs/**)"]}, str(claude_config))
@@ -544,6 +659,25 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp)
+    source = install.user_source(home)
+    source.parent.mkdir(parents=True)
+    source.write_bytes(bundled.content)
+    previous = home / ".copilot" / "copilot-instructions.md"
+    previous.parent.mkdir()
+    previous.symlink_to(source)
+    legacy = install.scan_user(home)
+    report, migrated = install.migrate_legacy_user(legacy[0], bundled)
+    shared = home / ".copilot" / "instructions" / install.VSCODE_INSTRUCTIONS_NAME
+    check("earlier Copilot user links migrate to one shared instruction file",
+          migrated is not None
+          and migrated.kind == "user"
+          and migrated.tools == ("copilot",)
+          and not previous.exists()
+          and install._vscode_copy_matches(shared, source),
+          str(report))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp)
     old_checkout = home / "old-checkout"
     old_checkout.mkdir()
     old_source = old_checkout / install.BASELINE
@@ -596,7 +730,11 @@ with tempfile.TemporaryDirectory() as tmp:
           result == 0
           and install.user_source(home).is_file()
           and (home / ".codex" / "AGENTS.md").is_symlink()
-          and (home / ".copilot" / "copilot-instructions.md").is_symlink(),
+          and install._vscode_copy_matches(
+              home / ".copilot" / "instructions"
+              / install.VSCODE_INSTRUCTIONS_NAME,
+              install.user_source(home),
+          ),
           str(output))
     check("guided setup can add the user-wide session notice for all three tools",
           (home / ".claude" / "settings.json").is_file()
@@ -908,7 +1046,8 @@ with tempfile.TemporaryDirectory() as tmp:
           and not any("individually" in line for line in output)
           and (home / ".codex" / "AGENTS.md").is_symlink()
           and not (home / ".claude" / "rules").exists()
-          and not (home / ".copilot" / "copilot-instructions.md").exists(),
+          and not (home / ".copilot" / "instructions"
+                   / install.VSCODE_INSTRUCTIONS_NAME).exists(),
           str(prompts))
     check("a baseline update persists the complete verified user bundle",
           installed_installer.read_bytes() == install.INSTALLER_SOURCE.read_bytes()
@@ -1392,6 +1531,33 @@ with tempfile.TemporaryDirectory() as tmp:
     check("an agent command on PATH counts", on_path == ("claude", "codex"))
 
 with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp)
+    extension = home / ".vscode" / "extensions" / "github.copilot-chat-1.2.3"
+    extension.mkdir(parents=True)
+    original_which = install.shutil.which
+    try:
+        install.shutil.which = lambda _name: None
+        vscode_found = real_found_agents(home)
+    finally:
+        install.shutil.which = original_which
+    check("the VS Code Copilot extension is discovered as a supported agent",
+          vscode_found == ("copilot",), str(vscode_found))
+
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp)
+    instruction = home / ".copilot" / "instructions" / "personal.instructions.md"
+    instruction.parent.mkdir(parents=True)
+    instruction.write_text("personal instructions\n")
+    original_which = install.shutil.which
+    try:
+        install.shutil.which = lambda _name: None
+        instruction_found = real_found_agents(home)
+    finally:
+        install.shutil.which = original_which
+    check("an existing VS Code personal instruction reveals Copilot",
+          instruction_found == ("copilot",), str(instruction_found))
+
+with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp) / "home"
     home.mkdir()
     state = Path(tmp) / "state.json"
@@ -1408,7 +1574,7 @@ with tempfile.TemporaryDirectory() as tmp:
           and output == [
               "AI Secure Coding Baseline setup",
               "\nNo supported coding agent found "
-              "(Claude Code, Codex, GitHub Copilot CLI).",
+              "(Claude Code, Codex, GitHub Copilot (CLI or VS Code)).",
               "Install one of them, then run the setup again.",
           ]
           and prompts == [] and contacted == [] and not state.exists(),
@@ -1427,7 +1593,7 @@ with tempfile.TemporaryDirectory() as tmp:
           tool_list(output) == [
               "  1. Claude Code",
               "  2. Codex",
-              "  Not found: GitHub Copilot CLI",
+              "  Not found: GitHub Copilot (CLI or VS Code)",
           ]
           and prompts[1] == "Tools (comma-separated; Enter = both): "
           and bool(user) and user[0].tools == ("claude", "codex"),
@@ -1522,7 +1688,11 @@ with tempfile.TemporaryDirectory() as tmp:
     check("adding the one missing tool asks nothing more and inherits the notice",
           result == 0
           and prompts == ["Choice [5]: "]
-          and (home / ".copilot" / "copilot-instructions.md").is_symlink()
+          and install._vscode_copy_matches(
+              home / ".copilot" / "instructions"
+              / install.VSCODE_INSTRUCTIONS_NAME,
+              install.user_source(home),
+          )
           and install._version_hook_is_installed("copilot", home, home)
           and "\nAdding the session notice, as for the other tools:" in output
           and "  ✓ GitHub Copilot session notice configured" in output
@@ -1541,7 +1711,11 @@ with tempfile.TemporaryDirectory() as tmp:
           and "  1. Codex" in output and "  2. GitHub Copilot" in output
           and prompts[1:] == ["Tools (comma-separated; Enter = both): "]
           and (home / ".codex" / "AGENTS.md").is_symlink()
-          and (home / ".copilot" / "copilot-instructions.md").is_symlink()
+          and install._vscode_copy_matches(
+              home / ".copilot" / "instructions"
+              / install.VSCODE_INSTRUCTIONS_NAME,
+              install.user_source(home),
+          )
           and not install._version_hook_is_installed("codex", home, home)
           and output[-1]
               == f"\nCodex and GitHub Copilot now load {bundled.baseline_id}.",
@@ -1598,8 +1772,11 @@ with tempfile.TemporaryDirectory() as tmp:
           result == 0
           and install._session_link(home / ".claude" / install.BASELINE, source)
           and install._session_link(home / ".codex" / "AGENTS.md", source)
-          and install._link_points_to(home / ".copilot" / "copilot-instructions.md",
-                                      source)
+          and install._vscode_copy_matches(
+              home / ".copilot" / "instructions"
+              / install.VSCODE_INSTRUCTIONS_NAME,
+              source,
+          )
           and any(line.endswith("approve its hooks in Codex with /hooks")
                   for line in output)
           and prompts[3:] == [
@@ -1618,8 +1795,10 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a project loads statically and asks nothing about startup hooks",
           result == 0
           and prompts == ["Choice [2]: ", "Tools (comma-separated; Enter = all): "]
-          and install._copy_matches(project / ".claude" / "rules" / install.BASELINE,
-                                    project / install.BASELINE)
+          and install._link_points_to(
+              project / ".claude" / "rules" / install.BASELINE,
+              project / install.BASELINE,
+          )
           and install._link_points_to(project / "AGENTS.md", project / install.BASELINE)
           and not (project / ".claude" / "settings.json").exists()
           and not (project / ".codex").exists()
@@ -1783,8 +1962,8 @@ with tempfile.TemporaryDirectory() as tmp:
     config = json.loads(settings.read_text())
     check("removing them returns the project to static loading",
           result == 0
-          and install._copy_matches(project / ".claude" / "rules" / install.BASELINE, source)
           and all(install._link_points_to(target, source) for target in (
+              project / ".claude" / "rules" / install.BASELINE,
               project / "AGENTS.md", project / ".github" / "copilot-instructions.md"))
           and not any(install._version_hook_is_installed(tool, project, None)
                       for tool in install.TOOLS)
@@ -1892,9 +2071,8 @@ with tempfile.TemporaryDirectory() as tmp:
         check("local setup installs every tool in 1 without installing in its parent, sibling, or user scope",
               result == 0 and installed is not None
               and installed.tools == install.TOOLS
-              and install._copy_matches(local / ".claude" / "rules" / install.BASELINE,
-                                        local / install.BASELINE)
               and all(install._link_points_to(target, local / install.BASELINE) for target in (
+                  local / ".claude" / "rules" / install.BASELINE,
                   local / "AGENTS.md", local / ".github" / "copilot-instructions.md"))
               and set(parent.iterdir()) == {local, sibling}
               and not any(sibling.iterdir())
@@ -2948,7 +3126,11 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     check("adding a tool also reports a blocked required installer",
           code == 2 and updater.is_dir()
-          and (home / ".copilot" / "copilot-instructions.md").is_symlink()
+          and install._vscode_copy_matches(
+              home / ".copilot" / "instructions"
+              / install.VSCODE_INSTRUCTIONS_NAME,
+              install.user_source(home),
+          )
           and output[-1] == "\nSetup finished with unresolved items.", str(output))
 
 

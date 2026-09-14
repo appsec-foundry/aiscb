@@ -201,7 +201,7 @@ make uninstall                         # remove what the installer placed here
 make help                              # list available commands
 ```
 
-`install-codex` and `install-copilot` work like `install-claude`. Project installations support Claude Code, Codex, and GitHub Copilot; user installations support Claude Code, Codex, and Copilot CLI. Guided setup offers a user installation only for tools it finds on this computer and stops outside a project if it finds none; `make install-<tool> ARGS=--user` installs one anyway.
+`install-codex` and `install-copilot` work like `install-claude`. Project installations support Claude Code, Codex, and GitHub Copilot; user installations support Claude Code, Codex, Copilot CLI, and Copilot Chat/agent in VS Code. The installer honors `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `COPILOT_HOME`. Guided setup offers a user installation only for tools it finds on this computer and stops outside a project if it finds none; `make install-<tool> ARGS=--user` installs one anyway.
 
 Guided setup changes only the user installation or current project you select. The current project is the nearest Git repository root above the current directory, otherwise the directory itself; your home directory never counts. It keeps existing instruction files and other configured tools. Overwriting an edited baseline creates a backup and requires confirmation; uninstall also previews its changes and defaults to no.
 
@@ -239,7 +239,7 @@ Claude Code does **not** load `AGENTS.md` automatically. Use one of its own inst
 
   If `AGENTS.md` already contains the rules, import it with `@AGENTS.md`.
 
-- **Project without `CLAUDE.md`:** copy the baseline to `.claude/rules/secure-coding-baseline.md`. Claude Code skips a symlink there when a session starts in a subdirectory.
+- **Project without `CLAUDE.md`:** link or copy the baseline to `.claude/rules/secure-coding-baseline.md`. Claude Code resolves rule-file symlinks normally.
 
 - **User:** import it from `~/.claude/CLAUDE.md` with an absolute path:
 
@@ -274,13 +274,14 @@ Copilot's coding agent and VS Code support `AGENTS.md`. For other Copilot surfac
   Support varies by surface. Use `copilot-instructions.md` for the broadest coverage; see the [support matrix](https://docs.github.com/en/copilot/reference/custom-instructions-support).
 
 - **Your account:** paste it into personal custom instructions for Copilot Chat on GitHub.
+- **Your computer:** guided setup installs one `applyTo: "**"` instruction under `~/.copilot/instructions/`; Copilot CLI and Copilot Chat/agent in VS Code both load it.
 - **Organization:** add it under Organization settings → Copilot → Custom instructions. This covers GitHub.com, not IDEs. See [organization custom instructions](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-organization-instructions).
 
 ### AGENTS.md
 
 Many coding agents read [`AGENTS.md`](https://agents.md/). Check the compatibility list for the tools you use.
 
-`AGENTS.md` cannot import another file, so use a symlink to avoid a second copy:
+`AGENTS.md` has no portable import syntax shared by coding agents, so use a symlink to avoid a second copy:
 
 ```bash
 # One file on disk, two names:

@@ -136,6 +136,24 @@ def check_success(failures: list[str]) -> None:
             if VALID_ID not in payload.get("systemMessage", ""):
                 failures.append(f"json output lacks the ID: {payload}")
 
+    code, out, err = call(ABOVE, ["--output", "copilot"])
+    if code != 0:
+        failures.append(f"copilot output: returned {code}: {err[:200]}")
+    else:
+        lines = out.splitlines()
+        try:
+            progress, result = (json.loads(line) for line in lines)
+        except (ValueError, json.JSONDecodeError) as exc:
+            failures.append(f"copilot output is not line-delimited JSON: {exc}")
+        else:
+            if (
+                progress.get("type") != "progress"
+                or progress.get("temporary") is not False
+                or VALID_ID not in progress.get("message", "")
+                or result != {}
+            ):
+                failures.append(f"copilot output has the wrong shape: {lines}")
+
     # The helper reads up to the limit, so the limit itself must still work.
     at_limit = VALID + "x" * (MAX_BASELINE_BYTES - len(VALID))
     code, out, _ = call({BASELINE: at_limit})

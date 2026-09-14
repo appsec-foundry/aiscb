@@ -55,6 +55,7 @@ KNOWN_HOOK_DIGESTS = (
     "7f957e239e7397587781c1498b85db20dad608c5ba1caebfa1d8696673370a9e",
     "fc6fe42137868f7024df6cf340fa375380150ed5aa12eda2b3bee2cfae93eaa7",
     "b2fa3d5d1d9d891117ca9b035db243129d24b6eb0c2c54c3568eef623f83bdea",
+    "2b4c6d1f85b76294169d1b958bc2b0a98da6952b6b9768c99823cb2d7582cec5",
 )
 COPILOT_VERSION_HOOK_NAME = "aiscb-baseline-version.json"
 PREVIOUS_COPILOT_VERSION_HOOK_NAME = "aisec-baseline-version.json"
@@ -64,15 +65,23 @@ TOOL_LABELS = {
     "codex": "Codex",
     "copilot": "GitHub Copilot",
 }
-# At user level Copilot means Copilot CLI, the tool the guided setup looks for.
-AGENT_LABELS = {**TOOL_LABELS, "copilot": "GitHub Copilot CLI"}
+# User setup supports both the CLI and the VS Code integration.
+AGENT_LABELS = {**TOOL_LABELS, "copilot": "GitHub Copilot (CLI or VS Code)"}
 # What this installer places in a tool's directory in the home directory.
 # Anything else there was written by the tool itself.
 INSTALLER_ENTRIES = {
     "claude": {BASELINE, "CLAUDE.md", "settings.json"},
     "codex": {"AGENTS.md", "hooks.json"},
-    "copilot": {"copilot-instructions.md", "hooks"},
+    "copilot": {"copilot-instructions.md", "hooks", "instructions"},
 }
+
+CONFIG_HOME_ENV = {
+    "claude": "CLAUDE_CONFIG_DIR",
+    "codex": "CODEX_HOME",
+    "copilot": "COPILOT_HOME",
+}
+VSCODE_INSTRUCTIONS_NAME = "secure-coding.instructions.md"
+VSCODE_INSTRUCTIONS_HEADER = b'---\napplyTo: "**"\n---\n\n'
 
 OFFICIAL_NAME = "aiscb"
 GITHUB_REPOSITORY = "appsec-foundry/aiscb"
@@ -418,9 +427,7 @@ def latest_available(check_online: bool) -> tuple[Baseline, str, Baseline | None
 
 def project_targets(root: Path) -> dict[str, list[tuple[str, Path]]]:
     return {
-        # A copy, not a link: Claude Code skips a linked rule whose target lies
-        # outside the directory a session starts in.
-        "claude": [("copy", root / ".claude" / "rules" / BASELINE)],
+        "claude": [("link", root / ".claude" / "rules" / BASELINE)],
         "codex": [("link", root / "AGENTS.md")],
         "copilot": [("link", root / ".github" / "copilot-instructions.md")],
     }
@@ -438,20 +445,79 @@ def user_source(home: Path) -> Path:
     return user_data_root(home) / BASELINE
 
 
+def tool_config_root(tool: str, home: Path) -> Path:
+    """Return the configuration directory the tool itself will use."""
+    configured = os.environ.get(CONFIG_HOME_ENV[tool])
+    if configured:
+        path = Path(configured).expanduser()
+        return path if path.is_absolute() else (Path.cwd() / path).resolve()
+    return home / f".{tool}"
+
+
 def user_targets(home: Path) -> dict[str, list[tuple[str, Path]]]:
+    claude = tool_config_root("claude", home)
+    codex = tool_config_root("codex", home)
+    copilot = tool_config_root("copilot", home)
+    vscode_instruction = (
+        home / ".copilot" / "instructions" / VSCODE_INSTRUCTIONS_NAME
+    )
+    copilot_instruction = copilot / "instructions" / VSCODE_INSTRUCTIONS_NAME
+    copilot_actions = [("vscode_copy", copilot_instruction)]
+    if vscode_instruction != copilot_instruction:
+        copilot_actions.append(("vscode_copy", vscode_instruction))
     return {
         "claude": [
-            ("link", home / ".claude" / BASELINE),
-            ("import_line", home / ".claude" / "CLAUDE.md"),
+            ("link", claude / BASELINE),
+            ("import_line", claude / "CLAUDE.md"),
         ],
-        "codex": [("link", home / ".codex" / "AGENTS.md")],
-        "copilot": [("link", home / ".copilot" / "copilot-instructions.md")],
+        "codex": [("link", codex / "AGENTS.md")],
+        "copilot": copilot_actions,
     }
+
+
+def previous_copilot_user_target(home: Path) -> Path:
+    return tool_config_root("copilot", home) / "copilot-instructions.md"
+
+
+def user_target_scope(tool: str, target: Path, home: Path) -> Path:
+    config_root = tool_config_root(tool, home)
+    try:
+        target.relative_to(config_root)
+    except ValueError:
+        return home
+    return config_root
+
+
+def codex_override(target: Path) -> Path | None:
+    """Return the same-scope override that prevents Codex from reading target."""
+    override = target.with_name("AGENTS.override.md")
+    if not override.exists() and not override.is_symlink():
+        return None
+    if override.is_symlink() or not override.is_file():
+        return override
+    try:
+        return override if override.stat().st_size else None
+    except OSError:
+        return override
 
 
 def link_text(target: Path, source: Path, *, relative: bool) -> str:
     """Inside a project the link stays relative, so a clone keeps working."""
     return os.path.relpath(source, target.parent) if relative else str(source)
+
+
+def _has_symlinked_parent(target: Path, scope: Path) -> bool:
+    if scope.is_symlink():
+        return True
+    try:
+        parents = target.relative_to(scope).parents
+    except ValueError:
+        return True
+    return any(
+        (scope / parent).is_symlink()
+        for parent in parents
+        if parent != Path(".")
+    )
 
 
 def _write_new(path: Path, content: bytes) -> None:
@@ -523,7 +589,11 @@ def install_link(
     report: list[str],
     *,
     relative: bool,
+    scope: Path,
 ) -> bool:
+    if _has_symlinked_parent(target, scope):
+        report.append(f"blocked {target}: a directory on its path is a symlink")
+        return False
     link = link_text(target, source, relative=relative)
     if target.is_symlink():
         if _session_link(target, source):
@@ -535,12 +605,24 @@ def install_link(
         report.append(f"blocked {target}: points elsewhere, remove it first")
         return False
     if target.exists():
+        if target.is_file() and _copy_matches(target, source):
+            report.append(f"in place {target} (copy fallback)")
+            return True
         report.append(
             f"blocked {target}: exists — append {source.name} to it by hand"
         )
         return False
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.symlink_to(link)
+    try:
+        target.symlink_to(link)
+    except OSError:
+        try:
+            _write_new(target, read_limited(source, MAX_BASELINE_BYTES))
+        except OSError:
+            report.append(f"blocked {target}: cannot create a link or copy")
+            return False
+        report.append(f"copied {source.name} to {target} (symlink unavailable)")
+        return True
     report.append(f"linked {target} -> {link}")
     return True
 
@@ -558,8 +640,7 @@ def install_copy(
     A link from an earlier setup becomes a copy, and a copy of the previous
     baseline follows an update. Any other content stays untouched.
     """
-    if any((root / parent).is_symlink()
-           for parent in target.relative_to(root).parents if parent != Path(".")):
+    if _has_symlinked_parent(target, root):
         report.append(f"blocked {target}: a directory on its path is a symlink")
         return False
     content = read_limited(source, MAX_BASELINE_BYTES)
@@ -589,6 +670,62 @@ def install_copy(
         return True
     _write_new(target, content)
     report.append(f"copied {source.name} to {target}")
+    return True
+
+
+def _vscode_content(source: Path) -> bytes:
+    return VSCODE_INSTRUCTIONS_HEADER + read_limited(source, MAX_BASELINE_BYTES)
+
+
+def _vscode_copy_matches(target: Path, source: Path) -> bool:
+    if target.is_symlink() or not target.is_file():
+        return False
+    try:
+        return read_limited(target, MAX_INSTRUCTION_BYTES) == _vscode_content(source)
+    except (OSError, ValueError):
+        return False
+
+
+def install_vscode_copy(
+    target: Path,
+    source: Path,
+    report: list[str],
+    *,
+    scope: Path,
+    previous: bytes | None = None,
+) -> bool:
+    """Install shared Copilot CLI and VS Code instructions with frontmatter."""
+    if _has_symlinked_parent(target, scope):
+        report.append(f"blocked {target}: a directory on its path is a symlink")
+        return False
+    content = _vscode_content(source)
+    previous_content = (
+        VSCODE_INSTRUCTIONS_HEADER + previous if previous is not None else None
+    )
+    if target.is_symlink():
+        report.append(f"blocked {target}: is a symlink")
+        return False
+    if target.exists():
+        try:
+            current = (
+                read_limited(target, MAX_INSTRUCTION_BYTES)
+                if target.is_file()
+                else None
+            )
+        except (OSError, ValueError):
+            current = None
+        if current == content:
+            report.append(f"in place {target}")
+            return True
+        if previous_content is not None and current == previous_content:
+            _atomic_replace(target, content)
+            report.append(f"updated {target}")
+            return True
+        report.append(f"blocked {target}: contains different Copilot instructions")
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _write_new(target, content)
+    report.append(f"copied Copilot instructions to {target}")
     return True
 
 
@@ -670,11 +807,33 @@ def install(
         if not actions:
             report.append(f"skipped {tool}: no documented location for this scope")
             continue
+        if tool == "codex":
+            override = codex_override(actions[0][1])
+            if override is not None:
+                report.append(
+                    f"blocked {actions[0][1]}: {override} overrides it; "
+                    "include the baseline in that override or remove it first"
+                )
+                result.blocked_paths.append(actions[0][1])
+                continue
+        tool_configured = True
         for kind, target in actions:
             if kind == "link":
-                configured = install_link(target, source, report, relative=relative)
+                scope = root if home is None else user_target_scope(
+                    tool, target, home
+                )
+                configured = install_link(
+                    target, source, report, relative=relative, scope=scope
+                )
             elif kind == "copy":
                 configured = install_copy(target, source, report, root)
+            elif kind == "vscode_copy":
+                configured = install_vscode_copy(
+                    target,
+                    source,
+                    report,
+                    scope=user_target_scope(tool, target, home),
+                )
             else:
                 accepted_sources = (
                     (targets[tool][0][1],) if home is not None and tool == "claude"
@@ -687,7 +846,13 @@ def install(
                     accepted_sources=accepted_sources,
                 )
             if not configured:
+                tool_configured = False
                 result.blocked_paths.append(target)
+        if home is not None and tool == "copilot" and tool_configured:
+            previous = previous_copilot_user_target(home)
+            if _managed_entry("link", previous, source):
+                previous.unlink()
+                report.append(f"removed {previous}: replaced by shared instructions")
     return result
 
 
@@ -962,7 +1127,9 @@ def _session_hook(tool: str, helper: Path, project: bool) -> dict[str, object]:
 
 
 def _session_hook_path(tool: str, root: Path, home: Path | None) -> Path:
-    directory = (home or root) / f".{tool}"
+    directory = (
+        tool_config_root(tool, home) if home is not None else root / f".{tool}"
+    )
     return directory / ("settings.json" if tool == "claude" else "hooks.json")
 
 
@@ -978,10 +1145,10 @@ def _session_check_hook(tool: str, helper: Path, project: bool) -> dict[str, obj
 def _check_session_parents(path: Path, scope: Path) -> None:
     """A repository link must not redirect setup into another tool's settings."""
     for parent in path.parents:
-        if parent == scope:
-            return
         if parent.is_symlink():
             raise ValueError("a session installation directory is a symlink")
+        if parent == scope:
+            return
     raise ValueError("session installation path is outside the selected scope")
 
 
@@ -1017,13 +1184,14 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
             raise ValueError("loader contains different content")
         for tool in tools:
             target = targets[tool][0][1]
+            tool_scope = root if home is None else tool_config_root(tool, home)
             for _, path in targets[tool]:
-                _check_session_parents(path, home or root)
+                _check_session_parents(path, tool_scope)
             if target.exists() or target.is_symlink():
                 if not _managed_entry(targets[tool][0][0], target, source):
                     raise ValueError("an instruction file is not an exact managed link")
             path = _session_hook_path(tool, root, home)
-            _check_session_parents(path, home or root)
+            _check_session_parents(path, tool_scope)
             config, existed = _read_hook_config(path)
             if config.get("disableAllHooks") is True:
                 raise ValueError("hooks are disabled in the selected settings")
@@ -1145,17 +1313,16 @@ def install_static_loading(tools: list[str], root: Path, home: Path | None) -> l
         read_baseline(source)
         for tool in tools:
             target = targets[tool][0][1]
+            tool_scope = root if home is None else tool_config_root(tool, home)
             for _, path in targets[tool]:
-                _check_session_parents(path, home or root)
-            if _link_points_to(target, source) or (
-                targets[tool][0][0] == "copy" and _copy_matches(target, source)
-            ):
+                _check_session_parents(path, tool_scope)
+            if _link_points_to(target, source) or _copy_matches(target, source):
                 report.append(f"in place {target}")
                 continue
             if not _session_link(target, source):
                 raise ValueError("an instruction file is not an exact managed link")
             path = _session_hook_path(tool, root, home)
-            _check_session_parents(path, home or root)
+            _check_session_parents(path, tool_scope)
             config, existed = _read_hook_config(path)
             hooks = config.setdefault("hooks", {})
             if not isinstance(hooks, dict):
@@ -1272,12 +1439,12 @@ def _codex_version_hook(helper: Path, project: bool) -> dict[str, object]:
 def _copilot_version_config(helper: Path, project: bool) -> dict[str, object]:
     if project:
         script = f"{VERSION_HOOK_DIR}/{VERSION_HOOK_NAME}"
-        bash = f"python3 {shlex.quote(script)} --output message"
-        powershell = f"py -3 {_powershell_quote(script)} --output message"
+        bash = f"python3 {shlex.quote(script)} --output copilot"
+        powershell = f"py -3 {_powershell_quote(script)} --output copilot"
         cwd: str | None = "."
     else:
-        bash = f"python3 {shlex.quote(str(helper))} --output message"
-        powershell = f"py -3 {_powershell_quote(str(helper))} --output message"
+        bash = f"python3 {shlex.quote(str(helper))} --output copilot"
+        powershell = f"py -3 {_powershell_quote(str(helper))} --output copilot"
         cwd = None
     hook: dict[str, object] = {
         "type": "command",
@@ -1370,14 +1537,14 @@ def install_version_hooks(
             continue
         if tool == "claude":
             settings = (root / ".claude" / "settings.json") if project else (
-                home / ".claude" / "settings.json"
+                tool_config_root("claude", home) / "settings.json"
             )
             _install_merged_version_hook(
                 settings, "SessionStart", _claude_version_hook(helper, project), report
             )
         elif tool == "codex":
             settings = (root / ".codex" / "hooks.json") if project else (
-                home / ".codex" / "hooks.json"
+                tool_config_root("codex", home) / "hooks.json"
             )
             _install_merged_version_hook(
                 settings, "SessionStart", _codex_version_hook(helper, project), report
@@ -1386,13 +1553,14 @@ def install_version_hooks(
             settings = (
                 root / ".github" / "hooks" / COPILOT_VERSION_HOOK_NAME
                 if project
-                else home / ".copilot" / "hooks" / COPILOT_VERSION_HOOK_NAME
+                else tool_config_root("copilot", home)
+                / "hooks"
+                / COPILOT_VERSION_HOOK_NAME
             )
             previous_settings = (
                 root / ".github" / "hooks" / PREVIOUS_COPILOT_VERSION_HOOK_NAME
                 if project
-                else home
-                / ".copilot"
+                else tool_config_root("copilot", home)
                 / "hooks"
                 / PREVIOUS_COPILOT_VERSION_HOOK_NAME
             )
@@ -1435,7 +1603,7 @@ def _version_hook_is_installed(tool: str, root: Path, home: Path | None) -> bool
             )
         if tool == "claude":
             path = (root / ".claude" / "settings.json") if project else (
-                home / ".claude" / "settings.json"
+                tool_config_root("claude", home) / "settings.json"
             )
             config, _existed = _read_hook_config(path)
             hooks = config.get("hooks")
@@ -1445,7 +1613,7 @@ def _version_hook_is_installed(tool: str, root: Path, home: Path | None) -> bool
             ) in entries
         if tool == "codex":
             path = (root / ".codex" / "hooks.json") if project else (
-                home / ".codex" / "hooks.json"
+                tool_config_root("codex", home) / "hooks.json"
             )
             config, _existed = _read_hook_config(path)
             hooks = config.get("hooks")
@@ -1457,7 +1625,9 @@ def _version_hook_is_installed(tool: str, root: Path, home: Path | None) -> bool
             path = (
                 root / ".github" / "hooks" / COPILOT_VERSION_HOOK_NAME
                 if project
-                else home / ".copilot" / "hooks" / COPILOT_VERSION_HOOK_NAME
+                else tool_config_root("copilot", home)
+                / "hooks"
+                / COPILOT_VERSION_HOOK_NAME
             )
             config, _existed = _read_hook_config(path)
             return config == _copilot_version_config(helper, project)
@@ -1867,7 +2037,9 @@ def _managed_entry(kind: str, target: Path, source: Path) -> bool:
     """
     if _link_points_to(target, source) or _session_link(target, source):
         return True
-    return kind == "copy" and _copy_matches(target, source)
+    if kind == "vscode_copy":
+        return _vscode_copy_matches(target, source)
+    return kind in {"link", "copy"} and _copy_matches(target, source)
 
 
 def _import_contains(target: Path, source: Path) -> bool:
@@ -1886,13 +2058,16 @@ def installed_tools(
     for tool, actions in targets.items():
         if not actions:
             continue
+        if tool == "codex" and codex_override(actions[0][1]) is not None:
+            continue
         matches = []
         for kind, target in actions:
-            if kind in {"link", "copy"}:
+            if kind in {"link", "copy", "vscode_copy"}:
                 matches.append(_managed_entry(kind, target, source))
             else:
                 matches.append(_import_contains(target, source) or any(
-                    _session_link(link, source) and _import_contains(target, link)
+                    (_link_points_to(link, source) or _session_link(link, source))
+                    and _import_contains(target, link)
                     for action, link in actions if action == "link"
                 ))
         if all(matches):
@@ -1938,24 +2113,47 @@ def scan_unmanaged_project_files(root: Path) -> list[Installation]:
 def scan_user(home: Path, user_entry: object = None) -> list[Installation]:
     targets = user_targets(home)
     sources: dict[Path, set[str]] = {}
+    legacy_sources: set[Path] = set()
+    managed_path = user_source(home)
+    managed = managed_path.resolve(strict=False)
+    managed_is_regular = managed_path.is_file() and not managed_path.is_symlink()
+
+    if managed_is_regular:
+        for tool in installed_tools(targets, managed_path):
+            sources.setdefault(managed, set()).add(tool)
+        if any(
+            _managed_entry(kind, target, managed_path)
+            for actions in targets.values()
+            for kind, target in actions
+            if kind in {"link", "copy", "vscode_copy"}
+        ):
+            sources.setdefault(managed, set())
 
     claude_link = targets["claude"][0][1]
     if claude_link.is_symlink():
         source = _instruction_source(claude_link)
-        if _import_contains(
-            targets["claude"][1][1], source
-        ) or _import_contains(targets["claude"][1][1], claude_link):
+        if source != managed and (
+            _import_contains(targets["claude"][1][1], source)
+            or _import_contains(targets["claude"][1][1], claude_link)
+        ):
             sources.setdefault(source, set()).add("claude")
 
-    for tool in ("codex", "copilot"):
+    for tool in ("codex",):
         link = targets[tool][0][1]
         if link.is_symlink():
             source = _instruction_source(link)
-            sources.setdefault(source, set()).add(tool)
+            if source != managed:
+                sources.setdefault(source, set()).add(tool)
 
-    managed_path = user_source(home)
-    managed = managed_path.resolve(strict=False)
-    managed_is_regular = managed_path.is_file() and not managed_path.is_symlink()
+    previous_copilot = previous_copilot_user_target(home)
+    if previous_copilot.is_symlink():
+        source = _instruction_source(previous_copilot)
+        sources.setdefault(source, set()).add("copilot")
+        legacy_sources.add(source)
+    elif managed_is_regular and _copy_matches(previous_copilot, managed_path):
+        sources.setdefault(managed, set()).add("copilot")
+        legacy_sources.add(managed)
+
     if isinstance(user_entry, dict) and managed not in sources and managed_is_regular:
         sources[managed] = set()
 
@@ -1968,9 +2166,13 @@ def scan_user(home: Path, user_entry: object = None) -> list[Installation]:
         except (OSError, ValueError):
             continue
         is_managed = managed_is_regular and source == managed
+        kind = (
+            "user" if is_managed and source not in legacy_sources
+            else "legacy-user"
+        )
         installations.append(
             Installation(
-                "user" if is_managed else "legacy-user",
+                kind,
                 home,
                 source,
                 baseline,
@@ -1984,6 +2186,7 @@ def scan_user(home: Path, user_entry: object = None) -> list[Installation]:
     if (
         claude_file.is_file()
         and not claude_file.is_symlink()
+        and not (managed_is_regular and _copy_matches(claude_file, managed_path))
         and claude_file.resolve(strict=False) not in seen
         and _import_contains(targets["claude"][1][1], claude_file)
     ):
@@ -2002,6 +2205,10 @@ def scan_user(home: Path, user_entry: object = None) -> list[Installation]:
         if (
             instruction_file.is_file()
             and not instruction_file.is_symlink()
+            and not (
+                managed_is_regular
+                and _copy_matches(instruction_file, managed_path)
+            )
             and instruction_file.resolve(strict=False) not in seen
         ):
             try:
@@ -2012,6 +2219,24 @@ def scan_user(home: Path, user_entry: object = None) -> list[Installation]:
                 Installation("unmanaged", home, instruction_file, baseline, (tool,))
             )
             seen.add(instruction_file.resolve(strict=False))
+    if (
+        previous_copilot.is_file()
+        and not previous_copilot.is_symlink()
+        and not (
+            managed_is_regular and _copy_matches(previous_copilot, managed_path)
+        )
+        and previous_copilot.resolve(strict=False) not in seen
+    ):
+        try:
+            baseline = read_baseline(previous_copilot)
+        except (OSError, ValueError):
+            pass
+        else:
+            installations.append(
+                Installation(
+                    "unmanaged", home, previous_copilot, baseline, ("copilot",)
+                )
+            )
     return installations
 
 
@@ -2161,21 +2386,21 @@ def _remove_version_hooks(root: Path, home: Path | None, report: list[str]) -> N
     for tool in TOOLS:
         if tool == "claude":
             path = (root / ".claude" / "settings.json") if project else (
-                home / ".claude" / "settings.json"
+                tool_config_root("claude", home) / "settings.json"
             )
             _remove_merged_version_hook(
                 path, "SessionStart", _claude_version_hook(helper, project), report
             )
         elif tool == "codex":
             path = (root / ".codex" / "hooks.json") if project else (
-                home / ".codex" / "hooks.json"
+                tool_config_root("codex", home) / "hooks.json"
             )
             _remove_merged_version_hook(
                 path, "SessionStart", _codex_version_hook(helper, project), report
             )
         else:
             hook_root = root / ".github" / "hooks" if project else (
-                home / ".copilot" / "hooks"
+                tool_config_root("copilot", home) / "hooks"
             )
             for name in (
                 COPILOT_VERSION_HOOK_NAME,
@@ -2234,9 +2459,14 @@ def remove_installation(installation: Installation, report: list[str]) -> bool:
     home = None if project else installation.root
     targets = project_targets(root) if project else user_targets(root)
     session_claude = _session_link(targets["claude"][0][1], installation.source)
+    if not project:
+        previous_copilot = previous_copilot_user_target(root)
+        if _managed_entry("link", previous_copilot, installation.source):
+            previous_copilot.unlink()
+            report.append(f"removed {previous_copilot}")
     for actions in targets.values():
         for kind, target in actions:
-            if kind in {"link", "copy"}:
+            if kind in {"link", "copy", "vscode_copy"}:
                 if _managed_entry(kind, target, installation.source):
                     target.unlink()
                     report.append(f"removed {target}")
@@ -2347,6 +2577,14 @@ def migrate_legacy_user(
                 complete = complete and (
                     _link_points_to(target, destination)
                     or _link_points_to(target, installation.source)
+                    or _copy_matches(target, destination)
+                    or _copy_matches(target, installation.source)
+                )
+            elif kind == "vscode_copy":
+                complete = complete and (
+                    (not target.exists() and not target.is_symlink())
+                    or _vscode_copy_matches(target, destination)
+                    or _vscode_copy_matches(target, installation.source)
                 )
             else:
                 complete = complete and not target.is_symlink() and (
@@ -2363,12 +2601,31 @@ def migrate_legacy_user(
                     continue
                 _atomic_symlink(target, destination)
                 report.append(f"linked {target} -> {destination}")
+            elif kind == "vscode_copy":
+                if not install_vscode_copy(
+                    target,
+                    destination,
+                    report,
+                    scope=user_target_scope(tool, target, home),
+                    previous=installation.baseline.content,
+                ):
+                    complete = False
             elif tool == "claude" and _import_contains(target, claude_link):
                 continue
             elif not _replace_import(target, installation.source, destination):
                 report.append(f"blocked {target}: import changed since discovery")
                 complete = False
         if complete:
+            if tool == "copilot":
+                previous = previous_copilot_user_target(home)
+                if _managed_entry("link", previous, installation.source) or (
+                    installation.source != destination
+                    and _managed_entry("link", previous, destination)
+                ):
+                    previous.unlink()
+                    report.append(
+                        f"removed {previous}: replaced by shared instructions"
+                    )
             migrated.append(tool)
 
     if not migrated:
@@ -2422,11 +2679,43 @@ def update_installation(
         report.append(f"backed up {installation.source} to {backup}")
 
     _atomic_replace(installation.source, available.content)
-    if installation.kind == "project" and "claude" in installation.tools:
-        install_copy(
-            project_targets(installation.root)["claude"][0][1], installation.source,
-            report, installation.root, previous=installation.baseline.content,
-        )
+    targets = (
+        project_targets(installation.root)
+        if installation.kind == "project"
+        else user_targets(installation.root)
+    )
+    for tool in installation.tools:
+        for kind, target in targets[tool]:
+            if kind == "vscode_copy":
+                install_vscode_copy(
+                    target,
+                    installation.source,
+                    report,
+                    scope=user_target_scope(tool, target, installation.root),
+                    previous=installation.baseline.content,
+                )
+            elif (
+                kind in {"link", "copy"}
+                and target.is_file()
+                and not target.is_symlink()
+            ):
+                scope = (
+                    installation.root
+                    if installation.kind == "project"
+                    else tool_config_root(tool, installation.root)
+                )
+                install_copy(
+                    target,
+                    installation.source,
+                    report,
+                    scope,
+                    previous=installation.baseline.content,
+                )
+        if installation.kind == "user" and tool == "copilot":
+            previous = previous_copilot_user_target(installation.root)
+            if _managed_entry("link", previous, installation.source):
+                previous.unlink()
+                report.append(f"removed {previous}: replaced by shared instructions")
     if installation.baseline.version == available.version:
         report.append(
             f"replaced differing {installation.baseline.baseline_id} content "
@@ -2496,10 +2785,38 @@ def ask_yes_no(
 def _agent_found(tool: str, home: Path) -> bool:
     if shutil.which(tool):
         return True
+    if tool == "copilot":
+        try:
+            extension_found = any(
+                entry.is_dir()
+                and entry.name.startswith(
+                    ("github.copilot-", "github.copilot-chat-")
+                )
+                for root in (
+                    home / ".vscode" / "extensions",
+                    home / ".vscode-insiders" / "extensions",
+                    home / ".vscode-server" / "extensions",
+                    home / ".vscode-server-insiders" / "extensions",
+                )
+                if root.is_dir()
+                for entry in root.iterdir()
+            )
+        except OSError:
+            extension_found = False
+        if extension_found:
+            return True
+        try:
+            if any(
+                entry.name != VSCODE_INSTRUCTIONS_NAME
+                for entry in (home / ".copilot" / "instructions").iterdir()
+            ):
+                return True
+        except OSError:
+            pass
     try:
         return any(
             entry.name not in INSTALLER_ENTRIES[tool]
-            for entry in (home / f".{tool}").iterdir()
+            for entry in tool_config_root(tool, home).iterdir()
         )
     except OSError:
         return False

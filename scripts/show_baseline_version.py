@@ -193,9 +193,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--part", type=int, choices=range(SESSION_PARTS))
     parser.add_argument(
         "--output",
-        choices=("message", "json"),
+        choices=("message", "json", "copilot"),
         default="message",
-        help="plain startup banner or hook JSON with a visible system message",
+        help="plain startup banner or tool-specific hook JSON",
     )
     args = parser.parse_args(argv)
     if args.session_check:
@@ -240,6 +240,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.output == "json":
         print(json.dumps({"systemMessage": message}))
+    elif args.output == "copilot":
+        print(json.dumps({"type": "progress", "message": message, "temporary": False}))
+        print("{}")
     else:
         print(message)
     return 0
