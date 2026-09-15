@@ -201,7 +201,7 @@ make uninstall                         # remove what the installer placed here
 make help                              # list available commands
 ```
 
-`install-codex` and `install-copilot` work like `install-claude`. Project installations support Claude Code, Codex, and GitHub Copilot; user installations support Claude Code, Codex, Copilot CLI, and Copilot Chat/agent in VS Code. The installer honors `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `COPILOT_HOME`. Guided setup offers a user installation only for tools it finds on this computer and stops outside a project if it finds none; `make install-<tool> ARGS=--user` installs one anyway.
+`install-codex` and `install-copilot` work like `install-claude`. Project installations support Claude Code, Codex, and GitHub Copilot, including Copilot Chat in Visual Studio. User installations support Claude Code, Codex, Copilot CLI, and Copilot Chat/agent in VS Code; Visual Studio's personal instructions are set up separately below. The installer honors `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `COPILOT_HOME`. Guided setup offers a user installation only for tools it finds on this computer and stops outside a project if it finds none; `make install-<tool> ARGS=--user` installs one anyway.
 
 Guided setup changes only the user installation or current project you select. The current project is the nearest Git repository root above the current directory, otherwise the directory itself; your home directory never counts. It keeps existing instruction files and other configured tools. Overwriting an edited baseline creates a backup and requires confirmation; uninstall also previews its changes and defaults to no.
 
@@ -275,7 +275,10 @@ Copilot's coding agent and VS Code support `AGENTS.md`. For other Copilot surfac
 
 - **Your account:** paste it into personal custom instructions for Copilot Chat on GitHub.
 - **Your computer:** guided setup installs one `applyTo: "**"` instruction under `~/.copilot/instructions/`; Copilot CLI and Copilot Chat/agent in VS Code both load it.
-- **Organization:** add it under Organization settings → Copilot → Custom instructions. This covers GitHub.com, not IDEs. See [organization custom instructions](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-organization-instructions).
+- **Visual Studio 2026 personal instructions:** copy the baseline to `%USERPROFILE%\copilot-instructions.md` on Windows, or append it if the file already contains personal preferences. Visual Studio also saves user-level Copilot preferences there; guided setup does not manage this file. See [Visual Studio's instructions documentation](https://learn.microsoft.com/en-us/visualstudio/ide/copilot-context-overview?view=visualstudio).
+- **Organization:** add it under Organization settings → Copilot → Custom instructions. GitHub.com, Visual Studio 2026 18.8 or later, and VS Code can use these instructions for Copilot Chat in organization repositories. In VS Code, enable `github.copilot.chat.organizationInstructions.enabled`; in Visual Studio, check **Tools → Options → GitHub → Copilot → Copilot Chat** if organization instructions are disabled. See [organization custom instructions](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-organization-instructions), [VS Code](https://code.visualstudio.com/docs/agent-customization/custom-instructions), and [Visual Studio 2026](https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-notes).
+
+These instructions guide Copilot Chat and agents; VS Code does not apply them to inline suggestions as you type. See [VS Code's custom instructions documentation](https://code.visualstudio.com/docs/agent-customization/custom-instructions).
 
 ### AGENTS.md
 
@@ -317,7 +320,7 @@ This is a reference, not an automatic import.
 
 Use each tool's managed instruction location for organization-wide setup: managed-policy `CLAUDE.md`, Copilot organization instructions, or Codex admin configuration.
 
-For cross-tool delivery and additional organization rules, see [adapting aiscb inside an organization](docs/adapting-in-an-organization.md) and the [organization bundle example](examples/organization-bundle/).
+For cross-tool delivery and additional organization rules, see [adapting aiscb inside an organization](docs/adapting-in-an-organization.md), the [agent integration and verification guide](docs/agent-integration-verification.md), and the [organization bundle example](examples/organization-bundle/).
 
 For Claude Code, an [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) organization profile can distribute and verify an adapted baseline.
 

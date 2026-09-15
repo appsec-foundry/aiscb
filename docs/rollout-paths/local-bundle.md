@@ -2,6 +2,8 @@
 
 Use this rollout path to distribute the baseline and organization policy files to developer machines or project repositories. Read the [shared content and overlay rules](../adapting-in-an-organization.md#define-the-shared-content) first. This is an implementation plan, not a ready-to-install package.
 
+For each client entry point and evidence that instructions actually loaded, use the [agent integration and verification guide](../agent-integration-verification.md).
+
 ## Deployment inputs
 
 Resolve these from the organization's existing setup before implementing:
@@ -56,7 +58,7 @@ Claude Code expands local `@` imports at startup; importing every pack there def
 
 Codex builds its project instruction chain from the repository root to the working directory at startup. A session started at the root does not gain a child's startup instructions merely by later editing that child. Make its pack discoverable from the root and use the overlay's routing rule. Generate combined text rather than assuming an `@` import. See the official OpenAI documentation for [AGENTS.md](https://developers.openai.com/codex/guides/agents-md/) and [skills](https://developers.openai.com/codex/skills/).
 
-Copilot support differs between chat, code review, IDEs, and agents. Verify the selected surface against its [instruction support matrix](https://docs.github.com/en/copilot/reference/custom-instructions-support) and [skill documentation](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills). Where on-demand loading is unavailable, include the applicable packs in the initial adapter and account for their size.
+Copilot support differs between chat, code review, IDEs, and agents. Verify the selected surface against its [instruction support matrix](https://docs.github.com/en/copilot/reference/custom-instructions-support), [skill documentation](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills), and [Visual Studio skill documentation](https://learn.microsoft.com/en-us/visualstudio/ide/copilot-agent-skills?view=visualstudio) (Visual Studio 2026 18.5 or later, agent mode). Where on-demand loading is unavailable, include the applicable packs in the initial adapter and account for their size.
 
 ## Update and roll back
 
