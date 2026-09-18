@@ -4,6 +4,11 @@ aiscb tells an assistant how to behave. It cannot know what your organization ha
 
 Putting everything into one large instruction file is the obvious way and the wrong one. Every session pays for the whole file, even a CSS change, and rules that matter for an authentication change are buried among rules that do not. This guide keeps aiscb unchanged, adds a short overlay that always applies, and moves detailed requirements into packs that the assistant loads only when the task needs them.
 
+This guide assumes the complete aiscb baseline remains always loaded. See the
+[modular baseline proposal](modular-baseline-proposal.md) for a future design
+that also splits aiscb itself into an always-on core and official modules while
+retaining the organization overlay and packs.
+
 The guide is an implementation recommendation, not part of the normative baseline. Acme names, versions, URLs, and digest placeholders are examples to replace.
 
 ## How the layers fit together
