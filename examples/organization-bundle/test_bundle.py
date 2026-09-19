@@ -106,7 +106,22 @@ with tempfile.TemporaryDirectory() as tmp:
           and "[aiscb-AGENTAUTH-001]" in (out / "complete-policy.md").read_text()
           and "[ACME-" in (out / "complete-policy.md").read_text())
     for tool in build.ADAPTERS:
-        for skill_name, module_id in (("aiscb-web-auth", "aiscb:web-auth"),
+        adapter = (out / "adapters" / tool / build.ADAPTERS[tool][0]).read_text()
+        for module in json.loads((out / "catalog.json").read_text())["modules"]:
+            skill_name = module["id"].replace(":", "-")
+            skill = (out / f"adapters/{tool}/skills/{skill_name}/SKILL.md").read_text()
+            description = json.loads(skill.split("description: ", 1)[1].splitlines()[0])
+            discovery_line = next(line for line in adapter.splitlines()
+                                  if line.startswith(f"- `{module['id']}`"))
+            check(f"{tool} discovers {module['id']} by semantic and additional path triggers",
+                  all(module["trigger"] in surface
+                      and all(path in surface for path in module["paths"])
+                      for surface in (discovery_line, description)))
+            if not module["paths"]:
+                check(f"{tool} adds no path hint for {module['id']} without paths",
+                      "additional paths:" not in discovery_line
+                      and "additional paths:" not in description)
+        for skill_name, module_id in (("aiscb-web-auth-crypto", "aiscb:web-auth-crypto"),
                                       ("acme-authentication", "acme:authentication")):
             skill = out / f"adapters/{tool}/skills/{skill_name}/SKILL.md"
             text = skill.read_text(encoding="utf-8") if skill.is_file() else ""
@@ -118,7 +133,7 @@ with tempfile.TemporaryDirectory() as tmp:
               f"{release_dir}/blueprints/spa/1.0.0.json" in acme)
     flat_modules = sorted(path.name for path in (out / "modules").glob("*.md"))
     check("aiscb and Acme modules share one flat release directory",
-          "aiscb-web-auth.md" in flat_modules
+          "aiscb-web-auth-crypto.md" in flat_modules
           and "acme-authentication.md" in flat_modules)
     check("blueprint ships unchanged",
           (out / "blueprints/spa/1.0.0.json").read_bytes()

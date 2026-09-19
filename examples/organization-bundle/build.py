@@ -328,8 +328,14 @@ def build(source: Path, aiscb_path: Path, out: Path, install_root: Path,
     put("catalog.json", (json.dumps(merged_catalog, indent=2) + "\n").encode("utf-8"))
 
     body = fill(overlay[len(IMPORT_MARKER):])
+    triggers = {
+        module["id"]: module["trigger"] + (
+            "; additional paths: " + ", ".join(module["paths"]) if module["paths"] else ""
+        )
+        for module in merged_modules
+    }
     discovery = "## Configured Module Catalog\n\n" + "\n".join(
-        f"- `{module['id']}` — {module['trigger']}"
+        f"- `{module['id']}` — {triggers[module['id']]}"
         for module in merged_modules
     ) + "\n"
     combined = aiscb["core"].rstrip("\n") + "\n\n" + body.rstrip("\n") + "\n\n" + discovery
@@ -341,7 +347,7 @@ def build(source: Path, aiscb_path: Path, out: Path, install_root: Path,
         put(f"adapters/{tool}/{name}", text.encode("utf-8"))
         for module in merged_modules:
             skill_name = module["id"].replace(":", "-")
-            description = json.dumps(f"{module['id']}: {module['trigger']}")
+            description = json.dumps(f"{module['id']}: {triggers[module['id']]}")
             inventory = {entry["id"]: entry for entry in merged_modules}
             selected = [inventory[module_id] for module_id in closure(inventory, [module["id"]])]
             module_body = "\n\n".join(read_text(out / entry["artifact"]).rstrip()

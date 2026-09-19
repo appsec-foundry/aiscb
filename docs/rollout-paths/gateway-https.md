@@ -31,7 +31,7 @@ The gateway supplies initial instructions. The assistant selects every matching
 `aiscb:*` and organization module in one pass and calls one bounded loader.
 Gateway injection itself installs no skills, tools, or network access.
 
-The catalog includes `mcp-integrations` and `retrieval-memory` automatically
+The catalog includes `mcp-clients-servers` and `llm-retrieval-memory` automatically
 when built from the current source. These are coding rules, not a deployed MCP
 loader. A future MCP policy-loader service itself needs the MCP integration
 controls, but merely calling it must not trigger MCP implementation rules for

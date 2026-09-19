@@ -3,6 +3,7 @@
 
 import importlib.util
 import json
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -30,9 +31,57 @@ class PolicyTests(unittest.TestCase):
         digest = record["digest"]
         return self.root / ".aiscb/releases" / digest, digest
 
+    def test_renamed_modules_reach_every_adapter_and_reject_old_ids(self):
+        renamed = {
+            "web-auth": "web-auth-crypto",
+            "data-boundaries": "data-handling",
+            "secrets-bootstrap": "secrets-initialization",
+            "deployment-runtime": "deployment-environments",
+            "agent-systems": "llm-agents",
+            "retrieval-memory": "llm-retrieval-memory",
+            "mcp-integrations": "mcp-clients-servers",
+        }
+        catalog = json.loads((ROOT / "baseline/catalog.json").read_text())
+        expected = {"aiscb:" + name for name in renamed.values()}
+        expected.update(("aiscb:llm-applications", "aiscb:supply-chain"))
+        self.assertEqual({m["id"] for m in catalog["modules"]}, expected)
+        for entry in catalog["modules"]:
+            if entry["id"] in {"aiscb:web-auth-crypto", "aiscb:deployment-environments",
+                               "aiscb:llm-agents", "aiscb:llm-retrieval-memory"}:
+                introduction = (ROOT / "baseline" / entry["file"]).read_text().split("\n## ", 1)[0]
+                self.assertIn(entry["trigger"], " ".join(introduction.split()))
+        bundle = self.root / "bundle"
+        _, org_digest = org.build(org.HERE, ROOT / "baseline", bundle, self.root / "managed")
+        for organization in (False, True):
+            target = self.root / ("organization" if organization else "official")
+            target.mkdir()
+            kwargs = {"bundle": bundle, "expected": org_digest} if organization else {}
+            installer.install(list(installer.ENTRY_POINTS), target, modular=True, **kwargs)
+            record = json.loads((target / ".aiscb/installation.json").read_text())
+            release = target / ".aiscb/releases" / record["digest"]
+            for rel in installer.ENTRY_POINTS.values():
+                initial = (target / rel).read_text()
+                for entry in catalog["modules"]:
+                    self.assertIn(f"- `{entry['id']}`: {entry['trigger']}", initial)
+                command = initial.split("Load selected IDs with `", 1)[1].split(" MODULE_ID", 1)[0]
+                result = subprocess.run([*shlex.split(command), *sorted(expected)],
+                                        cwd=ROOT, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                for entry in catalog["modules"]:
+                    for rule in entry["rules"]:
+                        self.assertEqual(result.stdout.count(f"[{rule}]"), 1)
+            for old in renamed:
+                rejected = subprocess.run(
+                    [sys.executable, str(release / "policy_loader.py"), "--digest",
+                     record["digest"], "aiscb:llm-applications", "aiscb:" + old],
+                    capture_output=True, text=True)
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertEqual(rejected.stdout, "")
+                self.assertIn("unknown module", rejected.stderr)
+
     def test_dependency_loaded_before_agent_rules(self):
         release, digest = self.installed()
-        text = loader.render(release, digest, ["aiscb:agent-systems"])
+        text = loader.render(release, digest, ["aiscb:llm-agents"])
         self.assertLess(text.index("[aiscb-LLM-001]"), text.index("[aiscb-AGENCY-001]"))
         self.assertNotIn("[aiscb-WEB-001]", text)
         self.assertEqual(text.count("[aiscb-LLM-001]"), 1)
@@ -40,7 +89,7 @@ class PolicyTests(unittest.TestCase):
             installer.install([tool], self.root, modular=True)
             initial = (self.root / installer.ENTRY_POINTS[tool]).read_text()
             self.assertIn("[aiscb-DESIGN-001]", initial)
-            self.assertIn("aiscb:agent-systems", initial)
+            self.assertIn("aiscb:llm-agents", initial)
             self.assertNotIn("[aiscb-AGENCY-001]", initial)
         self.assertIn("match", installer.status(self.root))
 
@@ -54,7 +103,7 @@ class PolicyTests(unittest.TestCase):
         module = release / "modules/aiscb-llm-applications.md"
         module.write_text(module.read_text() + "tamper")
         with self.assertRaisesRegex(ValueError, "mismatch"):
-            loader.render(release, digest, ["aiscb:agent-systems"])
+            loader.render(release, digest, ["aiscb:llm-agents"])
 
     def test_llm_application_discovery_and_renamed_dependency(self):
         release, digest = self.installed()
@@ -70,7 +119,7 @@ class PolicyTests(unittest.TestCase):
         self.assertIn("[aiscb-LLM-001]", direct)
         self.assertIn("system being built", direct)
         self.assertIn("assistant's own prompts, tool use, or code generation", direct)
-        combined = loader.render(release, digest, ["aiscb:agent-systems", "aiscb:retrieval-memory"])
+        combined = loader.render(release, digest, ["aiscb:llm-agents", "aiscb:llm-retrieval-memory"])
         self.assertEqual(combined.count("[aiscb-LLM-001]"), 1)
         for rule in ("[aiscb-AGENCY-001]", "[aiscb-RETRIEVAL-001]"):
             self.assertLess(combined.index("[aiscb-LLM-001]"), combined.index(rule))
@@ -82,17 +131,17 @@ class PolicyTests(unittest.TestCase):
 
     def test_new_modules_and_independent_mcp_loading(self):
         release, digest = self.installed()
-        text = loader.render(release, digest, ["aiscb:mcp-integrations"])
+        text = loader.render(release, digest, ["aiscb:mcp-clients-servers"])
         self.assertLess(text.index("[aiscb-EGRESS-001]"), text.index("[aiscb-MCPAUTH-001]"))
         self.assertNotIn("[aiscb-AGENCY-001]", text)
         self.assertNotIn("[aiscb-LLM-001]", text)
-        text = loader.render(release, digest, ["aiscb:retrieval-memory", "aiscb:agent-systems"])
+        text = loader.render(release, digest, ["aiscb:llm-retrieval-memory", "aiscb:llm-agents"])
         self.assertEqual(text.count("[aiscb-LLM-001]"), 1)
         self.assertLess(text.index("[aiscb-LLM-001]"), text.index("[aiscb-RETRIEVAL-001]"))
         for tool in installer.ENTRY_POINTS:
             installer.install([tool], self.root, modular=True)
             initial = (self.root / installer.ENTRY_POINTS[tool]).read_text()
-            for name in ("mcp-integrations", "retrieval-memory"):
+            for name in ("mcp-clients-servers", "llm-retrieval-memory"):
                 self.assertIn("aiscb:" + name, initial)
             self.assertNotIn("[aiscb-MCPAUTH-001]", initial)
             self.assertNotIn("[aiscb-RETRIEVAL-001]", initial)
@@ -136,7 +185,7 @@ class PolicyTests(unittest.TestCase):
         # Execute the exact generated command from outside the target project.
         text = (self.root / "AGENTS.md").read_text()
         command = text.split("Load selected IDs with `", 1)[1].split(" MODULE_ID", 1)[0]
-        result = subprocess.run([*shlex.split(command), "aiscb:mcp-integrations"],
+        result = subprocess.run([*shlex.split(command), "aiscb:mcp-clients-servers"],
                                 cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("[aiscb-MCPAUTH-001]", result.stdout)
@@ -163,12 +212,12 @@ class PolicyTests(unittest.TestCase):
         release, digest = self.installed()
         with self.assertRaisesRegex(ValueError, "manifest digest"):
             loader.load_package(release, "0" * 64)
-        module = release / "modules/aiscb-agent-systems.md"
+        module = release / "modules/aiscb-llm-agents.md"
         backup = self.root / "outside.md"
         module.rename(backup)
         module.symlink_to(backup)
         with self.assertRaisesRegex(ValueError, "symlink"):
-            loader.render(release, digest, ["aiscb:agent-systems"])
+            loader.render(release, digest, ["aiscb:llm-agents"])
 
     def test_cycles_unknown_dependencies_and_duplicate_ids(self):
         release, _ = self.installed()
@@ -266,7 +315,7 @@ class PolicyTests(unittest.TestCase):
     def test_organization_install_and_blueprints(self):
         bundle = self.root / "bundle"
         _, digest = org.build(org.HERE, ROOT / "baseline", bundle, self.root / "unused-build-root")
-        skill = (bundle / "adapters/codex/skills/aiscb-agent-systems/SKILL.md").read_text()
+        skill = (bundle / "adapters/codex/skills/aiscb-llm-agents/SKILL.md").read_text()
         self.assertLess(skill.index("[aiscb-LLM-001]"), skill.index("[aiscb-AGENCY-001]"))
         target = self.root / "project"
         target.mkdir()
@@ -276,10 +325,10 @@ class PolicyTests(unittest.TestCase):
         installer.install(["codex"], target, bundle=bundle, expected=digest, modular=True)
         record = json.loads((target / ".aiscb/installation.json").read_text())
         release = target / ".aiscb/releases" / record["digest"]
-        text = loader.render(release, record["digest"], ["acme:authentication", "aiscb:agent-systems"])
+        text = loader.render(release, record["digest"], ["acme:authentication", "aiscb:llm-agents"])
         self.assertIn("Blueprint values:", text)
 
-        for module, rule in (("mcp-integrations", "MCPAUTH"), ("retrieval-memory", "RETRIEVAL")):
+        for module, rule in (("mcp-clients-servers", "MCPAUTH"), ("llm-retrieval-memory", "RETRIEVAL")):
             selected = loader.render(release, record["digest"], ["aiscb:" + module])
             self.assertIn(f"[aiscb-{rule}-001]", selected)
             self.assertIn(f"[aiscb-{rule}-001]", (bundle / "complete-policy.md").read_text())
@@ -301,7 +350,7 @@ class PolicyTests(unittest.TestCase):
         shutil.copytree(org.HERE, source)
         for rel in ("catalog.json", "packs/authentication.md"):
             path = source / rel
-            path.write_text(path.read_text().replace("acme:authentication", "aiscb:web-auth"))
+            path.write_text(path.read_text().replace("acme:authentication", "aiscb:web-auth-crypto"))
         with self.assertRaisesRegex(org.BuildError, "collid"):
             org.build(source, ROOT / "baseline", self.root / "bad", self.root / "install")
         upstream = self.root / "upstream"
@@ -309,7 +358,7 @@ class PolicyTests(unittest.TestCase):
         path = upstream / "catalog.json"
         initial = json.loads(path.read_text())
         for field, value in (("version", "99.0.0"), ("publisher", "other"),
-                             ("requires", ["aiscb:missing"]), ("requires", ["aiscb:web-auth"])):
+                             ("requires", ["aiscb:missing"]), ("requires", ["aiscb:web-auth-crypto"])):
             catalog = json.loads(json.dumps(initial))
             catalog["modules"][0][field] = value
             path.write_text(json.dumps(catalog))

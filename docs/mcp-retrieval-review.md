@@ -16,7 +16,7 @@ Implementations must follow their supported protocol revision; this module is
 not a complete protocol-conformance checklist. It does not require HTTP OAuth
 for stdio or agent autonomy for every MCP connection.
 
-General file and outbound-request mechanisms remain in data-boundaries, informed
+General file and outbound-request mechanisms remain in data-handling, informed
 by the [OWASP file-upload guidance](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)
 and [SSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html).
 Webhook replay stays with web authentication rather than MCP. The
@@ -27,7 +27,7 @@ memory gaps closed, along with remaining non-goals.
 
 The catalog drives complete assembly, local snapshots, organization skills,
 and the gateway's complete block. There is no separate module copy list in the
-installer. MCP requires data-boundaries; retrieval-memory requires llm-applications.
+installer. MCP requires data-handling; llm-retrieval-memory requires llm-applications.
 Other semantic matches still apply. Package delivery is not model selection.
 
 The installer now offers explicit `--complete` as well as `--modular`; omitting

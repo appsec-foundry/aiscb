@@ -84,22 +84,22 @@ acme-sec-1.0.0/
 ├── catalog.json                       merged flat module catalog
 ├── aiscb-catalog.json                 reviewed upstream catalog
 ├── modules/
-│   ├── aiscb-web-auth.md
+│   ├── aiscb-web-auth-crypto.md
 │   ├── ...                            other aiscb modules
 │   ├── acme-authentication.md
 │   └── acme-deployment.md
 ├── blueprints/spa/1.0.0.json
 └── adapters/
     ├── claude-code/CLAUDE.md          imports the core, then carries overlay and discovery
-    ├── claude-code/skills/aiscb-web-auth/SKILL.md
+    ├── claude-code/skills/aiscb-web-auth-crypto/SKILL.md
     ├── claude-code/skills/acme-authentication/SKILL.md
     ├── claude-code/skills/acme-deployment/SKILL.md
     ├── codex/AGENTS.md                core, overlay, and merged discovery
-    ├── codex/skills/aiscb-web-auth/SKILL.md
+    ├── codex/skills/aiscb-web-auth-crypto/SKILL.md
     ├── codex/skills/acme-authentication/SKILL.md
     ├── codex/skills/acme-deployment/SKILL.md
     ├── copilot/copilot-instructions.md
-    ├── copilot/skills/aiscb-web-auth/SKILL.md
+    ├── copilot/skills/aiscb-web-auth-crypto/SKILL.md
     ├── copilot/skills/acme-authentication/SKILL.md
     ├── copilot/skills/acme-deployment/SKILL.md
     └── gateway/system-block.md        the text the gateway appends

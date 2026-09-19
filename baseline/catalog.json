@@ -26,11 +26,11 @@
   },
   "modules": [
     {
-      "id": "aiscb:web-auth",
+      "id": "aiscb:web-auth-crypto",
       "publisher": "aiscb",
       "version": "0.1.16",
-      "file": "modules/aiscb-web-auth.md",
-      "trigger": "HTTP endpoints, browser content, login, registration, recovery, verification, sessions, cookies, tokens, passwords, OAuth or OIDC, CORS, CSRF, webhooks, or security primitives",
+      "file": "modules/aiscb-web-auth-crypto.md",
+      "trigger": "HTTP endpoints, browser content, login, registration, recovery, verification, sessions, cookies, tokens, passwords, OAuth or OIDC, CORS, CSRF, webhooks, or cryptography including encryption, hashing, signatures, random generation and secret comparison",
       "paths": [],
       "requires": [],
       "rules": [
@@ -40,14 +40,14 @@
         "aiscb-MECHANISMS-001",
         "aiscb-WEBTESTS-001"
       ],
-      "size": 5074,
-      "sha256": "2e19e793a724b188fc7636fc4ba88dc1174d392db860a671b0a03930c71be21f"
+      "size": 5189,
+      "sha256": "bd22ad24b3341823c24bc234f83d1c1e9f1c1214f63d4d2b2aca0aac81669e2f"
     },
     {
-      "id": "aiscb:data-boundaries",
+      "id": "aiscb:data-handling",
       "publisher": "aiscb",
       "version": "0.1.16",
-      "file": "modules/aiscb-data-boundaries.md",
+      "file": "modules/aiscb-data-handling.md",
       "trigger": "Request parsing, database access, files, archives, templates, process execution, deserialization, search, pagination, uploads, error responses, logging, or external destinations",
       "paths": [],
       "requires": [],
@@ -57,14 +57,14 @@
         "aiscb-FILES-001",
         "aiscb-EGRESS-001"
       ],
-      "size": 1726,
-      "sha256": "b0a5d1c257124aa628fceb1fa3422d422df0d8cd5172b63f071e09d54d069f60"
+      "size": 1720,
+      "sha256": "06f0e4bbacfd1d4539e27ac1593323b3bd85b7b85c94d5a69125f38e65369bf6"
     },
     {
-      "id": "aiscb:secrets-bootstrap",
+      "id": "aiscb:secrets-initialization",
       "publisher": "aiscb",
       "version": "0.1.16",
-      "file": "modules/aiscb-secrets-bootstrap.md",
+      "file": "modules/aiscb-secrets-initialization.md",
       "trigger": "Credentials, passwords, tokens, keys, signing, secret rotation, first-start setup, seed data, demo accounts, or prototype initialization",
       "paths": [],
       "requires": [],
@@ -72,8 +72,8 @@
         "aiscb-BOOTSTRAP-001",
         "aiscb-SECRETTESTS-001"
       ],
-      "size": 1885,
-      "sha256": "cd5e62f7392a355dd077e32937178fb71b37f8f54c164cac64530208d0d4c135"
+      "size": 1900,
+      "sha256": "bb0e50de93b64bf5c1996980dfb22e52bf18bee3ec8b796a331e99cabb98e5c5"
     },
     {
       "id": "aiscb:supply-chain",
@@ -86,15 +86,15 @@
       "rules": [
         "aiscb-DEPS-001"
       ],
-      "size": 1155,
-      "sha256": "c44a7b51d1388bd179dde5b637946a5f4fe67d850f8466190a4b913bdb22e52b"
+      "size": 1173,
+      "sha256": "09ed296779cd53824c5f4547c6edf790a4c9bae4c234110dd90580d2f18eada3"
     },
     {
-      "id": "aiscb:deployment-runtime",
+      "id": "aiscb:deployment-environments",
       "publisher": "aiscb",
       "version": "0.1.16",
-      "file": "modules/aiscb-deployment-runtime.md",
-      "trigger": "Public or network exposure, TLS termination, proxying, containers, CI permissions, production configuration, startup requirements, debug behavior, development servers, mocks, or fixtures",
+      "file": "modules/aiscb-deployment-environments.md",
+      "trigger": "Network exposure, TLS termination, proxies, containers, CI/CD permissions, production configuration, startup requirements, or activation, exposure and production separation of debug features, development servers, mocks and fixtures; not isolated test-data edits alone",
       "paths": [],
       "requires": [],
       "rules": [
@@ -102,8 +102,8 @@
         "aiscb-ENV-001",
         "aiscb-DEPLOYTESTS-001"
       ],
-      "size": 1562,
-      "sha256": "0c7e760a552862a5ff16949064f4d48b740fa4b8b87decef0fde67bd4f619fe7"
+      "size": 1659,
+      "sha256": "94de064002430594fdcb278f540f394706b241881f8b75ee77778827e9abe41b"
     },
     {
       "id": "aiscb:llm-applications",
@@ -116,15 +116,15 @@
       "rules": [
         "aiscb-LLM-001"
       ],
-      "size": 1255,
-      "sha256": "60cea6faab4ce793db08992790c9d54b14d9e37f7a8a98003efe6ef9b8f25c1b"
+      "size": 1252,
+      "sha256": "59063eb8bb6886d3fddecc1579a111b07faddb5867c28ee611c3a2b54e04ace5"
     },
     {
-      "id": "aiscb:agent-systems",
+      "id": "aiscb:llm-agents",
       "publisher": "aiscb",
       "version": "0.1.16",
-      "file": "modules/aiscb-agent-systems.md",
-      "trigger": "Designing or changing model-directed tool execution, autonomous workflows, action permissions or approvals, delegation, or multi-agent orchestration in the system being built",
+      "file": "modules/aiscb-llm-agents.md",
+      "trigger": "Designing or changing model-directed tool execution, autonomous workflows, action permissions or approvals, delegation, or multi-agent orchestration in the system being built; not merely the coding assistant's own tools",
       "paths": [],
       "requires": [
         "aiscb:llm-applications"
@@ -135,15 +135,15 @@
         "aiscb-AGENTBOUNDS-001",
         "aiscb-AGENTTESTS-001"
       ],
-      "size": 2054,
-      "sha256": "66f2a3c3e694963830d71486b9d92319f0b31a43896dda169e462bf218ecc1e7"
+      "size": 2033,
+      "sha256": "13d2e8041fd0c93ab4919307d75204c90a908d32c08638453c30264b6fd4d608"
     },
     {
-      "id": "aiscb:retrieval-memory",
+      "id": "aiscb:llm-retrieval-memory",
       "publisher": "aiscb",
       "version": "0.1.16",
-      "file": "modules/aiscb-retrieval-memory.md",
-      "trigger": "Building or changing LLM retrieval, RAG, vector stores, context caches, or persistent model/agent memory; not ordinary database queries or the coding assistant's own context",
+      "file": "modules/aiscb-llm-retrieval-memory.md",
+      "trigger": "Designing or changing retrieval or persistent memory in an LLM application: selecting documents for model answers, RAG, vector stores, context caches, or creating, replacing and deleting model/agent memories; not ordinary database queries or the coding assistant's own context",
       "paths": [],
       "requires": [
         "aiscb:llm-applications"
@@ -153,26 +153,26 @@
         "aiscb-MEMORY-001",
         "aiscb-RETRIEVALTESTS-001"
       ],
-      "size": 1551,
-      "sha256": "9a03e8429565b1dc84fc7537d7561ba77f2b786769e655db8296ba25aad97b28"
+      "size": 1666,
+      "sha256": "2256a76bdfd36ce8931c4482eec024d61a248f1bed8a8ea6e88542e04b8d5aad"
     },
     {
-      "id": "aiscb:mcp-integrations",
+      "id": "aiscb:mcp-clients-servers",
       "publisher": "aiscb",
       "version": "0.1.16",
-      "file": "modules/aiscb-mcp-integrations.md",
+      "file": "modules/aiscb-mcp-clients-servers.md",
       "trigger": "Building or changing MCP clients, servers, proxies, transports, discovery, or server installation/configuration; not merely using an existing MCP tool",
       "paths": [],
       "requires": [
-        "aiscb:data-boundaries"
+        "aiscb:data-handling"
       ],
       "rules": [
         "aiscb-MCPAUTH-001",
         "aiscb-MCPLOCAL-001",
         "aiscb-MCPTESTS-001"
       ],
-      "size": 2206,
-      "sha256": "3ff69009c5085b262e6577bdcdce4dc4e0b66ffd5cdaabeee2930ab696003109"
+      "size": 2225,
+      "sha256": "c44d130f5bb32154ac2b3a041470fc47c0efd47059980c0f62d7e4266af1ab6e"
     }
   ]
 }

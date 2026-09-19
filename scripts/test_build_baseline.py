@@ -108,7 +108,7 @@ check(rejected(dependency_cycle, "dependency cycle"),
 
 
 def repeated_rule(root: Path) -> None:
-    target = root / "baseline" / "modules" / "aiscb-data-boundaries.md"
+    target = root / "baseline" / "modules" / "aiscb-data-handling.md"
     target.write_text(target.read_text().replace("aiscb-ERRORS-001",
                                                   "aiscb-AUTH-001", 1))
     value = catalog()
@@ -129,7 +129,7 @@ def unlisted_module(root: Path) -> None:
 check(rejected(unlisted_module, "unlisted"), "unlisted module files are rejected")
 
 with fixture() as root:
-    module = root / "baseline" / "modules" / "aiscb-web-auth.md"
+    module = root / "baseline" / "modules" / "aiscb-web-auth-crypto.md"
     module.write_text(module.read_text() + "\nChanged.\n")
     failures = BUILD.stale_outputs()
     check(any("metadata is stale" in item for item in failures)

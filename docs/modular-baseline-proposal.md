@@ -116,25 +116,25 @@ domain-specific test matrices.
 
 | Module | Semantic triggers | Current rule material moved or expanded there |
 | --- | --- | --- |
-| `aiscb:web-auth` | HTTP endpoints, browser UI, login, SSO, sessions, cookies, tokens, passwords, account recovery, CORS or CSRF | Browser protections, authentication abuse resistance, session lifecycle, password handling, OAuth/OIDC, webhook authentication, and relevant negative tests |
-| `aiscb:data-boundaries` | Request parsing, database access, files, archives, templates, command execution, deserialization, search, pagination, uploads or external callbacks | Detailed input validation, parameterized sinks, output encoding, path handling, field allow-lists, errors, logging, resource limits, and boundary tests |
-| `aiscb:secrets-bootstrap` | Credentials, keys, tokens, signing, first-start setup, seed data, demo accounts or secret rotation | Secret-context minimization, initial administrator setup, persistent keys, prototype credentials, disclosure channels, and clean-initialization tests |
+| `aiscb:web-auth-crypto` | HTTP endpoints, browser UI, login, SSO, sessions, cookies, tokens, passwords, account recovery, CORS or CSRF | Browser protections, authentication abuse resistance, session lifecycle, password handling, OAuth/OIDC, webhook authentication, and relevant negative tests |
+| `aiscb:data-handling` | Request parsing, database access, files, archives, templates, command execution, deserialization, search, pagination, uploads or external callbacks | Detailed input validation, parameterized sinks, output encoding, path handling, field allow-lists, errors, logging, resource limits, and boundary tests |
+| `aiscb:secrets-initialization` | Credentials, keys, tokens, signing, first-start setup, seed data, demo accounts or secret rotation | Secret-context minimization, initial administrator setup, persistent keys, prototype credentials, disclosure channels, and clean-initialization tests |
 | `aiscb:supply-chain` | Adding or updating packages, CI actions, container images, build tools, downloads, installers or generated lockfiles | Dependency identity and vulnerability checks, immutable references, integrity or authenticity, reviewed install scripts, lockfiles, frozen installs, and scanning |
-| `aiscb:deployment-runtime` | Public binding, TLS termination, proxying, containers, CI permissions, production configuration, debug or development modes | Loopback and TLS behavior, non-root containers, least-privilege CI, required startup configuration, production/development separation, and deployment tests |
+| `aiscb:deployment-environments` | Public binding, TLS termination, proxying, containers, CI permissions, production configuration, debug or development modes | Loopback and TLS behavior, non-root containers, least-privilege CI, required startup configuration, production/development separation, and deployment tests |
 | `aiscb:llm-applications` | Designing or changing LLM features in the system being built, including prompts, retrieval, memory, model output, agents, tool calls, generated code or model-selected resources; not merely the coding assistant's own activity | Strict output schemas, safe rendering, separation from interpreters, execution sandboxes, tenant isolation, and LLM-specific review |
-| `aiscb:agent-systems` | Building model-directed tool execution, autonomous workflows, action permissions, approvals, delegation or multi-agent orchestration | Minimum agency, external action authorization, bound approvals, bounded execution, safe retries and agent-boundary tests; depends on `aiscb:llm-applications` |
-| `aiscb:retrieval-memory` | Building LLM retrieval, RAG, vector stores, context caches or persistent model/agent memory | Source-level permissions, provenance, controlled writes and boundary tests; depends on `aiscb:llm-applications` |
-| `aiscb:mcp-integrations` | Building or configuring MCP clients, servers, proxies, transport or discovery | HTTP credential/consent boundaries and local process trust; depends on `aiscb:data-boundaries`, not agent-systems |
+| `aiscb:llm-agents` | Building model-directed tool execution, autonomous workflows, action permissions, approvals, delegation or multi-agent orchestration | Minimum agency, external action authorization, bound approvals, bounded execution, safe retries and agent-boundary tests; depends on `aiscb:llm-applications` |
+| `aiscb:llm-retrieval-memory` | Building LLM retrieval, RAG, vector stores, context caches or persistent model/agent memory | Source-level permissions, provenance, controlled writes and boundary tests; depends on `aiscb:llm-applications` |
+| `aiscb:mcp-clients-servers` | Building or configuring MCP clients, servers, proxies, transport or discovery | HTTP credential/consent boundaries and local process trust; depends on `aiscb:data-handling`, not llm-agents |
 
 The LLM module retains output validation, safe sinks, code sandboxing, and data
-isolation. Action authorization and approval move into agent-systems. The core
+isolation. Action authorization and approval move into llm-agents. The core
 adds the scoped secure-design step: affected assets, identities, data flows,
 trust boundaries, enforcing controls, and fail-closed behavior. The new agent
 trigger concerns the system being built, not the coding assistant's tool use.
 
 Some work selects several modules. Adding OIDC login, for example, normally
-selects `aiscb:web-auth`, `aiscb:secrets-bootstrap`, and possibly
-`aiscb:deployment-runtime`. The catalog must express declared dependencies, but
+selects `aiscb:web-auth-crypto`, `aiscb:secrets-initialization`, and possibly
+`aiscb:deployment-environments`. The catalog must express declared dependencies, but
 dependencies should be rare: selecting all semantic matches is clearer than a
 large implicit dependency graph.
 
@@ -146,7 +146,7 @@ obligation to test changed controls and trust boundaries.
 There should not be one module hierarchy or loader protocol for upstream aiscb
 and another for the organization. All thematic modules occupy one logical,
 flat, namespaced plane. A single selection pass over a single catalog can
-therefore select `aiscb:web-auth`, `acme:authentication`, and
+therefore select `aiscb:web-auth-crypto`, `acme:authentication`, and
 `acme:payments` together. No selected organization module has to discover or
 load an aiscb module, and no aiscb module has to know which overlays exist.
 
@@ -158,13 +158,13 @@ colliding fully qualified IDs. Each record should contain at least:
 
 ```json
 {
-  "id": "aiscb:web-auth",
+  "id": "aiscb:web-auth-crypto",
   "authority": "aiscb",
   "version": "<same release as the core>",
   "trigger": "HTTP endpoints, browser UI, login, SSO, sessions, cookies, tokens, passwords, CORS or CSRF",
   "paths": [],
   "requires": [],
-  "artifact": "modules/aiscb-web-auth.md",
+  "artifact": "modules/aiscb-web-auth-crypto.md",
   "size": 0,
   "sha256": "<digest>"
 }
@@ -219,7 +219,7 @@ in the same catalog and loader as aiscb modules.
   request data.
 ```
 
-An authentication task could then select both `aiscb:web-auth` and
+An authentication task could then select both `aiscb:web-auth-crypto` and
 `acme:authentication` in the same pass. The aiscb module provides portable
 mechanisms; the Acme module chooses the managed identity provider and references
 a blueprint with approved issuers, claims, group mappings, libraries, and
@@ -283,13 +283,13 @@ baseline/
   aiscb-core.md
   catalog.json
   modules/
-    aiscb-web-auth.md
-    aiscb-data-boundaries.md
-    aiscb-secrets-bootstrap.md
+    aiscb-web-auth-crypto.md
+    aiscb-data-handling.md
+    aiscb-secrets-initialization.md
     aiscb-supply-chain.md
-    aiscb-deployment-runtime.md
+    aiscb-deployment-environments.md
     aiscb-llm-applications.md
-    aiscb-agent-systems.md
+    aiscb-llm-agents.md
 dist/dev/aiscb-VERSION/secure-coding-baseline.md   generated compatibility output
 ```
 

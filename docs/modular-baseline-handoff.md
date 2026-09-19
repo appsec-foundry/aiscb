@@ -66,19 +66,19 @@ Current `o200k_base` measurements are:
 | Artifact | Bytes | Tokens |
 | --- | ---: | ---: |
 | Always-on core | 7,780 | 1,558 |
-| `aiscb:web-auth` | 5,074 | 1,017 |
-| `aiscb:secrets-bootstrap` | 1,885 | 349 |
-| `aiscb:deployment-runtime` | 1,562 | 294 |
-| `aiscb:llm-applications` | 1,255 | 246 |
-| `aiscb:agent-systems` | 2,054 | 398 |
-| `aiscb:supply-chain` | 1,155 | 221 |
-| `aiscb:data-boundaries` | 1,726 | 346 |
-| `aiscb:retrieval-memory` | 1,551 | 301 |
-| `aiscb:mcp-integrations` | 2,206 | 408 |
-| Complete eager artifact | 26,257 | 5,138 |
+| `aiscb:web-auth-crypto` | 5,189 | 1,040 |
+| `aiscb:secrets-initialization` | 1,900 | 351 |
+| `aiscb:deployment-environments` | 1,659 | 311 |
+| `aiscb:llm-applications` | 1,252 | 247 |
+| `aiscb:llm-agents` | 2,033 | 401 |
+| `aiscb:supply-chain` | 1,173 | 223 |
+| `aiscb:data-handling` | 1,720 | 344 |
+| `aiscb:llm-retrieval-memory` | 1,666 | 325 |
+| `aiscb:mcp-clients-servers` | 2,225 | 415 |
+| Complete eager artifact | 26,606 | 5,215 |
 
 The core exceeds its provisional 1,500-token target by 58 tokens; complete
-output exceeds its 4,100-token target by 1,038. Further reduction
+output exceeds its 4,100-token target by 1,115. Further reduction
 should be evaluated against lost always-on behavior, not treated as an
 automatic goal. In particular, do not shorten the Security-note contract merely
 to improve the headline number.
@@ -98,14 +98,14 @@ aiscb-core.md
 overlay.md
 catalog.json                    merged discovery catalog
 modules/
-  aiscb-web-auth.md
-  aiscb-secrets-bootstrap.md
+  aiscb-web-auth-crypto.md
+  aiscb-secrets-initialization.md
   acme-authentication.md
   acme-deployment.md
   ...
 ```
 
-Logical IDs stay namespaced (`aiscb:web-auth`, `acme:authentication`). The
+Logical IDs stay namespaced (`aiscb:web-auth-crypto`, `acme:authentication`). The
 builder now rejects namespace and output-path collisions and applies the
 main validator to official modules. The project installer wires the shared
 catalog and a bounded Python loader directly into each tool's instructions;
@@ -130,11 +130,11 @@ work.
   digest. Status, update-by-reinstallation, and guarded uninstall are available.
 - `scripts/policy_loader.py` accepts only catalog IDs, verifies the pinned
   package, resolves dependencies, and emits complete bodies and blueprints.
-- `aiscb:agent-systems` depends on `aiscb:llm-applications`; it covers minimum
+- `aiscb:llm-agents` depends on `aiscb:llm-applications`; it covers minimum
   agency, action authority, bounded execution, and agent-boundary tests.
-- `aiscb:retrieval-memory` depends on `aiscb:llm-applications`;
-  `aiscb:mcp-integrations` depends on `aiscb:data-boundaries`, not agent-systems.
-  File/SSRF mechanisms stay in data-boundaries and webhook replay in web-auth.
+- `aiscb:llm-retrieval-memory` depends on `aiscb:llm-applications`;
+  `aiscb:mcp-clients-servers` depends on `aiscb:data-handling`, not llm-agents.
+  File/SSRF mechanisms stay in data-handling and webhook replay in web-auth-crypto.
 - `--complete` installs all content through the same local adapter; updates
   refresh every already-managed tool and reject drift before activation.
 - `make build-full-baseline` regenerates the complete artifact and source hashes.

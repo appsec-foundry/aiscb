@@ -139,27 +139,27 @@ The crypto example shows Claude Code with `aiscb-0.1.14` in the baseline session
 
 The assistant always reads the [core](baseline/aiscb-core.md): how to scope
 changes, protect secrets, handle security decisions, and review its work.
-It loads modules as the task requires—for example, `web-auth` for a login.
+It loads modules as the task requires—for example, `web-auth-crypto` for a login.
 The [catalog](baseline/catalog.json) lists when each module applies.
 An organization can add rules through an overlay, but cannot relax the baseline.
 
 | Component | Covers | Tokens (`o200k_base`) |
 | --- | --- | ---: |
 | Always-on core | Scope changes, select modules, apply basic controls, and review results | 1,558 |
-| `aiscb:web-auth` | Protect logins, sessions, browser content, and webhooks | 1,017 |
-| `aiscb:secrets-bootstrap` | Set up credentials and keys without shipping working defaults | 349 |
-| `aiscb:deployment-runtime` | Restrict CI and container privileges; separate development from production | 294 |
-| `aiscb:llm-applications` | Validate model output and contain generated-code execution | 246 |
-| `aiscb:agent-systems` | Check permissions for agent actions; limit tools, delegation, and retries | 398 |
-| `aiscb:supply-chain` | Verify packages and downloads before use; pin external build tools | 221 |
-| `aiscb:data-boundaries` | Handle untrusted files, restrict outbound requests, and limit resource use | 346 |
-| `aiscb:retrieval-memory` | Check access before retrieval and control what enters persistent memory | 301 |
-| `aiscb:mcp-integrations` | Authorize MCP requests and control local server starts and credentials | 408 |
-| Complete baseline | The core and every module in one file | 5,138 |
+| `aiscb:web-auth-crypto` | Protect web content, authentication, webhooks, and cryptography | 1,040 |
+| `aiscb:secrets-initialization` | Set up credentials and keys without shipping working defaults | 351 |
+| `aiscb:deployment-environments` | Restrict CI and container privileges; separate development from production | 311 |
+| `aiscb:llm-applications` | Validate model output and contain generated-code execution | 247 |
+| `aiscb:llm-agents` | Check permissions for agent actions; limit tools, delegation, and retries | 401 |
+| `aiscb:supply-chain` | Verify packages and downloads before use; pin external build tools | 223 |
+| `aiscb:data-handling` | Handle untrusted files, restrict outbound requests, and limit resource use | 344 |
+| `aiscb:llm-retrieval-memory` | Check access before retrieval and control what enters persistent memory | 325 |
+| `aiscb:mcp-clients-servers` | Authorize MCP requests and control local server starts and credentials | 415 |
+| Complete baseline | The core and every module in one file | 5,215 |
 
 Counts cover rule text only; the catalog, loading instructions, and overlays
-add context. `agent-systems` and `retrieval-memory` also load `llm-applications`;
-`mcp-integrations` also loads `data-boundaries`. Shared dependencies load once.
+add context. `llm-agents` and `llm-retrieval-memory` also load `llm-applications`;
+`mcp-clients-servers` also loads `data-handling`. Shared dependencies load once.
 
 ## The rules at a glance
 
@@ -412,7 +412,7 @@ token measurements.
 
 The provisional budgets are roughly 1,500 tokens for the core and 4,100 for
 the eager artifact. The expanded rules currently
-exceed them by 58 and 1,038 tokens respectively; these are visible design targets,
+exceed them by 58 and 1,115 tokens respectively; these are visible design targets,
 not a reason to silently drop controls. Adapter discovery and overlay text add
 to the actual session context. aiscb is not formally certified.
 

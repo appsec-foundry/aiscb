@@ -5,9 +5,9 @@ normative source; these summaries do not add or change behavior.
 
 ## aiscb-WEBHOOK-001 — Webhook Replay Protection
 
-**Section:** Web and Authentication
+**Section:** Web, Authentication and Cryptography
 
-**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+**Normative source:** `baseline/modules/aiscb-web-auth-crypto.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-WEBHOOK-001`.
 
 **Applies when:** Handling incoming webhooks.
@@ -24,9 +24,9 @@ not assistant compliance or the security of an application implementation.
 
 ## aiscb-FILES-001 — Untrusted Files
 
-**Section:** Data Boundaries
+**Section:** Data Handling
 
-**Normative source:** `baseline/modules/aiscb-data-boundaries.md`, published in
+**Normative source:** `baseline/modules/aiscb-data-handling.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-FILES-001`.
 
 **Applies when:** Accepting, parsing, extracting, storing, or serving untrusted files.
@@ -43,9 +43,9 @@ not assistant compliance or the security of an application implementation.
 
 ## aiscb-EGRESS-001 — Outbound Requests
 
-**Section:** Data Boundaries
+**Section:** Data Handling
 
-**Normative source:** `baseline/modules/aiscb-data-boundaries.md`, published in
+**Normative source:** `baseline/modules/aiscb-data-handling.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-EGRESS-001`.
 
 **Applies when:** Making input-influenced outbound requests.
@@ -62,9 +62,9 @@ not assistant compliance or the security of an application implementation.
 
 ## aiscb-MCPAUTH-001 — MCP Authorization Boundaries
 
-**Section:** MCP Integrations
+**Section:** MCP Clients and Servers
 
-**Normative source:** `baseline/modules/aiscb-mcp-integrations.md`, published in
+**Normative source:** `baseline/modules/aiscb-mcp-clients-servers.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-MCPAUTH-001`.
 
 **Applies when:** Building or changing protected HTTP MCP and related discovery or state handling.
@@ -81,9 +81,9 @@ not assistant compliance or the security of an application implementation.
 
 ## aiscb-MCPLOCAL-001 — Local MCP Execution
 
-**Section:** MCP Integrations
+**Section:** MCP Clients and Servers
 
-**Normative source:** `baseline/modules/aiscb-mcp-integrations.md`, published in
+**Normative source:** `baseline/modules/aiscb-mcp-clients-servers.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-MCPLOCAL-001`.
 
 **Applies when:** Configuring, installing or launching local MCP servers.
@@ -100,9 +100,9 @@ not assistant compliance or the security of an application implementation.
 
 ## aiscb-MCPTESTS-001 — MCP Boundary Tests
 
-**Section:** MCP Integrations
+**Section:** MCP Clients and Servers
 
-**Normative source:** `baseline/modules/aiscb-mcp-integrations.md`, published in
+**Normative source:** `baseline/modules/aiscb-mcp-clients-servers.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-MCPTESTS-001`.
 
 **Applies when:** Changing applicable MCP boundaries.
@@ -119,9 +119,9 @@ not assistant compliance or the security of an application implementation.
 
 ## aiscb-RETRIEVAL-001 — Authorized Retrieval
 
-**Section:** Retrieval and Memory
+**Section:** LLM Retrieval and Memory
 
-**Normative source:** `baseline/modules/aiscb-retrieval-memory.md`, published in
+**Normative source:** `baseline/modules/aiscb-llm-retrieval-memory.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-RETRIEVAL-001`.
 
 **Applies when:** Building or changing LLM retrieval and context caching.
@@ -138,9 +138,9 @@ not assistant compliance or the security of an application implementation.
 
 ## aiscb-MEMORY-001 — Controlled Memory Writes
 
-**Section:** Retrieval and Memory
+**Section:** LLM Retrieval and Memory
 
-**Normative source:** `baseline/modules/aiscb-retrieval-memory.md`, published in
+**Normative source:** `baseline/modules/aiscb-llm-retrieval-memory.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-MEMORY-001`.
 
 **Applies when:** Creating, replacing or deleting persistent model/agent memory.
@@ -157,9 +157,9 @@ not assistant compliance or the security of an application implementation.
 
 ## aiscb-RETRIEVALTESTS-001 — Retrieval Boundary Tests
 
-**Section:** Retrieval and Memory
+**Section:** LLM Retrieval and Memory
 
-**Normative source:** `baseline/modules/aiscb-retrieval-memory.md`, published in
+**Normative source:** `baseline/modules/aiscb-llm-retrieval-memory.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-RETRIEVALTESTS-001`.
 
 **Applies when:** Changing retrieval or persistent memory boundaries.
@@ -497,9 +497,9 @@ context are not covered.
 
 ## aiscb-BOOTSTRAP-001 — Credentials and Initialization
 
-**Section:** Secrets and Bootstrap
+**Section:** Secrets and Initialization
 
-**Normative source:** `baseline/modules/aiscb-secrets-bootstrap.md`, published in
+**Normative source:** `baseline/modules/aiscb-secrets-initialization.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-BOOTSTRAP-001`.
 
 **Applies when:** Initializing credentials, administrator access, demo accounts,
@@ -522,9 +522,9 @@ explicit local-prototype exception. One-time activation is not covered.
 
 ## aiscb-SECRETTESTS-001 — Secret Lifecycle Tests
 
-**Section:** Secrets and Bootstrap
+**Section:** Secrets and Initialization
 
-**Normative source:** `baseline/modules/aiscb-secrets-bootstrap.md`, published in
+**Normative source:** `baseline/modules/aiscb-secrets-initialization.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-SECRETTESTS-001`.
 
 **Applies when:** Greenfield deployable initialization or an existing secret or
@@ -617,9 +617,9 @@ also depend on this floor. Separate privileged identities are not covered.
 
 ## aiscb-WEB-001 — Browser and Transport Security
 
-**Section:** Web and Authentication
+**Section:** Web, Authentication and Cryptography
 
-**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+**Normative source:** `baseline/modules/aiscb-web-auth-crypto.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-WEB-001`.
 
 **Applies when:** Work exposes HTTP traffic or creates or changes browser
@@ -644,9 +644,9 @@ remain uncovered.
 
 ## aiscb-AUTH-001 — Authentication Abuse Resistance
 
-**Section:** Web and Authentication
+**Section:** Web, Authentication and Cryptography
 
-**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+**Normative source:** `baseline/modules/aiscb-web-auth-crypto.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-AUTH-001`.
 
 **Applies when:** Work changes login, registration, recovery, verification,
@@ -674,9 +674,9 @@ out-of-band verification, and the full session lifecycle are not covered.
 
 ## aiscb-MECHANISMS-001 — Proven Mechanisms
 
-**Section:** Web and Authentication
+**Section:** Web, Authentication and Cryptography
 
-**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+**Normative source:** `baseline/modules/aiscb-web-auth-crypto.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-MECHANISMS-001`.
 
 **Applies when:** Selecting cryptography, password storage, random tokens,
@@ -702,9 +702,9 @@ boundaries, constant-time comparison, and webhook verification are not covered.
 
 ## aiscb-WEBTESTS-001 — Web and Authentication Tests
 
-**Section:** Web and Authentication
+**Section:** Web, Authentication and Cryptography
 
-**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+**Normative source:** `baseline/modules/aiscb-web-auth-crypto.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-WEBTESTS-001`.
 
 **Applies when:** A change affects browser, authentication, verification,
@@ -727,7 +727,7 @@ and out-of-band verification are not covered.
 
 ## aiscb-DEPS-001 — Dependencies
 
-**Section:** Supply Chain
+**Section:** Software Supply Chain
 
 **Normative source:** `baseline/modules/aiscb-supply-chain.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-DEPS-001`.
@@ -756,9 +756,9 @@ covered.
 
 ## aiscb-ERRORS-001 — Errors & Logging
 
-**Section:** Data Boundaries
+**Section:** Data Handling
 
-**Normative source:** `baseline/modules/aiscb-data-boundaries.md`, published in
+**Normative source:** `baseline/modules/aiscb-data-handling.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-ERRORS-001`.
 
 **Applies when:** Returning errors or recording security-relevant events.
@@ -776,9 +776,9 @@ security-event logging and sensitive-data redaction are not covered.
 
 ## aiscb-LIMITS-001 — Resource Limits
 
-**Section:** Data Boundaries
+**Section:** Data Handling
 
-**Normative source:** `baseline/modules/aiscb-data-boundaries.md`, published in
+**Normative source:** `baseline/modules/aiscb-data-handling.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-LIMITS-001`.
 
 **Applies when:** Input controls work, volume, runtime, loops, or matching.
@@ -796,9 +796,9 @@ size limits, loops, and user-supplied regular expressions are not covered.
 
 ## aiscb-DEPLOYMENT-001 — Least-Privilege Runtime
 
-**Section:** Deployment and Runtime
+**Section:** Deployment and Environments
 
-**Normative source:** `baseline/modules/aiscb-deployment-runtime.md`, published in
+**Normative source:** `baseline/modules/aiscb-deployment-environments.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-DEPLOYMENT-001`.
 
 **Applies when:** Work changes CI permissions, containers, production runtime
@@ -821,9 +821,9 @@ not covered.
 
 ## aiscb-ENV-001 — Production vs. Development
 
-**Section:** Deployment and Runtime
+**Section:** Deployment and Environments
 
-**Normative source:** `baseline/modules/aiscb-deployment-runtime.md`, published in
+**Normative source:** `baseline/modules/aiscb-deployment-environments.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-ENV-001`.
 
 **Applies when:** Adding mocks, fixtures, seed data, debug behavior, development
@@ -842,9 +842,9 @@ default, and documentation provides a separate production-safe path.
 
 ## aiscb-DEPLOYTESTS-001 — Deployment Tests
 
-**Section:** Deployment and Runtime
+**Section:** Deployment and Environments
 
-**Normative source:** `baseline/modules/aiscb-deployment-runtime.md`, published in
+**Normative source:** `baseline/modules/aiscb-deployment-environments.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-DEPLOYTESTS-001`.
 
 **Applies when:** Greenfield deployable work or an existing change affects
@@ -903,7 +903,7 @@ untrusted. Validate structured output deterministically against strict schemas
 and allow-lists before use. Keep values separate from instructions and
 executable text through parameterized or structured sink APIs, encode text,
 sanitize intentionally rendered markup, and isolate intended code execution.
-Isolate tenants, review the current OWASP LLM risks, and load agent-systems
+Isolate tenants, review the current OWASP LLM risks, and load llm-agents
 for model-directed actions. Action authorization and approval now live there.
 
 **Observable acceptance:** Unknown, extra, invalid, or ambiguous model output
@@ -924,9 +924,9 @@ not model routing decisions.
 
 ## aiscb-AGENCY-001 — Minimum Agency
 
-**Section:** Agent Systems
+**Section:** LLM Agents
 
-**Normative source:** `baseline/modules/aiscb-agent-systems.md`, published in
+**Normative source:** `baseline/modules/aiscb-llm-agents.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-AGENCY-001`.
 
 **Applies when:** Designing or changing agentic systems.
@@ -944,9 +944,9 @@ dedicated operations are preferred to unrestricted interpreters.
 
 ## aiscb-AGENTAUTH-001 — Action Authority
 
-**Section:** Agent Systems
+**Section:** LLM Agents
 
-**Normative source:** `baseline/modules/aiscb-agent-systems.md`, published in
+**Normative source:** `baseline/modules/aiscb-llm-agents.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-AGENTAUTH-001`.
 
 **Applies when:** Implementing model-directed execution, approvals, or delegation.
@@ -965,9 +965,9 @@ bound approvals or delegated authority.
 
 ## aiscb-AGENTBOUNDS-001 — Bounded Execution
 
-**Section:** Agent Systems
+**Section:** LLM Agents
 
-**Normative source:** `baseline/modules/aiscb-agent-systems.md`, published in
+**Normative source:** `baseline/modules/aiscb-llm-agents.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-AGENTBOUNDS-001`.
 
 **Applies when:** Building agent execution loops, retries, or delegation.
@@ -985,9 +985,9 @@ do not blindly duplicate effects.
 
 ## aiscb-AGENTTESTS-001 — Agent Boundary Tests
 
-**Section:** Agent Systems
+**Section:** LLM Agents
 
-**Normative source:** `baseline/modules/aiscb-agent-systems.md`, published in
+**Normative source:** `baseline/modules/aiscb-llm-agents.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-AGENTTESTS-001`.
 
 **Applies when:** Changing agent-system control boundaries.

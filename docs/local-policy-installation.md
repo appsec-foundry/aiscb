@@ -36,8 +36,8 @@ checks installed files, not the complete instruction context a client actually
 loads. Installation does not remove inherited policy.
 
 Start a fresh session from the project root. Confirm `baseline?`, then exercise
-a task requiring modules. Selecting `aiscb:agent-systems` must return both
-`aiscb:llm-applications` and `aiscb:agent-systems` before affected work. The loader
+a task requiring modules. Selecting `aiscb:llm-agents` must return both
+`aiscb:llm-applications` and `aiscb:llm-agents` before affected work. The loader
 verifies the pinned snapshot, rejects unknown IDs and invalid dependencies,
 and emits nothing on failure. It cannot establish that the assistant invokes
 it or follows the rules: test actual clients before organizational rollout.
@@ -120,20 +120,32 @@ at each target location. Repository-wide portable adapters remain rollout work.
 
 | Work | Required selection beyond core |
 | --- | --- |
-| Configure a local stdio MCP server | `mcp-integrations` and its `data-boundaries` dependency; `supply-chain` when executing/installing its package |
-| Build protected HTTP MCP | `mcp-integrations`, `data-boundaries`, `web-auth`; other matching modules still apply |
-| Build RAG without agent actions | `retrieval-memory` and its `llm-applications` dependency; no automatic agent module |
+| Configure a local stdio MCP server | `mcp-clients-servers` and its `data-handling` dependency; `supply-chain` when executing/installing its package |
+| Build protected HTTP MCP | `mcp-clients-servers`, `data-handling`, `web-auth-crypto`; other matching modules still apply |
+| Build RAG without agent actions | `llm-retrieval-memory` and its `llm-applications` dependency; no automatic agent module |
 | Build an agent with persistent memory and MCP actions | All three domain modules plus their dependencies and other semantic matches |
 | Use an existing MCP tool during unrelated editing | No MCP implementation trigger from tool use alone |
 | Change the system prompt of an application's LLM summarizer | `llm-applications`; other task-specific matches still apply |
 | Fix ordinary code or a documentation typo using the assistant's tools | No `llm-applications` trigger from the assistant's prompts, tool use, or code generation alone |
-| Change a login flow in an application without LLM features | `web-auth` and other task-specific matches; no `llm-applications` trigger from assistant activity alone |
-| Change archive extraction in an application without LLM features | `data-boundaries` and other task-specific matches; no `llm-applications` trigger from assistant activity alone |
+| Change a login flow in an application without LLM features | `web-auth-crypto` and other task-specific matches; no `llm-applications` trigger from assistant activity alone |
+| Change archive extraction in an application without LLM features | `data-handling` and other task-specific matches; no `llm-applications` trigger from assistant activity alone |
+| Add file encryption or signature verification without a web endpoint | `web-auth-crypto`; the cryptography trigger does not require web work |
+| Select internal documents for a chatbot's answers | `llm-retrieval-memory` and `llm-applications`, even if the request never says RAG |
+| Store, replace or delete an application's persistent agent memories | `llm-retrieval-memory` and `llm-applications`; `llm-agents` when model-directed actions also change |
+| Optimize an ordinary SQL query or add a database index | No `llm-retrieval-memory` trigger without an LLM retrieval or memory feature; `data-handling` still applies |
+| Change a CI action version or container base image | `supply-chain`; also `deployment-environments` when container configuration or runtime controls are affected |
+| Change CI job permissions or isolate untrusted PR code | `deployment-environments`; also `supply-chain` when external components change |
+| Make a debug route, development server or mock service reachable | `deployment-environments` and other matching modules |
+| Change only an isolated unit-test fixture's expected value | No `deployment-environments` trigger from test data alone; reassess if activation, exposure or production separation changes |
 
 Run these scenarios with actual supported clients, including unavailable-loader
 and corrupt-artifact cases. Unit tests prove dependency resolution and installed
 content, not semantic selection. All discovery descriptions cost initial context;
 selected module bodies and dependencies add context, and complete mode loads all.
+
+The module names changed during this unpublished branch trial. Reinstall from
+the reviewed checkout and start a fresh session to use the current names.
+Old IDs are rejected by the new loader; retained snapshots keep their own IDs.
 
 ```bash
 python3 scripts/install.py --status --offline --into /path/to/project

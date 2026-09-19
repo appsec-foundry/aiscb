@@ -7,7 +7,7 @@ local installation path. Organization packaging duplicates weaker validation.
 
 ## Goal
 
-Implement the user's approved agent-systems proposal, the requested secure
+Implement the user's approved llm-agents proposal, the requested secure
 design step, the aiscb-core.md name, and local installation with an optional
 organization overlay, one catalog, and verified dependency loading.
 

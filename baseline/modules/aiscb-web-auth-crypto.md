@@ -1,10 +1,11 @@
-# Web and Authentication Module
+# Web, Authentication and Cryptography Module
 
-`module-id: aiscb:web-auth`. Load for HTTP endpoints, browser content, login,
-registration, recovery, verification, sessions, cookies, tokens, passwords,
-OAuth/OIDC, CORS, CSRF, webhooks, or security primitives.
+`module-id: aiscb:web-auth-crypto`. Load for: HTTP endpoints, browser content, login,
+registration, recovery, verification, sessions, cookies, tokens, passwords, OAuth or
+OIDC, CORS, CSRF, webhooks, or cryptography including encryption, hashing, signatures,
+random generation and secret comparison.
 
-## Web and Authentication
+## Web, Authentication and Cryptography
 
 - **[aiscb-WEBHOOK-001] Webhook Replay Protection:** Verify the provider's signature over its prescribed bytes before processing. Enforce authenticated timestamp freshness where supported and atomically deduplicate authenticated event IDs or use an equivalent provider-supported replay mechanism before side effects. Test forged, stale, concurrent duplicate, and retried deliveries without blocking legitimate first delivery.
 

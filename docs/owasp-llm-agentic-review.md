@@ -67,7 +67,7 @@ least agency. The following compact additions merit a separate content decision:
 
 1. LLM context: make hidden-prompt exposure assumptions explicit. Retrieval
    scoping, provenance and persistent-write authorization were subsequently
-   approved and implemented in `retrieval-memory`; they are no longer pending.
+   approved and implemented in `llm-retrieval-memory`; they are no longer pending.
 2. Agent action evidence: check current preconditions against authoritative
    state and build approval displays from the actual execution request,
    not solely from model-written descriptions.

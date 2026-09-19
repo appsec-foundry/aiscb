@@ -1,11 +1,12 @@
-# Agent Systems Module
+# LLM Agents Module
 
-`module-id: aiscb:agent-systems`. Load when designing or changing model-directed
-tool execution, autonomous workflows, action permissions or approvals,
-delegation, or multi-agent orchestration. Requires `aiscb:llm-applications`.
-The trigger concerns the system being built, not the coding assistant's own tools.
+`module-id: aiscb:llm-agents`. Load for: Designing or changing model-directed tool
+execution, autonomous workflows, action permissions or approvals, delegation, or
+multi-agent orchestration in the system being built; not merely the coding assistant's
+own tools.
+Requires `aiscb:llm-applications`.
 
-## Agent Systems
+## LLM Agents
 
 - **[aiscb-AGENCY-001] Minimum Agency:** When building agentic systems, use deterministic execution where model-selected actions are unnecessary. Expose only task-required tools with narrow operations and resource scopes; separate read, write, and destructive capabilities. Prefer dedicated operations over unrestricted shell, code, database, or network tools. Review against the current OWASP Top 10 for Agentic Applications.
 - **[aiscb-AGENTAUTH-001] Action Authority:** Treat model-selected actions and arguments as untrusted proposals. Validate them and authorize each execution outside the model against the initiating identity, tenant, task, and target resource with least privilege. Require human approval for consequential or irreversible actions; bind approval to the concrete action, target, and parameters, and renew it if these change. Delegated agents receive only the authority their subtask needs, never more than the parent holds.

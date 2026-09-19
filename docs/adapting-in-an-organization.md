@@ -60,7 +60,7 @@ The build turns that entry into whatever the tool uses for discovery. For Claude
 Two sessions on the same machine then differ like this:
 
 - A developer asks for SSO login. The single selection pass chooses both
-  `aiscb:web-auth` and `acme:authentication`; the Acme module then loads its
+  `aiscb:web-auth-crypto` and `acme:authentication`; the Acme module then loads its
   blueprint for issuer, claim, and approved group values.
 - A developer asks to edit unrelated prose. Nothing matches, so no module body
   loads; only the core, overlay, and discovery metadata remain in context.
@@ -102,6 +102,27 @@ loader.
 The content is the same for every delivery. Keep it in a policy repository, review changes there, and generate the adapters from a reviewed release.
 
 Give organization requirements stable IDs. Record whether each narrows named aiscb rules or stands alone as an organization requirement. The overlay and packs may narrow the baseline, never relax it. Keep rationale and history in the policy repository, outside the assistant's routine context.
+
+### Customize rules and handle exceptions
+
+- **Make a rule more specific or stricter:** Give it an organization rule ID
+  and name the baseline rule it narrows. Put universal rules in the overlay;
+  put domain rules in a module and register its loading triggers in the
+  catalog. Keep configuration values in a blueprint. For example, put
+  “use Acme SSO” in the authentication module and the approved issuer in its
+  blueprint. The baseline still applies.
+- **Request an exception for a concrete task:** Follow the [core's
+  explicit-override procedure](../baseline/aiscb-core.md#operating-mode).
+  The assistant names the rule, risk, and safer alternative, obtains explicit
+  user confirmation before proceeding, and records accepted risk in
+  **Security note (aiscb)**. An overlay cannot preapprove exceptions.
+  Exposing real secrets or harming others remains forbidden. Use a compliant
+  solution without confirmation when it meets the request.
+- **Disable a baseline rule across the organization:** The overlay does not
+  support this. For example, “internal services need no access control”
+  conflicts with aiscb. The assistant reports the conflict and stops only
+  the affected work. Permanent exceptions require a separately approved
+  change to the policy model.
 
 ### The overlay
 

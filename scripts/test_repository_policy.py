@@ -32,12 +32,12 @@ class RepositoryTests(unittest.TestCase):
     def test_loader_works_in_clean_checkout_without_dist(self):
         self.source_copy()
         result = subprocess.run([sys.executable, str(self.root / "scripts/repository_policy.py"),
-                                 "aiscb:agent-systems"], cwd=self.root / "baseline",
+                                 "aiscb:llm-agents"], cwd=self.root / "baseline",
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertLess(result.stdout.index("[aiscb-LLM-001]"), result.stdout.index("[aiscb-AGENCY-001]"))
         self.assertFalse((self.root / "dist").exists())
-        for ids in (["aiscb:agent-systems", "https://untrusted.invalid/rules"], ["../outside"]):
+        for ids in (["aiscb:llm-agents", "https://untrusted.invalid/rules"], ["../outside"]):
             result = subprocess.run([sys.executable, str(self.root / "scripts/repository_policy.py"), *ids],
                                     capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
@@ -45,12 +45,24 @@ class RepositoryTests(unittest.TestCase):
 
     def test_stale_source_refuses_without_output(self):
         self.source_copy()
-        target = self.root / "baseline/modules/aiscb-web-auth.md"
+        target = self.root / "baseline/modules/aiscb-web-auth-crypto.md"
         target.write_text(target.read_text() + "\nChanged\n")
         result = subprocess.run([sys.executable, str(self.root / "scripts/repository_policy.py"), "--catalog"],
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
+
+    def test_source_loader_rejects_obsolete_module_ids(self):
+        for old in ("web-auth", "data-boundaries", "secrets-bootstrap",
+                    "deployment-runtime", "agent-systems", "retrieval-memory",
+                    "mcp-integrations"):
+            result = subprocess.run(
+                [sys.executable, str(build.ROOT / "scripts/repository_policy.py"),
+                 "aiscb:llm-applications", "aiscb:" + old],
+                capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("unknown module", result.stderr)
 
     def test_build_refuses_symlinked_dist(self):
         self.source_copy()

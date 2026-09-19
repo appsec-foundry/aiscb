@@ -9,7 +9,7 @@ Distinguish HTTP authorization from local stdio process trust. Bind credentials
 and state to their intended resource and identity, prevent token passthrough
 and proxy consent confusion, constrain discovery destinations and local starts.
 
-Acceptance: mcp-integrations has explicit implementation/configuration triggers,
+Acceptance: mcp-clients-servers has explicit implementation/configuration triggers,
 no unconditional agent dependency, and negative boundary-test instructions.
 
 ## MCPRET-002 Retrieval and memory
@@ -20,13 +20,13 @@ authorization, provenance, and controlled memory writes.
 Apply identity/resource permissions before retrieved content reaches the model;
 preserve provenance and authorize persistent writes independently of content.
 
-Acceptance: retrieval-memory depends on llm-applications, covers caches and revoked
+Acceptance: llm-retrieval-memory depends on llm-applications, covers caches and revoked
 access, and requires cross-identity and poisoning boundary tests.
 
 ## MCPRET-003 Existing-module gaps
 
-Source: user's approval to close file/SSRF gaps in data-boundaries and webhook
-gaps in web-auth rather than add broad overlapping modules.
+Source: user's approval to close file/SSRF gaps in data-handling and webhook
+gaps in web-auth-crypto rather than add broad overlapping modules.
 
 Constrain file handling, decompression and outbound destinations; prevent
 replayed webhook side effects using provider verification and deduplication.
