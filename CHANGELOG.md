@@ -6,6 +6,7 @@ shows its publication date. Later installer updates are listed separately.
 ## Unreleased
 
 - Clarified what the core covers and when a Security note is required.
+- Clarified that the session switch requires dynamic loading in a user installation.
 
 ## [0.1.16](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.16) (2026-09-19)
 

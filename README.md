@@ -237,8 +237,12 @@ For an organization overlay, package verification, updates, and removal, see
 
 ### Temporarily disable the baseline
 
-Claude Code and Codex user installations support an optional session switch.
-Enable **dynamic loading** in guided setup, then start a new session:
+This switch works **only for Claude Code or Codex user installations configured
+for dynamic loading**. With static loading (the default), the baseline stays
+active even when `AISCB_DISABLE=1` is set.
+
+If needed, rerun guided setup and select **dynamic loading** for your user
+installation. Then start a new session:
 
 ```bash
 AISCB_DISABLE=1 claude
