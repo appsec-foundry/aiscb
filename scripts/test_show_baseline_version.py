@@ -22,6 +22,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parent.parent
 HELPER = REPO / "scripts" / "show_baseline_version.py"
@@ -202,7 +203,7 @@ def check_update_note(failures: list[str]) -> None:
     ]
     for label, section in current:
         code, out, _ = call(registry_layout(section))
-        if code != 0 or f"up to date (checked {checked_on})" not in out:
+        if code != 0 or f"no newer release known at last check (checked {checked_on})" not in out:
             failures.append(f"{label}: expected current status, got {out[:160]!r}")
 
     unchecked = [
@@ -245,6 +246,39 @@ def check_update_note(failures: list[str]) -> None:
         code, out, _ = call({**ABOVE, REGISTRY_FILE: payload})
         if code != 0 or "update status not checked" not in out:
             failures.append(f"{label}: expected unchecked status, got {code} {out[:160]!r}")
+
+
+def check_cache_age(failures: list[str]) -> None:
+    """A pending or unsuccessful refresh must not make old knowledge current."""
+    checked = 1_789_027_200
+    for latest in (VALID_ID, "aiscb-0.1.9", "aiscb-0.2.0"):
+        for age in (86_399, 86_400, 86_401, 864_000):
+            for enabled in (False, True):
+                root = build({
+                    **registry_layout({"latest": latest, "checked": checked,
+                                       "enabled": enabled}),
+                    "scripts/install.py": "raise SystemExit(1)\n",
+                })
+                state = root / REGISTRY_FILE
+                original = state.read_bytes()
+                with patch("time.time", return_value=checked + age), \
+                        patch.object(hook.subprocess, "Popen") as refresh:
+                    # No cache write: a pending or failed check has no new evidence.
+                    notes = [hook.update_note(VALID_ID, root / "scripts", root)
+                             for _ in range(2)]
+                stale = age >= 86_400
+                for note in notes:
+                    if ("check stale" in note) != stale or "up to date" in note:
+                        failures.append(f"cache age {age}: misleading status: {note}")
+                    if latest == "aiscb-0.2.0":
+                        if "update 0.2.0 available" not in note or hook.UPDATE_GUIDE not in note:
+                            failures.append(f"cache age {age}: update notice lost: {note}")
+                    elif "no newer release known at last check" not in note:
+                        failures.append(f"cache age {age}: missing qualification: {note}")
+                if refresh.called != (enabled and stale):
+                    failures.append(f"cache age {age}: refresh permission or interval changed")
+                if state.read_bytes() != original:
+                    failures.append("reporting cache age changed the stored check")
 
 
 def check_background_refresh(failures: list[str]) -> None:
@@ -321,6 +355,7 @@ def main() -> int:
     check_success(failures)
     check_failures(failures)
     check_update_note(failures)
+    check_cache_age(failures)
     check_background_refresh(failures)
     check_arguments(failures)
     check_installed_script(failures)

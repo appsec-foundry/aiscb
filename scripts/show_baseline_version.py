@@ -170,15 +170,20 @@ def update_note(installed: str, helper_dir: Path, home: Path) -> str:
         else None
     )
     date = f" (checked {checked_on})" if checked_on else ""
+    stale = (
+        "; check stale"
+        if checked_on and time.time() - checked >= CHECK_INTERVAL
+        else ""
+    )
     if published[0] != current[0]:
         return "update status not checked"
     if published[1] > current[1]:
         return (
-            f"update {latest[len(published[0]) + 1:]} available{date}: "
+            f"update {latest[len(published[0]) + 1:]} available{date}{stale}: "
             f"{UPDATE_GUIDE}"
         )
     if checked_on:
-        return f"up to date (checked {checked_on})"
+        return f"no newer release known at last check{date}{stale}"
     return "update status not checked"
 
 

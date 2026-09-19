@@ -61,6 +61,7 @@ KNOWN_HOOK_DIGESTS = (
     "fc6fe42137868f7024df6cf340fa375380150ed5aa12eda2b3bee2cfae93eaa7",
     "b2fa3d5d1d9d891117ca9b035db243129d24b6eb0c2c54c3568eef623f83bdea",
     "2b4c6d1f85b76294169d1b958bc2b0a98da6952b6b9768c99823cb2d7582cec5",
+    "238dcc65b98b93f404310caacf16e163f1ea0387debcd77b47446e4160f3ed5a",
 )
 COPILOT_VERSION_HOOK_NAME = "aiscb-baseline-version.json"
 PREVIOUS_COPILOT_VERSION_HOOK_NAME = "aisec-baseline-version.json"
