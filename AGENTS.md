@@ -25,10 +25,15 @@ the code's internal workflow.
 Four limits from it bind every edit to the baseline text:
 
 - It stays compact. Size is a criterion, not only correctness; the README states
-  the current budgets. After every change to a normative core or module,
-  run `make build-full-baseline`, recompute the core and complete file
-  sizes and GPT token counts with `o200k_base`, and update every value in
-  `README.md`; never carry previous measurements forward by assumption.
+  the current budgets. Before completing any repository change, recompute byte
+  sizes and token counts with `o200k_base` for the core, every cataloged module,
+  and the complete baseline. After changing normative sources, first regenerate
+  the complete baseline with `make build-full-baseline`. Update the table in
+  README's "Structure and context budget" section and every other affected
+  measurement or budget comparison; unchanged values may remain only after
+  verification, never by assumption. Keep module dependencies and the additional
+  context from discovery, loading instructions, and overlays accurately described;
+  rule-text counts must not be presented as total session context.
 - It stays tool-neutral. The same text ships to Claude Code, Copilot, Codex, and
   anything else that reads an `AGENTS.md`, so no rule may depend on one tool.
 - Every rule names a mechanism, not a goal. "Authorize on the server" works;
