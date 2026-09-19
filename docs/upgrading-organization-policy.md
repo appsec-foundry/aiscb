@@ -45,6 +45,10 @@ split organization prose into modules or decide whether its meaning conflicts
 with newer baseline rules. Historical versions other than the tested `0.1.15`
 example are handled only where their format matches these recognized cases.
 
+Every file under `packs/` must be registered. Unlisted files, including files
+in subdirectories, stay in the draft and block readiness; the current catalog
+format requires module files directly under `packs/`.
+
 ## Review and activate
 
 Exit `0` means the candidate passes the current bundle builder and organization

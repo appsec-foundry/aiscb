@@ -146,6 +146,18 @@ class UpgradeTests(unittest.TestCase):
         self.assertIn(b'customized legacy rule', files['overlay.md'])
         self.assertTrue(any('embedded-upstream' in x for x in report['issues']))
 
+    def test_embedded_rules_without_bold_markup_require_review(self):
+        path = self.source / 'overlay.md'
+        original = path.read_text()
+        for marker in ('- [aiscb-ACCESS-001]', '### [aiscb-ACCESS-001]',
+                       '[aiscb-ACCESS-001]', '- __[aiscb-ACCESS-001]__'):
+            with self.subTest(marker=marker):
+                path.write_text(original + '\n' + marker + ' Retained custom rule.\n')
+                files, report, _ = upgrade.prepare(self.source)
+                self.assertIn(b'Retained custom rule.', files['overlay.md'])
+                self.assertFalse(report['ready_for_policy_review'])
+                self.assertTrue(any('embedded-upstream' in x for x in report['issues']))
+
     def test_explicit_version_must_increase_and_keep_identity(self):
         for value in ('acme-sec-1.0.0', 'acme-sec-0.9.9', 'other-1.0.1', 'aiscb-1.0.1'):
             with self.subTest(value=value), self.assertRaises(ValueError):
@@ -196,6 +208,43 @@ class UpgradeTests(unittest.TestCase):
         (self.source / 'catalog.json').write_text('{"packs": []}')
         _, report, _ = upgrade.prepare(self.source)
         self.assertFalse(report['structurally_valid'])
+
+    def test_nested_unlisted_rules_are_preserved_but_block_readiness(self):
+        path = self.source / 'packs/team/extra.md'
+        path.parent.mkdir()
+        path.write_text('- **[ACME-EXTRA-001]** Require approval before deployment.\n')
+        files, report, _ = upgrade.prepare(self.source)
+        self.assertEqual(files['packs/team/extra.md'], path.read_bytes())
+        self.assertFalse(report['structurally_valid'])
+        self.assertFalse(report['ready_for_policy_review'])
+        self.assertIn('unlisted-pack: packs/team/extra.md is not registered in the catalog',
+                      report['issues'])
+        self.assertEqual(self.cli().returncode, 2)
+        self.assertEqual((self.source / '.aiscb-upgrade/packs/team/extra.md').read_bytes(),
+                         path.read_bytes())
+
+    def test_one_pack_file_cannot_represent_two_modules(self):
+        path = self.source / 'catalog.json'
+        catalog = json.loads(path.read_text())
+        second = dict(catalog['packs'][0], id='acme-second')
+        catalog['packs'].append(second)
+        path.write_text(json.dumps(catalog))
+        _, report, _ = upgrade.prepare(self.source)
+        self.assertFalse(report['ready_for_policy_review'])
+        self.assertIn('duplicate-pack: a source file is assigned to multiple modules',
+                      report['issues'])
+
+    def test_tree_and_total_size_limits(self):
+        for index in range(upgrade.MAX_FILES):
+            (self.source / 'packs' / f'extra-{index}.md').write_text('rule\n')
+        with self.assertRaises(upgrade.UpgradeError):
+            upgrade.prepare(self.source)
+        for path in (self.source / 'packs').glob('extra-*.md'):
+            path.unlink()
+        for index in range(upgrade.MAX_TOTAL // upgrade.MAX_BYTES + 1):
+            (self.source / 'packs' / f'extra-{index}.md').write_bytes(b'x' * upgrade.MAX_BYTES)
+        with self.assertRaises(upgrade.UpgradeError):
+            upgrade.prepare(self.source)
 
     def test_ambiguous_namespace_is_reported_without_renaming(self):
         path = self.source / 'catalog.json'

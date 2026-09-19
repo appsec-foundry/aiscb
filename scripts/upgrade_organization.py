@@ -209,6 +209,7 @@ def prepare(source, organization_id=None, namespace=None):
                 namespace = prefix
     namespaces = set()
     renamed = {}
+    listed_packs = set()
     for pack in org["packs"]:
         if not isinstance(pack, dict) or not isinstance(pack.get("id"), str):
             raise UpgradeError("invalid organization catalog entry")
@@ -227,6 +228,9 @@ def prepare(source, organization_id=None, namespace=None):
         policy_loader.safe_path(Path("/source"), rel)
         if rel not in files or not rel.startswith("packs/"):
             raise UpgradeError("catalog module must reference a supplied pack file")
+        if rel in listed_packs:
+            issues.append("duplicate-pack: a source file is assigned to multiple modules")
+        listed_packs.add(rel)
         blueprints = pack.get("blueprints")
         if not isinstance(blueprints, list):
             raise UpgradeError("blueprints must be a list")
@@ -249,6 +253,9 @@ def prepare(source, organization_id=None, namespace=None):
             renamed[old] = new
             files[rel] = body.encode()
             changes.append("Namespaced a legacy module ID and its recognized declaration")
+    for name in sorted(files):
+        if name.startswith("packs/") and name not in listed_packs:
+            issues.append("unlisted-pack: " + name + " is not registered in the catalog")
     files["catalog.json"] = (json.dumps(org, indent=2) + "\n").encode()
     if len(namespaces) == 1:
         ns = next(iter(namespaces))
@@ -275,7 +282,9 @@ def prepare(source, organization_id=None, namespace=None):
         if not name.endswith(".md"):
             continue
         text = raw.decode()
-        if re.search(r"\*\*\[aiscb-[A-Z0-9]+-\d{3}\]", text):
+        if (re.search(r"\*\*\[aiscb-[A-Z0-9]+-\d{3}\]", text)
+                or re.search(r"^[ \t]*(?:(?:[-*+]|\d+[.)]|#{1,6})[ \t]+)?"
+                             r"(?:__)?\[aiscb-[A-Z0-9]+-\d{3}\]", text, re.MULTILINE)):
             issues.append("embedded-upstream: " + name + " defines aiscb rules; separate them manually")
         refs = set(re.findall(r"aiscb-[A-Z][A-Z0-9]*-\d{3}", text))
         if refs - known_rules:

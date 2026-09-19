@@ -235,7 +235,8 @@ def load_catalog(source: Path, aiscb_rules: set[str]) -> dict:
             unknown = sorted(set(mapping["narrows"]) - aiscb_rules)
             if unknown:
                 raise BuildError(f"{req_id} narrows unknown aiscb rules {unknown}")
-    on_disk = {f"packs/{p.name}" for p in (source / "packs").glob("*.md")}
+    on_disk = {p.relative_to(source).as_posix()
+               for p in (source / "packs").rglob("*.md")}
     stray = sorted(on_disk - listed_files)
     if stray:
         raise BuildError(f"packs without a catalog entry: {stray}")
