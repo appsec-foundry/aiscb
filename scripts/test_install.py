@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -2185,14 +2186,54 @@ with tempfile.TemporaryDirectory() as tmp:
 setup_script = install.REPO / "setup.sh"
 setup_content = setup_script.read_text(encoding="utf-8")
 published_fixture = install.REPO / "tests/fixtures/published-bootstrap"
-setup_digest = hashlib.sha256((published_fixture / "setup.sh").read_bytes()).hexdigest()
+published_setup = (published_fixture / "setup.sh").read_text(encoding="utf-8")
 readme = (install.REPO / "README.md").read_text(encoding="utf-8")
 quick_start = readme.split("## Quick start", 1)[1].split("\n## ", 1)[0]
 normalized_quick_start = " ".join(quick_start.split())
-check("the quick start pins the exact published bootstrap fixture",
-      "6deb1bd83c627a54c31570899a4dd1dc40f690c1/setup.sh" in quick_start
+bootstrap_refs = re.findall(
+    r"https://raw\.githubusercontent\.com/appsec-foundry/aiscb/([a-f0-9]{40})/setup\.sh",
+    quick_start,
+)
+# The published 0.1.15 script predates the checkout's modular dispatch.
+expected_bootstrap = (
+    (published_fixture / "setup.sh").read_bytes()
+    if bootstrap_refs == ["6deb1bd83c627a54c31570899a4dd1dc40f690c1"]
+    else setup_script.read_bytes()
+)
+setup_digest = hashlib.sha256(expected_bootstrap).hexdigest()
+check("the quick start pins an immutable commit and the exact documented bootstrap",
+      len(bootstrap_refs) == 1
       and f"echo '{setup_digest} aiscb-setup.sh' | sha256sum --check"
       in normalized_quick_start)
+if len(bootstrap_refs) == 1:
+    pinned_setup = subprocess.run(
+        ["git", "show", f"{bootstrap_refs[0]}:setup.sh"], cwd=install.REPO,
+        capture_output=True,
+    )
+    # Shallow checkouts need not contain the bootstrap commit. The hash check
+    # above still applies; release acceptance also checks the actual download.
+    if pinned_setup.returncode == 0:
+        check("the locally available pinned commit contains the documented bootstrap",
+              pinned_setup.stdout == expected_bootstrap)
+
+# Accept the preserved historical bootstrap or the tested asset template with
+# immutable release and SHA-256 substitutions. Never accept arbitrary scripts.
+bootstrap_pattern = re.escape((install.REPO / "scripts/release-setup.sh.in").read_text())
+bootstrap_pattern = bootstrap_pattern.replace(
+    re.escape("@RELEASE@"), r"aiscb-bundle-[0-9]+\.[0-9]+\.[0-9]+-[1-9][0-9]*")
+for marker in ("@BASELINE_SHA@", "@INSTALLER_SHA@", "@HELPER_SHA@"):
+    bootstrap_pattern = bootstrap_pattern.replace(re.escape(marker), r"[a-f0-9]{64}")
+legacy_checkout_setup = published_setup.replace(
+    '    && [ -f "$script_dir/secure-coding-baseline.md" ]; then',
+    '    && { [ -f "$script_dir/baseline/catalog.json" ] \\\n'
+    '         || [ -f "$script_dir/secure-coding-baseline.md" ]; }; then',
+)
+check("the current bootstrap uses a verified distribution path",
+      setup_content in (published_setup, legacy_checkout_setup)
+      or re.fullmatch(bootstrap_pattern, setup_content) is not None)
+check("the historical bootstrap fixture is unchanged",
+      hashlib.sha256((published_fixture / "setup.sh").read_bytes()).hexdigest()
+      == "7aa593cc0b69dd4c2f9d21dd9a7782bbf23e5f4922c772033ff070ac1956f3ac")
 bundle_hashes = {
     install.BASELINE: hashlib.sha256(install.SOURCE.read_bytes()).hexdigest(),
     "scripts/install.py": hashlib.sha256(
@@ -2202,30 +2243,34 @@ bundle_hashes = {
         install.VERSION_HOOK_SOURCE.read_bytes()
     ).hexdigest(),
 }
-check("the remote bootstrap pins and hashes one coherent bundle",
-      "bundle_ref=\"aiscb-bundle-0.1.15-2\"" in setup_content
-      and "/branches/main" not in setup_content
-      and all(entry["sha256"] in setup_content for entry in
+check("the historical bootstrap pins and hashes one coherent bundle",
+      "bundle_ref=\"aiscb-bundle-0.1.15-2\"" in published_setup
+      and "/branches/main" not in published_setup
+      and all(entry["sha256"] in published_setup for entry in
               json.loads((published_fixture / "bundle.json").read_text())["files"].values())
-      and "--interactive --offline" in setup_content
-      and setup_content.count("--max-filesize") == 1,
-      setup_content)
-completed = subprocess.run(
-    ["bash", str(setup_script), "--help"],
-    capture_output=True,
-    text=True,
-    cwd=tempfile.gettempdir(),
-)
-check("setup.sh is executable and reaches the installer",
-      os.access(setup_script, os.X_OK)
-      and completed.returncode == 0
-      and "usage: install.py" in completed.stdout,
-      completed.stderr or completed.stdout)
+      and "--interactive --offline" in published_setup
+      and published_setup.count("--max-filesize") == 1,
+      published_setup)
+with tempfile.TemporaryDirectory() as tmp:
+    checkout = Path(tmp)
+    historical_script = checkout / "setup.sh"
+    historical_script.write_text(published_setup)
+    historical_script.chmod(0o755)
+    (checkout / "scripts").symlink_to(install.REPO / "scripts", target_is_directory=True)
+    (checkout / install.BASELINE).symlink_to(install.SOURCE)
+    completed = subprocess.run(
+        ["bash", str(historical_script), "--help"],
+        capture_output=True, text=True, cwd=tempfile.gettempdir(),
+    )
+    check("the historical checkout bootstrap reaches the installer",
+          completed.returncode == 0 and "usage: install.py" in completed.stdout,
+          completed.stderr or completed.stdout)
+check("the current setup.sh remains executable", os.access(setup_script, os.X_OK))
 
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
     remote_setup = sandbox / "remote-setup.sh"
-    fixture_setup = setup_content
+    fixture_setup = published_setup
     for name, entry in json.loads((published_fixture / "bundle.json").read_text())["files"].items():
         fixture_setup = fixture_setup.replace(entry["sha256"], bundle_hashes[name])
     remote_setup.write_text(fixture_setup)
