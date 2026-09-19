@@ -148,7 +148,7 @@ An organization can add rules through an overlay, but cannot relax the baseline.
 
 | Component | Covers | Bytes | Tokens (`o200k_base`) |
 | --- | --- | ---: | ---: |
-| Core (always loaded) | Keep work within scope, load relevant modules, protect secrets, and review changes | 7,780 | 1,558 |
+| aiscb core (always loaded) | Keep work within scope, load relevant modules, protect secrets, and review changes | 7,780 | 1,558 |
 | `aiscb:web-auth-crypto` | Protect web content, authentication, webhooks, and cryptography | 5,189 | 1,040 |
 | `aiscb:secrets-initialization` | Set up credentials and keys without shipping working defaults | 1,900 | 351 |
 | `aiscb:deployment-environments` | Restrict CI and container privileges; separate development from production | 1,659 | 311 |
