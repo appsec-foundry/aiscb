@@ -153,7 +153,7 @@ It loads modules as the task requires—for example, `web-auth-crypto` for a log
 The [catalog](baseline/catalog.json) lists when each module applies.
 An organization can add rules through an overlay, but cannot relax the baseline.
 
-| Component | Covers | Bytes | Tokens (`o200k_base`) |
+| Component | Covers | Bytes | Tokens (OpenAI `o200k_base`)[^tokens] |
 | --- | --- | ---: | ---: |
 | aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review—including when a Security note is required | 8,138 | 1,617 |
 | `aiscb:web-auth-crypto` | Protect web content, authentication, webhooks, and cryptography | 5,189 | 1,040 |
@@ -166,6 +166,12 @@ An organization can add rules through an overlay, but cannot relax the baseline.
 | `aiscb:llm-retrieval-memory` | Check access before retrieval and control what enters persistent memory | 1,666 | 325 |
 | `aiscb:mcp-clients-servers` | Authorize MCP requests and control local server starts and credentials | 2,225 | 415 |
 | Complete baseline | The core and every module in one file | 26,964 | 5,274 |
+
+[^tokens]: Measured with OpenAI's `o200k_base`, which GPT-4o, GPT-4.1, and GPT-5
+    models use. Other tokenizers count the same text differently. Unmeasured
+    estimates: Claude up to 4.6 about 15–30% more tokens; Claude with the newer
+    tokenizer introduced in Opus 4.7 about 15–75% more. The text itself does not
+    change.
 
 Counts cover rule text only; the catalog, loading instructions, and overlays
 add context. `llm-agents` and `llm-retrieval-memory` also load `llm-applications`;
