@@ -14,6 +14,8 @@ Install it once instead of repeating security expectations in every prompt.
 
 Current baseline: `aiscb-0.1.16`.
 
+See the [changelog](CHANGELOG.md) for changes and update notes.
+
 The Quick start installs the signed 0.1.16 release. For modular installation,
 use a [reviewed checkout](#modular-installation).
 

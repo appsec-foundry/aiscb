@@ -36,10 +36,20 @@ Never replace this with development checks or skip verification to make a releas
    catalog baseline ID and every official module version, builder constants,
    overlay compatibility references and version-sensitive tests. Keep existing
    rule IDs. Update the README version examples.
-2. Run `make build-full-baseline`; recompute all README byte and
+2. Update [`CHANGELOG.md`](../CHANGELOG.md) from the Git changes since the
+   previous release. Explain what changed for users and what they need to do
+   when updating. Use short, plain-language entries. Group related changes;
+   omit internal refactoring, routine test work, and planned features.
+
+   Record completed changes under **Unreleased**. Before publication, put the
+   changes being shipped under the approved version, date and release link.
+   List later installer updates separately, with a date, under the version
+   they install. Reuse the summary in GitHub release notes, keeping build and
+   signing details separate. Do not publish without a current changelog entry.
+3. Run `make build-full-baseline`; recompute all README byte and
    `o200k_base` token measurements. Run `make check`. Review the resulting
    sources and record the approved source commit. Generated output is ignored.
-3. Stage the approved version and an unused positive revision:
+4. Stage the approved version and an unused positive revision:
 
    ```bash
    make build-release VERSION=X.Y.Z REVISION=1
@@ -48,7 +58,7 @@ Never replace this with development checks or skip verification to make a releas
    This writes an unsigned manifest and hash-pinned asset bootstrap, and refuses
    an existing directory. It neither signs nor publishes. For a changed staging
    attempt, use a new revision; never overwrite a published bundle.
-4. The maintainer signs and checks the staged bytes:
+5. The maintainer signs and checks the staged bytes:
 
    ```bash
    make sign-bundle BUNDLE_DIR=dist/aiscb-X.Y.Z/bundle-1 KEY=/path/to/release-key
@@ -58,7 +68,7 @@ Never replace this with development checks or skip verification to make a releas
    The private key stays outside the repository, CI and assistant context.
    The public key must already appear in `ALLOWED_SIGNERS` in the staged
    installer. A changed file after signing invalidates the release.
-5. Create the immutable distribution tag `aiscb-bundle-X.Y.Z-N` on the reviewed
+6. Create the immutable distribution tag `aiscb-bundle-X.Y.Z-N` on the reviewed
    source commit. Upload the staged files to its GitHub release, marked
    **prerelease** so a packaging tag cannot become the updater's latest stable
    baseline. The generated bootstrap pins this distribution tag and revision.
@@ -77,13 +87,13 @@ Never replace this with development checks or skip verification to make a releas
    them to asset basenames. Do not use upload overwrite options. Keep source
    commit and bundle revision in the release notes. An archive is optional and
    must be named `aiscb-X.Y.Z-bundle-N.tar.gz`; it is not the updater input.
-6. Prepare the new Quick start from the staged `setup.sh`. After the assets are
+7. Prepare the new Quick start from the staged `setup.sh`. After the assets are
    available, put these exact bytes into the tracked root `setup.sh`, commit it,
    then update the **complete** README Quick start block with that commit and
    its exact SHA-256 in a follow-up documentation commit. Keep the old working
    Quick start until the new assets can actually be downloaded. Never publish
    or merge a mismatched bootstrap URL/hash pair.
-7. Verify the real download path in a clean environment: expected version,
+8. Verify the real download path in a clean environment: expected version,
    signature, hash/size checks, refused tampering, installation and new-session
    loading. Publish the release as stable only after validation; the updater
    rejects draft/prerelease metadata. Do not claim release completion while
