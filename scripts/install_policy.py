@@ -19,7 +19,14 @@ START = "<!-- aiscb managed policy -->"
 END = "<!-- /aiscb managed policy -->"
 
 
-def installation_record(root):
+def entry_path(root, name):
+    if Path(name).is_absolute():
+        return loader.safe_path(Path(Path(name).anchor), str(Path(name)).lstrip("/"))
+    return loader.safe_path(root, name)
+
+
+def installation_record(root, entry_points=None):
+    entry_points = entry_points or ENTRY_POINTS
     record = json.loads(loader.read(loader.safe_path(root, ".aiscb/installation.json")),
                         object_pairs_hook=loader.pairs)
     if (not isinstance(record, dict) or set(record) != {"digest", "modular", "entries"}
@@ -27,7 +34,7 @@ def installation_record(root):
             or not loader.DIGEST.fullmatch(record["digest"])
             or type(record["modular"]) is not bool
             or not isinstance(record["entries"], dict) or not record["entries"]
-            or any(rel not in ENTRY_POINTS.values() or not isinstance(digest, str)
+            or any(rel not in entry_points.values() or not isinstance(digest, str)
                    or not loader.DIGEST.fullmatch(digest)
                    for rel, digest in record["entries"].items())):
         raise ValueError("invalid local installation record")
@@ -142,7 +149,10 @@ def atomic(path, raw):
             os.unlink(name)
 
 
-def install(tools, root, *, modular=False, bundle=None, expected=None):
+def install(tools, root, *, modular=True, bundle=None, expected=None,
+            entry_points=None, prepared=None):
+    entry_points = entry_points or ENTRY_POINTS
+    prepared = prepared or {}
     if root == Path(root.anchor) or not root.is_dir():
         raise ValueError("target must be an existing non-root project directory")
     if any(character in str(root) for character in "`\n\r"):
@@ -157,11 +167,11 @@ def install(tools, root, *, modular=False, bundle=None, expected=None):
     fingerprint = loader.digest(manifest)
     storage = loader.safe_path(root, ".aiscb")
     record_path = loader.safe_path(root, ".aiscb/installation.json")
-    previous = installation_record(root) if record_path.exists() else {}
+    previous = installation_record(root, entry_points) if record_path.exists() else {}
     if previous:
-        status(root)
+        status(root, entry_points)
         # One record describes one release/format for every managed entry point.
-        tools = list(dict.fromkeys([*tools, *(tool for tool, rel in ENTRY_POINTS.items()
+        tools = list(dict.fromkeys([*tools, *(tool for tool, rel in entry_points.items()
                                              if rel in previous["entries"])]))
     destination = loader.safe_path(root, f".aiscb/releases/{fingerprint}")
     with tempfile.TemporaryDirectory(prefix="aiscb-policy-") as tmp:
@@ -178,7 +188,8 @@ def install(tools, root, *, modular=False, bundle=None, expected=None):
         if modular:
             command = shlex.join(["python3", str(destination / "policy_loader.py"), "--digest", fingerprint])
             initial += ("\n## Installed module adapter\n\n"
-                        f"Source: {destination}. Release: {release}.\n"
+                        f"Installation mode: modular. Source: {destination}. Release: {release}.\n"
+                        "The catalog below lists available modules, not loaded bodies.\n"
                         f"Load selected IDs with `{command} MODULE_ID [MODULE_ID ...]`.\n"
                         "The loader verifies full bodies and includes dependencies and blueprint values. "
                         "Use this loader before affected work and again after context loss; "
@@ -190,14 +201,20 @@ def install(tools, root, *, modular=False, bundle=None, expected=None):
                 initial += "\n"
         else:
             initial += "\n" + loader.render(stage, fingerprint, list(inventory))
-            initial += "\n\nAll configured modules and blueprint values are loaded above.\n"
+            initial += "\n\nInstallation mode: complete. All configured modules and blueprint values are loaded above.\n"
         block = START + "\n" + initial + "\n" + END
-        edits = {}
+        edits = dict(prepared)
         records = dict(previous.get("entries", {}))
         for tool in tools:
-            rel = ENTRY_POINTS[tool]
-            path = loader.safe_path(root, rel)
-            old = path.read_text() if path.exists() else ""
+            rel = entry_points[tool]
+            path = Path(rel) if Path(rel).is_absolute() else root / rel
+            if path in prepared:
+                loader.safe_path(Path(path.anchor), str(path.parent).lstrip("/"))
+            # A migration may replace a verified managed symlink without following it.
+            if path not in prepared:
+                path = entry_path(root, rel)
+            old = (prepared[path].decode() if path in prepared else
+                   loader.read(path).decode() if path.exists() else "")
             if START in old or END in old:
                 if old.count(START) != 1 or old.count(END) != 1:
                     raise ValueError(f"invalid managed markers in {rel}")
@@ -205,6 +222,9 @@ def install(tools, root, *, modular=False, bundle=None, expected=None):
                 current = old[start:end]
                 if end < start or records.get(rel) != loader.digest(current.encode()):
                     raise ValueError(f"modified or unowned policy block in {rel}")
+                outside = old[:start] + old[end:]
+                if "module-id:" in outside or "secure-coding-baseline.md" in outside:
+                    raise ValueError(f"additional baseline outside managed block in {rel}")
                 new = old[:start] + block + old[end:]
             else:
                 if "baseline-id:" in old or "secure-coding-baseline.md" in old:
@@ -236,14 +256,14 @@ def install(tools, root, *, modular=False, bundle=None, expected=None):
     return messages
 
 
-def status(root):
-    record = installation_record(root)
+def status(root, entry_points=None):
+    record = installation_record(root, entry_points)
     fingerprint = record["digest"]
     if not loader.DIGEST.fullmatch(fingerprint):
         raise ValueError("invalid installed digest")
     loader.load_package(root / ".aiscb/releases" / fingerprint, fingerprint)
     for rel, expected in record["entries"].items():
-        text = loader.read(loader.safe_path(root, rel)).decode()
+        text = loader.read(entry_path(root, rel)).decode()
         if text.count(START) != 1 or text.count(END) != 1:
             raise ValueError(f"missing managed block in {rel}")
         block = text[text.index(START):text.index(END) + len(END)]
@@ -252,11 +272,11 @@ def status(root):
     return "Local policy and tool entry points match their recorded digests."
 
 
-def uninstall(root):
-    status(root)
-    record = installation_record(root)
+def uninstall(root, entry_points=None):
+    status(root, entry_points)
+    record = installation_record(root, entry_points)
     for rel in record["entries"]:
-        path = loader.safe_path(root, rel)
+        path = entry_path(root, rel)
         text = path.read_text()
         start, end = text.index(START), text.index(END) + len(END)
         atomic(path, (text[:start] + text[end:]).encode())

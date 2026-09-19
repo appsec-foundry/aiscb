@@ -59,7 +59,7 @@ SECURITY_NOTE_HEADING = re.compile(
 
 # The baseline answers this prompt from context alone, which is what makes it
 # usable as a probe: it reports the ids in scope and the file each came from.
-PROBE_PROMPT = "baseline?"
+PROBE_PROMPT = "aiscb?"
 BASELINE_ID_LINE = re.compile(r"^`baseline-id: ([^`]+)`", re.MULTILINE)
 SEMVER_TAIL = (r"\d+\.\d+\.\d+"
                r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"

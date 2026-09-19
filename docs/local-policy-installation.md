@@ -4,8 +4,9 @@ Use the same local installer for official policy and an organization package.
 The core and official modules share one aiscb release. An organization overlay
 has its own release and pins the exact aiscb content it extends.
 
-Modular installation uses a reviewed checkout and an existing project
-directory. The signed remote bundle installs the complete baseline.
+Modular installation is the default for reviewed checkouts and newly built
+bundles, at project or user scope. The currently published 0.1.16 bootstrap still
+installs complete policy; it is unchanged until a new release is signed.
 Python 3.10 or newer is required. Modular mode requires the assistant to execute
 the supplied Python loader; it does not grant command-execution permission. If that tool is absent
 or denied, affected work must stop. Use complete output for such clients.
@@ -19,7 +20,8 @@ Complete mode avoids that runtime command but still needs client loading tests.
 ## Install
 
 ```bash
-python3 scripts/install.py codex --modular --into /path/to/project
+python3 scripts/install.py claude codex copilot --into /path/to/project
+python3 scripts/install.py claude codex copilot --user
 ```
 
 Supported entry points are `AGENTS.md` for Codex, `CLAUDE.md` for Claude Code,
@@ -29,13 +31,26 @@ and a named loader command directly into a managed block. Existing unrelated
 instructions are preserved; existing baseline integrations and changed managed
 blocks cause a refusal rather than a second baseline or an overwrite.
 
-This conflict check covers the targeted project entry points, not every inherited
-user-level or managed policy. Inspect those separately before rollout; do not
-combine old eager imports and new modular installation unintentionally. Status
-checks installed files, not the complete instruction context a client actually
-loads. Installation does not remove inherited policy.
+Project setup also checks known user and ancestor instruction locations for
+inherited complete policy and refuses the conflict before writing. Close sessions
+and migrate the user installation first with `--user --migrate`, then any old
+project with `--into /path/to/project --migrate`. Only unchanged, recorded managed
+content (or the exact bundled complete source) is eligible. Other instructions
+are preserved; unowned imports, modified policy and unexpected symlinks are refused.
+For a managed dynamic installation, migration also removes its exact complete-text
+injection hooks while preserving unrelated hooks. A modified injection hook is
+refused; it cannot silently continue loading all modules after migration.
+Custom managed policies, additional configured instruction directories and IDE profile
+settings still need inspection; status verifies files, not the whole client context.
 
-Start a fresh session from the project root. Confirm `baseline?`, then exercise
+User entries are `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` and
+`~/.copilot/instructions/secure-coding.instructions.md` with `applyTo: "**"`.
+The existing tool configuration-home overrides are respected; Copilot also gets
+the default VS Code personal instruction file when its CLI home differs.
+User snapshots and their record live under `~/.aiscb/`. Use `--status --user` or
+`--uninstall --user` for this scope. The installed updater is `~/.aiscb/install.py`.
+
+Start a fresh session from the project root. Confirm `aiscb?`, then exercise
 a task requiring modules. Selecting `aiscb:llm-agents` must return both
 `aiscb:llm-applications` and `aiscb:llm-agents` before affected work. The loader
 verifies the pinned snapshot, rejects unknown IDs and invalid dependencies,
@@ -93,9 +108,12 @@ the loader returns blueprints with modules. No model-supplied URL is fetched.
 The example's separate managed-machine installer still requires its configured
 install root; the project installer above relocates verified content itself.
 
-Replace `--modular` with `--complete` when the client cannot execute a loader. Then the managed
-block contains the core, overlay, every configured module, and all referenced
+Select `--complete` when the client cannot execute a loader. Then the
+entry contains the core, overlay, every configured module, and all referenced
 blueprint values. This is generated from the same package, not separate policy.
+Fresh official complete installs retain the legacy installer and session-switch
+compatibility. A managed modular installation can switch to complete and back by
+rerunning setup; returning from a legacy complete installation requires `--migrate`.
 The example gateway also receives complete output until a remote loader exists.
 
 ## Update, verify, remove

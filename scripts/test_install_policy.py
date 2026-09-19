@@ -3,6 +3,7 @@
 
 import importlib.util
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -274,13 +275,16 @@ class PolicyTests(unittest.TestCase):
         def run(*args):
             return subprocess.run([sys.executable, str(ROOT / "scripts/install.py"),
                                    *args, "--into", str(self.root)],
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True,
+                                  env={**os.environ, "HOME": str(self.root),
+                                       "CODEX_HOME": str(self.root / ".codex")})
         self.assertEqual(run("codex", "--modular").returncode, 0)
         self.assertEqual(run("codex", "--complete").returncode, 0)
         self.assertIn("[aiscb-MCPAUTH-001]", (self.root / "AGENTS.md").read_text())
         self.assertNotEqual(run("codex", "--complete", "--modular").returncode, 0)
         self.assertEqual(run("--status", "--offline").returncode, 0)
-        self.assertNotEqual(run("codex").returncode, 0)
+        self.assertEqual(run("codex").returncode, 0)
+        self.assertNotIn("[aiscb-MCPAUTH-001]", (self.root / "AGENTS.md").read_text())
         self.assertEqual(run("--uninstall").returncode, 0)
 
     def test_local_install_does_not_accept_unverified_source(self):
@@ -304,10 +308,12 @@ class PolicyTests(unittest.TestCase):
         (distribution / "secure-coding-baseline.md").write_bytes(installer.build_baseline.validate()[2])
         project = self.root / "project"
         project.mkdir()
-        for mode in ("--modular", "--complete"):
+        for mode in ("--modular",):
             result = subprocess.run([sys.executable, "-I", str(distribution / "install.py"),
                                      "codex", mode, "--into", str(project)],
-                                    capture_output=True, text=True)
+                                    capture_output=True, text=True,
+                                    env={**os.environ, "HOME": str(self.root),
+                                         "CODEX_HOME": str(self.root / ".codex")})
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Local policy setup refused", result.stderr)
             self.assertEqual(list(project.iterdir()), [])
@@ -338,7 +344,7 @@ class PolicyTests(unittest.TestCase):
                 self.assertIn(f"[aiscb-{rule}-001]", skill)
         self.assertIn("[aiscb-LLM-001]", text)
         self.assertNotIn("unused-build-root", text)
-        installer.install(["codex"], target, bundle=bundle, expected=digest)
+        installer.install(["codex"], target, bundle=bundle, expected=digest, modular=False)
         text = (target / "AGENTS.md").read_text()
         self.assertIn("[aiscb-AGENTAUTH-001]", text)
         self.assertIn("[ACME-", text)

@@ -13,6 +13,15 @@ not tracked copies of the rules. Never publish development output as a release.
   `scripts/install.py`, `scripts/show_baseline_version.py`, `bundle.json`,
   and generated `setup.sh`. Signing adds `bundle.json.sig`.
 
+The staged installer embeds the reviewed core, catalog, modules and Python
+loader/setup sources as data. Its existing manifest entry and bootstrap hash
+cover those exact bytes. Runtime setup extracts them into a private temporary
+directory, validates the catalog, and installs persistent verified snapshots;
+it fetches no replacement code or policy. The three-file signed update contract
+therefore remains unchanged. The complete Markdown remains a compatibility asset,
+not the default initial prompt. Never replace the staged installer with the
+unbundled checkout script before signing.
+
 A baseline version identifies core and official modules together. A bundle
 revision distinguishes packaging changes; it does not approve new normative
 content under an already-published baseline version. Organization overlays have

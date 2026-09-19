@@ -5,6 +5,15 @@ shows its publication date. Later installer updates are listed separately.
 
 ## Unreleased
 
+- Make modular loading the default for Claude Code, Codex and Copilot project
+  and user installations: core and discovery first, module bodies when needed.
+- Add explicit migration of verified complete installations and detect inherited
+  complete policy before project setup; preserve unrelated instructions.
+- Replace the status question with `aiscb?`, separating available modules from
+  loaded bodies and reporting the installation mode without file reads.
+- Prepare self-contained modular release installers. The published Quick start
+  remains on the previous complete bundle until the next signed release.
+
 - Clarified what the core covers and when a Security note is required.
 - Clarified that the session switch requires dynamic loading in a user installation.
 

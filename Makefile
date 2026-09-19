@@ -8,6 +8,7 @@
 
 # Both check and coverage run this suite, so it is listed once.
 CHECK_TESTS = tests/selfcheck.py \
+              scripts/test_modular_setup.py \
               scripts/test_install_policy.py \
               scripts/test_repository_policy.py \
               tests/test_selfcheck.py \

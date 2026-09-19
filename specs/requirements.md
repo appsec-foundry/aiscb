@@ -191,7 +191,10 @@ aiscb or organization module triggers.
 before affected design or code changes, using only the bounded catalog and
 loader supplied by the adapter. Recheck on scope changes, final diff, resume,
 or context loss. Missing, invalid, incompatible, or conflicting required
-content stops only affected work.
+content stops only affected work. Initial context contains core, discovery and
+loader instructions plus supplied always-on overlays; complete loading is explicit.
+The `aiscb?` status uses existing context to distinguish available from loaded
+modules and reports unknown state without reading files.
 
 **Observable acceptance:** Relevant modules are loaded completely before their
 requirements are needed; unrelated modules stay unloaded, and unavailable

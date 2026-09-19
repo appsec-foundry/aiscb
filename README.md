@@ -16,8 +16,9 @@ Current baseline: `aiscb-0.1.16`.
 
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
-The Quick start installs the signed 0.1.16 release. For modular installation,
-use a [reviewed checkout](#modular-installation).
+Use the [modular installation](#modular-installation) from a reviewed checkout
+to start with only the core and discovery. The published Quick start below
+still installs the signed, complete 0.1.16 release until the next publication.
 
 > **Scope and limits**
 >
@@ -151,7 +152,7 @@ An organization can add rules through an overlay, but cannot relax the baseline.
 
 | Component | Covers | Bytes | Tokens (`o200k_base`) |
 | --- | --- | ---: | ---: |
-| aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review—including when a Security note is required | 7,780 | 1,558 |
+| aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review—including when a Security note is required | 8,138 | 1,617 |
 | `aiscb:web-auth-crypto` | Protect web content, authentication, webhooks, and cryptography | 5,189 | 1,040 |
 | `aiscb:secrets-initialization` | Set up credentials and keys without shipping working defaults | 1,900 | 351 |
 | `aiscb:deployment-environments` | Restrict CI and container privileges; separate development from production | 1,659 | 311 |
@@ -161,7 +162,7 @@ An organization can add rules through an overlay, but cannot relax the baseline.
 | `aiscb:data-handling` | Handle untrusted files, restrict outbound requests, and limit resource use | 1,720 | 344 |
 | `aiscb:llm-retrieval-memory` | Check access before retrieval and control what enters persistent memory | 1,666 | 325 |
 | `aiscb:mcp-clients-servers` | Authorize MCP requests and control local server starts and credentials | 2,225 | 415 |
-| Complete baseline | The core and every module in one file | 26,606 | 5,215 |
+| Complete baseline | The core and every module in one file | 26,964 | 5,274 |
 
 Counts cover rule text only; the catalog, loading instructions, and overlays
 add context. `llm-agents` and `llm-retrieval-memory` also load `llm-applications`;
@@ -208,41 +209,57 @@ make uninstall               # preview and remove the project installation
 make help                    # list available commands
 ```
 
-Omit `--offline` in setup to check for a newer published release. The optional
-update notice checks at most daily and never installs automatically.
+Modular setup uses the reviewed local sources without fetching replacements.
+Signed release updates remain a separate `--update` operation.
 
 See the [integration guide](docs/agent-integration-verification.md) for client
 setup, including Visual Studio personal instructions.
 
 ### Modular installation
 
-To load only the modules a task needs, run this from a reviewed checkout:
+Modular loading is the default in this checkout for all three clients. Run:
 
 ```bash
-python3 scripts/install.py codex --modular --into /path/to/project
+python3 scripts/install.py claude codex copilot --into /path/to/project
+# Or install for your user account:
+python3 scripts/install.py claude codex copilot --user
 ```
 
-Replace `codex` with `claude` or `copilot`, or name several tools. The assistant
+Name only the tools you use, or omit the names for all three. The assistant
 must be allowed to run the supplied Python 3.10+ loader. The installer preserves
 unrelated instructions. Restart the assistant after installation.
 
 Modular loading needs verification in the clients you use before rollout;
 installer tests do not establish that a model selects the right modules.
 If command execution is unavailable, use `--complete`, provided the client's
-instruction limit can hold the entire baseline. Remote and user installations
-use the complete baseline.
+instruction limit can hold the entire baseline. Only the core, module discovery
+and loader instructions enter the initial context; module bodies stay on disk
+until selected. `--modular` remains an explicit spelling of the default.
+
+Close affected sessions before migrating an existing complete installation:
+
+```bash
+python3 scripts/install.py claude codex copilot --user --migrate
+python3 scripts/install.py claude codex copilot --into /path/to/project --migrate
+```
+
+Migrate inherited user policy first. The installer preserves unrelated text and
+refuses altered or unrecorded complete content. New user installs keep their
+signed updater at `~/.aiscb/install.py`; use `python3 ~/.aiscb/install.py --update`
+after a newer signed release is published. Rerun the checkout installer to apply
+reviewed development changes without publishing them.
 
 For an organization overlay, package verification, updates, and removal, see
 [local installation and overlays](docs/local-policy-installation.md).
 
 ### Temporarily disable the baseline
 
-This switch works **only for Claude Code or Codex user installations configured
-for dynamic loading**. With static loading (the default), the baseline stays
-active even when `AISCB_DISABLE=1` is set.
+This legacy switch works **only for complete Claude Code or Codex user
+installations configured for dynamic loading**. It does not apply to the modular
+default, where the core stays active. Explicit setup uses
+`python3 scripts/install.py claude codex --user --complete --session-switch`.
 
-If needed, rerun guided setup and select **dynamic loading** for your user
-installation. Then start a new session:
+For an existing dynamic complete installation, start a new session:
 
 ```bash
 AISCB_DISABLE=1 claude
@@ -267,9 +284,11 @@ surface you use, instruction limits, and loading checks.
 
 ### Verify it loaded
 
-Start a fresh session after installing 0.1.16. Ask `baseline?`; the
+Start a fresh session after installing 0.1.16. Ask `aiscb?`; the
 answer should include `aiscb-0.1.16`,
-its source, loaded modules, and any overlays.
+its source, installation mode, available modules, loaded modules, and any overlays.
+In a fresh modular session, no module bodies should be loaded. Catalog entries
+are availability information, not loaded modules. Status must not read files.
 
 The answer reports what the assistant sees in context; it does not prove that
 all rules are followed. Check the client's loaded instructions too, as described
@@ -311,7 +330,7 @@ token measurements.
 
 The provisional budgets are roughly 1,500 tokens for the core and 4,100 for
 the complete baseline. The expanded rules currently
-exceed them by 58 and 1,115 tokens respectively; these are visible design targets,
+exceed them by 117 and 1,174 tokens respectively; these are visible design targets,
 not a reason to silently drop controls. Adapter discovery and overlay text add
 to the actual session context.
 

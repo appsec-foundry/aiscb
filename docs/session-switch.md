@@ -1,8 +1,13 @@
 # Session switch
 
+This describes the legacy complete installation, selected with `--complete`.
+The modular default keeps its core active and does not use this switch.
+Use `--user --migrate` to replace a verified legacy installation with modular
+loading; migration removes its managed injection hooks and preserves other hooks.
+
 `AISCB_DISABLE=1` omits the baseline security instructions supplied by each
 installation set up for dynamic loading, in guided setup or with
-`install.py --session-switch`. Unset the variable or use `0` to load them.
+`install.py --complete --session-switch`. Unset the variable or use `0` to load them.
 Other values block the prompt. Start a fresh session: the switch cannot remove
 instructions from conversation history.
 
@@ -45,7 +50,7 @@ remain active.
 Startup hooks supply four bounded parts of the baseline. A prompt hook rejects
 invalid values or an unreadable baseline. If hook context is missing, the
 instruction file tells the assistant to execute the loader and stop on failure;
-that fallback relies on the assistant following instructions. `baseline?`
+that fallback relies on the assistant following instructions. `aiscb?`
 reports visible context, not proof of compliance. Normal setup retains the mode;
 uninstall removes the managed loader and hooks.
 

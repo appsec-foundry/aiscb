@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Callable
 
 BASELINE = "secure-coding-baseline.md"
+EMBEDDED_POLICY = None  # release resource slot
 VERSION_HOOK_DIR = ".aiscb"
 VERSION_HOOK_NAME = "show-baseline-version.py"
 INSTALLER_NAME = "install.py"
@@ -4333,16 +4334,86 @@ def main(argv: list[str] | None = None) -> int:
     )
     policy_format = parser.add_mutually_exclusive_group()
     policy_format.add_argument("--modular", action="store_true",
-                        help="local project adapter with a verified Python module loader")
+                        help="core and discovery first, verified modules on demand (default)")
     policy_format.add_argument("--complete", action="store_true",
-                        help="local project adapter containing every module, without runtime loading")
+                        help="explicit compatibility mode containing every module")
     parser.add_argument("--organization", type=Path,
                         help="built organization bundle; requires its trusted manifest digest")
     parser.add_argument("--organization-sha256",
                         help="organization manifest digest received through a trusted channel")
+    parser.add_argument("--migrate", action="store_true",
+                        help="replace verified managed complete instructions; preserve other text")
     args = parser.parse_args(argv)
+    if sum((args.status, args.uninstall, args.interactive, args.update,
+            args.refresh_update_cache, args.session_switch)) > 1:
+        parser.error("choose one setup or management action")
+    if args.session_switch and not args.complete:
+        parser.error("--session-switch is a legacy complete-mode operation; "
+                     "use --complete explicitly or install the modular default")
+    if (args.status and not args.into and not args.user
+            and not (Path.cwd() / ".aiscb/installation.json").exists()
+            and (Path.home() / ".aiscb/installation.json").exists()):
+        args.user = True
 
-    if (REPO / "baseline/catalog.json").is_file() and not (args.modular or args.complete or args.organization):
+    # Modern setup is the default for both scopes. Legacy management remains
+    # available for old installations and the explicit session-switch operation.
+    modern_record = ((Path.home() if args.user else (args.into or Path.cwd())) /
+                     ".aiscb/installation.json")
+    modern_action = not (args.update or args.refresh_update_cache or args.session_switch)
+    if args.complete and not modern_record.exists() and not args.organization:
+        modern_action = False
+    if args.status or args.uninstall:
+        modern_action = modern_record.exists() or args.modular
+    if modern_action:
+        if any(tool not in TOOLS for tool in args.tools):
+            parser.error("unknown tool")
+        if args.offline and not (args.status or args.interactive):
+            parser.error("--offline is only valid with --interactive or --status")
+        if args.interactive and (args.tools or args.user or args.status or args.uninstall):
+            parser.error("--interactive cannot be combined with tools, --user, --status or --uninstall")
+        if (args.status or args.uninstall) and args.tools:
+            parser.error("--status and --uninstall do not take tools")
+        if args.into is not None and (not args.into.is_dir() or args.into.resolve() == Path(args.into.resolve().anchor)):
+            parser.error("--into must be an existing non-root directory")
+        if args.organization_sha256 and not args.organization:
+            parser.error("--organization-sha256 requires --organization")
+        if args.organization and not args.organization_sha256:
+            parser.error("--organization requires --organization-sha256 from a trusted channel")
+        if args.interactive and not sys.stdin.isatty():
+            parser.error("the guided setup needs a terminal")
+        try:
+            if (REPO / "baseline/catalog.json").is_file():
+                catalog, artifacts, complete = build_baseline.validate()
+                if build_baseline.CATALOG.read_bytes() != build_baseline.render_catalog(catalog, artifacts):
+                    raise ValueError("stale source metadata; run make build-full-baseline")
+                build_baseline.write_complete(complete)
+            with tempfile.TemporaryDirectory(prefix="aiscb-runtime-") as temporary:
+                if EMBEDDED_POLICY is not None:
+                    resources = json.loads(EMBEDDED_POLICY)
+                    if not isinstance(resources, dict) or len(resources) > 64:
+                        raise ValueError("invalid embedded resource inventory")
+                    stage = Path(temporary)
+                    for name, value in resources.items():
+                        if (not isinstance(name, str) or not isinstance(value, str)
+                                or Path(name).is_absolute() or "\\" in name
+                                or any(p in {"", ".", ".."} for p in name.split("/"))
+                                or not name.startswith(("baseline/", "scripts/"))):
+                            raise ValueError("invalid embedded resource path")
+                        _write_new(stage / name, value.encode())
+                    sys.path.insert(0, str(stage / "scripts"))
+                else:
+                    # -I excludes the script directory: add only this reviewed checkout.
+                    sys.path.insert(0, str(INSTALLER_SOURCE.parent))
+                import policy_setup
+                return policy_setup.run(sys.modules[__name__], args)
+        except (ImportError, OSError, ValueError, KeyError, TypeError, RecursionError) as exc:
+            print(f"Local policy setup refused: {exc}", file=sys.stderr)
+            return 1
+        except (EOFError, KeyboardInterrupt):
+            print("Setup cancelled.", file=sys.stderr)
+            return 130
+
+    if (REPO / "baseline/catalog.json").is_file() and not (args.modular or args.organization):
         try:
             catalog, artifacts, complete = build_baseline.validate()
             if build_baseline.CATALOG.read_bytes() != build_baseline.render_catalog(catalog, artifacts):
@@ -4351,42 +4422,10 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             parser.error(str(exc))
 
-    local_record = (args.into or Path.cwd()) / ".aiscb/installation.json"
-    local_policy = args.modular or args.complete or args.organization is not None
-    if args.organization_sha256 and not args.organization:
-        parser.error("--organization-sha256 requires --organization")
-    if local_policy or (local_record.exists() and not args.user
-                        and (args.status or args.uninstall)):
-        if (args.user or args.interactive or args.update or args.session_switch
-                or args.refresh_update_cache):
-            parser.error("local policy installation takes tools, --into, --modular/--complete, and optional --organization")
-        if args.organization and not args.organization_sha256:
-            parser.error("--organization requires --organization-sha256 from a trusted channel")
-        if args.offline and not args.status:
-            parser.error("local policy installation is already offline")
-        selected_tools = args.tools or list(TOOLS)
-        if any(tool not in TOOLS for tool in selected_tools):
-            parser.error("unknown tool")
-        try:
-            # Only present in a reviewed checkout; never fetch missing helpers.
-            import install_policy
-            root = (args.into or Path.cwd()).resolve()
-            if args.status:
-                print(install_policy.status(root))
-            elif args.uninstall:
-                print(install_policy.uninstall(root))
-            else:
-                for line in install_policy.install(selected_tools, root, modular=args.modular,
-                                                  bundle=args.organization,
-                                                  expected=args.organization_sha256):
-                    print(line)
-        except (ImportError, OSError, ValueError, KeyError, TypeError, RecursionError) as exc:
-            print(f"Local policy setup refused: {exc}", file=sys.stderr)
-            return 1
-        return 0
-
-    if local_record.exists() and not args.user:
-        parser.error("this project uses local policy; update with --modular/--complete/--organization or uninstall it first")
+    if args.modular or args.organization or args.organization_sha256:
+        parser.error("module/organization options cannot be combined with legacy management actions")
+    if args.session_switch and modern_record.exists():
+        parser.error("the legacy session switch cannot replace a modular installation")
 
     if args.session_switch and (args.interactive or args.status or args.offline
                                or args.uninstall or args.refresh_update_cache or args.update):

@@ -3082,14 +3082,15 @@ check("yes/no falls back to the default after three invalid answers",
 #
 # main() reads Path.home() and writes a registry there, so every case below
 # runs as its own process with HOME pointing into a throwaway directory. That
-# also exercises the module's __main__ entry point.
+# also exercises the module's __main__ entry point. These are explicit complete-
+# mode compatibility cases; test_modular_setup.py covers the new default CLI.
 
 
 def cli(args: list[str], home: Path, cwd: Path | None = None):
     environment = dict(os.environ, HOME=str(home))
     environment.pop("XDG_CONFIG_HOME", None)
     return subprocess.run(
-        [sys.executable, str(install.REPO / "scripts" / "install.py"), *args],
+        [sys.executable, str(install.REPO / "scripts" / "install.py"), "--complete", *args],
         capture_output=True, text=True, timeout=60, env=environment,
         cwd=str(cwd) if cwd else None, stdin=subprocess.DEVNULL,
     )
@@ -3250,8 +3251,8 @@ with tempfile.TemporaryDirectory() as tmp:
     install.interactive_setup = lambda **kwargs: seen.append(kwargs["current_root"]) or 0
     sys.stdin = Terminal()
     try:
-        install.main(["--interactive", "--offline", "--into", str(project)])
-        install.main(["--interactive", "--offline"])
+        install.main(["--complete", "--interactive", "--offline", "--into", str(project)])
+        install.main(["--complete", "--interactive", "--offline"])
     finally:
         install.interactive_setup, sys.stdin = original_setup, original_stdin
     check("guided setup takes the directory --into names, else the current one",

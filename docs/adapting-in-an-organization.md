@@ -133,7 +133,7 @@ Keep application specifications in the project, not in security modules.
 
 The overlay is the part every session pays for, so it carries only what every session needs:
 
-- its own ID and the aiscb release it extends, so `baseline?` reports both;
+- its own ID and the aiscb release it extends, so `aiscb?` reports both;
 - the authority rule for organization modules and blueprints;
 - the few substantive rules that apply to almost every change, such as tenant binding, an audit-log requirement, or a list of approved languages.
 
@@ -151,7 +151,7 @@ behavior in every delivery:
 ```markdown
 # Acme Secure Coding Overlay
 
-`baseline-id: acme-sec-1.0.0`. Extends aiscb (`aiscb-0.1.16`). On `baseline?`,
+`baseline-id: acme-sec-1.0.0`. Extends aiscb (`aiscb-0.1.16`). On `aiscb?`,
 report both IDs and their sources. Identify injected content as gateway-supplied;
 do not claim to have read a local file for it.
 
@@ -212,7 +212,7 @@ Test the mechanisms separately from model behavior:
 | Release consistency | An update during a session followed by first use of another pack keeps one release throughout; test restart, rollback, and any cache |
 | Application behavior | Representative positive and negative cases exercise SSO, claims, tenant isolation, browser policy, and limits covered by the selected packs |
 
-Use `baseline?` as a smoke test for visible IDs and sources, not proof of prior loading or compliance. Repeat affected checks after policy, loader, gateway, or client changes. Mark unimplemented pieces and unrun integration tests explicitly.
+Use `aiscb?` as a smoke test for visible IDs and sources, not proof of prior loading or compliance. Repeat affected checks after policy, loader, gateway, or client changes. Mark unimplemented pieces and unrun integration tests explicitly.
 
 An overlay supplies instructions; it cannot guarantee compliance. A verified loader establishes which content was returned, not whether the model selected every needed pack or followed it. Requirements that must hold still need application controls, tests, review, and deployment checks.
 

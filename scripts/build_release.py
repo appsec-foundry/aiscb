@@ -8,6 +8,7 @@ from pathlib import Path
 
 import build_baseline as build
 import bundle_manifest
+import bundle_resources
 import install
 
 
@@ -31,7 +32,10 @@ def stage(version, revision, root=build.ROOT):
         (work / install.BASELINE).write_bytes(complete)
         for name in install.BUNDLE_FILES:
             if name != install.BASELINE:
-                (work / name).write_bytes(install.read_limited(root / name, install.BUNDLE_FILES[name]))
+                content = (bundle_resources.installer_bytes(install, root)
+                           if name == "scripts/install.py" else
+                           install.read_limited(root / name, install.BUNDLE_FILES[name]))
+                (work / name).write_bytes(content)
         bundle_manifest.write_manifest(work)
         template = (root / "scripts/release-setup.sh.in").read_text()
         replacements = {"@RELEASE@": f"aiscb-bundle-{version}-{revision}"}

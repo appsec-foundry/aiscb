@@ -157,7 +157,7 @@ in an environment that permits loopback networking.
 ## Running comparisons
 
 The `control` arm carries no project baseline; `baseline` carries the current
-`secure-coding-baseline.md`. Preflight asks `baseline?` and stops if these
+`secure-coding-baseline.md`. Preflight asks `aiscb?` and stops if these
 conditions do not hold. Remove a user-level baseline installation from the tool
 under test before comparing arms. Other user-level instructions still affect
 both arms. A successful preflight shows visibility, not compliance.

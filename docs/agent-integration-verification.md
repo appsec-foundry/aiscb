@@ -81,11 +81,27 @@ does not verify model compliance, modular selection, or Copilot/IDE loading.
 
 ### Current branch evidence (2026-09-19)
 
-The project installer tests all three entry points in modular and complete mode,
-including dependency loading, existing user text, drift, update and uninstall.
-The repository adapter separately tests Claude imports, the short Copilot entry
-point, and core/catalog/loader references. No real Claude, Copilot or Codex
-session was run for this migration; all surfaces remain configured but unverified.
+Default project and user installations now use core plus discovery and a loader.
+`scripts/test_modular_setup.py` exercises all three adapters, dependency output,
+complete-to-modular migration, inherited and additional complete instructions,
+modified sources/hooks/updaters, configuration-home overrides, symlinks,
+interactive setup, and standalone staged/installed installers. The existing
+complete-mode compatibility and loader integrity tests still run in `make check`.
+
+`python3 scripts/probe_modular_clients.py` was run with Claude Code 2.1.278,
+Codex CLI 0.154.0 and Copilot CLI 1.0.83. All twelve combinations passed:
+three clients, project/user scope, and launch from project root/subdirectory.
+Captured API requests contained the exact core and the available-module catalog,
+and no module rule bodies. The probe uses isolated homes, a loopback API fixture
+and artificial test credentials; it makes no real model calls or external writes.
+
+This verifies initial instruction loading on those CLI versions. Loader tests
+execute each generated command and verify the selected dependency closure and
+failure behavior. Neither proves semantic module selection, the model's status
+answer, or IDE loading. Copilot in VS Code Agent Mode still needs a fresh-window
+test of References/Diagnostics and an allowed loader execution; other Copilot
+surfaces remain separately unverified. No paid model cases were run for this
+delivery change; do not treat a fixture response as evidence of model compliance.
 
 The repository's Copilot entry is a short read-and-load instruction, not an
 automatic import. A surface unable to read files or execute the loader cannot
@@ -100,8 +116,8 @@ same policy in both files, a non-default setting loading both may duplicate
 context; inspect `/context` and select one integration. Source:
 [Claude memory and AGENTS behavior](https://code.claude.com/docs/en/memory#agentsmd).
 
-Before release, run a fresh-session matrix for each actual client: startup from
-root and subdirectory, MCP-only and RAG tasks, multi-module selection, missing
+Before release, supplement the recorded startup checks with actual model tasks:
+MCP-only and RAG tasks, multi-module selection, missing
 loader, corrupted source, new session after update, and preserved user policy.
 Record exact client versions, execution permissions and instruction-size limits.
 
