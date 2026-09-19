@@ -5,7 +5,7 @@ shows its publication date. Later installer updates are listed separately.
 
 ## Unreleased
 
-## 0.1.17 — prepared, not yet published
+## [0.1.17](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.17) (2026-09-19)
 
 - Make modular loading the default for Claude Code, Codex and Copilot project
   and user installations: core and discovery first, module bodies when needed.
@@ -19,8 +19,8 @@ shows its publication date. Later installer updates are listed separately.
 
 **Updating:** Close agent sessions, then migrate existing complete installations
 with the 0.1.17 installer and `--user --migrate` or `--into PROJECT --migrate`.
-Restart the clients and ask `aiscb?`. The published Quick start remains on 0.1.16
-until the new signed assets and bootstrap pins are available.
+The verified Quick start offers migration during guided setup.
+Restart the clients and ask `aiscb?`.
 
 ## [0.1.16](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.16) (2026-09-19)
 

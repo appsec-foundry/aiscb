@@ -16,9 +16,9 @@ Current baseline: `aiscb-0.1.17`.
 
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
-Use the [modular installation](#modular-installation) from a reviewed checkout
-to start with only the core and discovery. The published Quick start below
-still installs the signed, complete 0.1.16 release until the next publication.
+The Quick start installs the modular baseline: core and discovery first,
+module bodies only when needed. See [Modular installation](#modular-installation)
+for project setup, migration and explicit complete mode.
 
 > **Scope and limits**
 >
@@ -35,18 +35,18 @@ Use the guided installer to install or update aiscb. The complete command verifi
 curl --proto '=https' \
   --fail --silent --show-error \
   --output aiscb-setup.sh \
-  https://raw.githubusercontent.com/appsec-foundry/aiscb/5f6d0ced024b3ab3f7b2396e7f198d456f56e377/setup.sh &&
-echo '3256f0359a58aa86c43089dfae2324a40a4402ac494cbcee7b9fdda8780d7554  aiscb-setup.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/aiscb/bcddbf17be2c2199b96fdd56554636dd895a6a09/setup.sh &&
+echo 'ef5eac4bb9994c069bfb1701d9c0b76b20f5e139961be2eea5514cc05769ddc1  aiscb-setup.sh' |
   sha256sum --check &&
 bash aiscb-setup.sh
 ```
 
 Choose your user account or a project directory, then the tools. The installer
-preserves existing instructions and installs the complete baseline, with all
-modules loaded together. Restart the assistant after installation.
+preserves unrelated instructions and offers migration of verified managed
+complete installations. Restart the assistant after installation.
 
-Requires Bash, `curl`, `sha256sum`, and Python 3.10+. For modules loaded as
-needed, use [Modular installation](#modular-installation). Claude Code users
+Requires Bash, `curl`, `sha256sum`, and Python 3.10+. Modular loading requires
+permission to execute the supplied Python loader. Claude Code users
 can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor)
 plugin.
 
@@ -55,10 +55,13 @@ plugin.
 If enabled, the optional session notice links here when a newer release is available. Update a user-level installation from a terminal, outside the agent session:
 
 ```bash
-python3 ~/.local/share/aiscb/install.py --update
+python3 ~/.aiscb/install.py --update
 ```
 
-The command verifies the signed release, then opens guided setup for the user installation and the current project. The new baseline applies to new sessions. If the command is unavailable or refuses the update, run the current [Quick start](#quick-start).
+The command verifies the signed release, then opens guided setup to choose the
+installation scope. The new baseline applies to new sessions. Older complete
+installations may keep the updater at `~/.local/share/aiscb/install.py`. If the
+command is unavailable or refuses the update, run the current [Quick start](#quick-start).
 
 ## Why this exists
 
@@ -217,7 +220,7 @@ setup, including Visual Studio personal instructions.
 
 ### Modular installation
 
-Modular loading is the default in this checkout for all three clients. Run:
+Modular loading is the default in this checkout and signed release for all three clients. Run:
 
 ```bash
 python3 scripts/install.py claude codex copilot --into /path/to/project

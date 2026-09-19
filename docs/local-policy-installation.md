@@ -4,9 +4,8 @@ Use the same local installer for official policy and an organization package.
 The core and official modules share one aiscb release. An organization overlay
 has its own release and pins the exact aiscb content it extends.
 
-Modular installation is the default for reviewed checkouts and newly built
-bundles, at project or user scope. The currently published 0.1.16 bootstrap still
-installs complete policy; it is unchanged until a new release is signed.
+Modular installation is the default for reviewed checkouts and signed releases
+from 0.1.17 onward, at project or user scope.
 Python 3.10 or newer is required. Modular mode requires the assistant to execute
 the supplied Python loader; it does not grant command-execution permission. If that tool is absent
 or denied, affected work must stop. Use complete output for such clients.
@@ -182,6 +181,8 @@ permissions. Hashes detect drift relative to the pinned instructions; they
 cannot defend against an actor allowed to replace both instructions and loader.
 Project-local policy is not a substitute for managed organizational enforcement.
 
-The signed remote updater still handles the published complete bundle. It does
-not update these local snapshots or fetch unpinned modular helpers. A modular
-remote release needs a maintainer-approved signed distribution extension.
+The signed remote updater verifies the release before running its guided setup.
+From 0.1.17 onward, the signed installer embeds modular sources and helpers; it
+installs verified snapshots without fetching replacement code. User installations
+keep the updater at `~/.aiscb/install.py`. Organization packages still need an
+explicit approved package and digest.
