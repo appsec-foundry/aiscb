@@ -35,6 +35,10 @@ replaces it with the versioned directory the release will live in, so the
 install root is a build input and the installer refuses a bundle built for
 another root.
 
+An overlay-only organization may use `{"packs": []}` and no pack files.
+Its overlay remains always loaded; official modules retain their usual routing.
+For old overlays, see the [upgrade guide](../../docs/upgrading-organization-policy.md).
+
 Blueprints are JSON here so the build can parse them without a dependency.
 It checks top-level fields, a version matching the file name, and a compatible
 major version. It does not validate nested types or approved values. Complete

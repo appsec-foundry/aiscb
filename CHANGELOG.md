@@ -5,6 +5,11 @@ shows its publication date. Later installer updates are listed separately.
 
 ## Unreleased
 
+- Add a no-option organization upgrade command that prepares a separate draft,
+  preserves custom rules, and reports unresolved legacy loading instructions.
+  Organization packages can now contain only an always-on overlay, with no
+  organization modules.
+
 ## [0.1.17](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.17) (2026-09-19)
 
 - Make modular loading the default for Claude Code, Codex and Copilot project

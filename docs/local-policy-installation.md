@@ -76,6 +76,10 @@ project-management process. The installer preserves project workflow text.
 
 ## Add organization policy
 
+For an existing overlay from a pre-modular release, use the
+[organization upgrade script](upgrading-organization-policy.md) to prepare a
+reviewable copy from the organization repository with no command options.
+
 Keep a short always-on `overlay.md` with organization identity, the exact
 aiscb release, namespace authority, and only universally applicable rules.
 Put thematic rules in cataloged organization modules. Blueprints provide

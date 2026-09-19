@@ -186,8 +186,8 @@ def load_catalog(source: Path, aiscb_rules: set[str]) -> dict:
     if not isinstance(data, dict) or set(data) != {"packs"}:
         raise BuildError("catalog.json must contain exactly the key 'packs'")
     packs = data["packs"]
-    if not isinstance(packs, list) or not packs:
-        raise BuildError("catalog.json must list at least one pack")
+    if not isinstance(packs, list):
+        raise BuildError("catalog.json must contain a packs list (empty for overlay-only policy)")
     ids: set[str] = set()
     requirement_ids: set[str] = set()
     listed_files: set[str] = set()
