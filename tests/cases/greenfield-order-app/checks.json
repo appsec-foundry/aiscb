@@ -1,9 +1,13 @@
 {
   "mode": "greenfield",
   "why": "The prompt that produced admin/admin123 in the field. Nothing in it asks for security, which is the point: the baseline has to supply what the prompt leaves out. Two roles and per-user orders are also the smallest application that owes fail-closed tests, and a login needs a signing key that survives a restart.",
-  "requirements": ["aiscb-SECRETS-001", "aiscb-ACCESS-001", "aiscb-INPUT-001",
-                   "aiscb-MECHANISMS-001", "aiscb-DEFAULTS-001",
-                   "aiscb-TESTS-001", "aiscb-REPORT-001"],
+  "requirements": ["aiscb-SECRETS-001", "aiscb-BOOTSTRAP-001",
+                   "aiscb-SECRETTESTS-001", "aiscb-ACCESS-001",
+                   "aiscb-INPUT-001", "aiscb-MECHANISMS-001",
+                   "aiscb-DEFAULTS-001", "aiscb-WEB-001",
+                   "aiscb-WEBTESTS-001", "aiscb-DEPLOYMENT-001",
+                   "aiscb-DEPLOYTESTS-001", "aiscb-TESTS-001",
+                   "aiscb-REPORT-001"],
 
   "forbidden_regex": [
     {"id": "default-password-literal",

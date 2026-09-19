@@ -2,7 +2,7 @@
 """Check that the bundle example builds, verifies, installs, and refuses correctly.
 
 Everything runs against throwaway directories. The build uses the repository's
-own secure-coding-baseline.md as the approved aiscb file, so the example
+own modular baseline directory as the approved aiscb source, so the example
 stays in step with the baseline release the overlay names.
 """
 
@@ -19,7 +19,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-AISCB = REPO / "secure-coding-baseline.md"
+AISCB = REPO / "baseline"
 
 sys.path.insert(0, str(HERE))
 import build  # noqa: E402
@@ -72,7 +72,8 @@ with tempfile.TemporaryDirectory() as tmp:
     root = work / "install"
     out = work / "bundle"
     manifest, digest = build.build(HERE, AISCB, out, root)
-    aiscb_id = build.single(build.ID_RE, AISCB.read_text(encoding="utf-8"), "id")
+    aiscb_id = build.single(build.ID_RE,
+                            (AISCB / "core.md").read_text(encoding="utf-8"), "id")
     release_dir = root.resolve() / "releases" / manifest["bundle"]
 
     # ---- build output -------------------------------------------------------
@@ -93,8 +94,8 @@ with tempfile.TemporaryDirectory() as tmp:
                  if build.PLACEHOLDER in (out / rel).read_text(encoding="utf-8", errors="ignore")]
     check("no bundle-dir placeholder survives the build", not leftovers, str(leftovers))
     claude = (out / "adapters/claude-code/CLAUDE.md").read_text(encoding="utf-8")
-    check("Claude Code adapter imports the versioned aiscb file",
-          claude.startswith(f"@{release_dir}/secure-coding-baseline.md\n\n# Acme"))
+    check("Claude Code adapter imports the versioned aiscb core",
+          claude.startswith(f"@{release_dir}/core.md\n\n# Acme"))
     codex = (out / "adapters/codex/AGENTS.md").read_text(encoding="utf-8")
     check("Codex adapter is aiscb followed by the overlay without the marker",
           codex.startswith("# AI Secure Coding Baseline") and "@<bundle-dir>" not in codex
@@ -102,11 +103,20 @@ with tempfile.TemporaryDirectory() as tmp:
     check("gateway block equals the combined adapter",
           (out / "adapters/gateway/system-block.md").read_bytes() == codex.encode("utf-8"))
     for tool in build.ADAPTERS:
-        skill = out / f"adapters/{tool}/skills/acme-authentication/SKILL.md"
-        text = skill.read_text(encoding="utf-8") if skill.is_file() else ""
-        check(f"{tool} gets the pack as a skill with frontmatter",
-              text.startswith("---\nname: acme-authentication\ndescription: ")
-              and f"{release_dir}/blueprints/spa/1.0.0.json" in text)
+        for skill_name, module_id in (("aiscb-web-auth", "aiscb:web-auth"),
+                                      ("acme-authentication", "acme:authentication")):
+            skill = out / f"adapters/{tool}/skills/{skill_name}/SKILL.md"
+            text = skill.read_text(encoding="utf-8") if skill.is_file() else ""
+            check(f"{tool} gets {module_id} on the same skill plane",
+                  text.startswith(f"---\nname: {skill_name}\ndescription: ")
+                  and module_id in text)
+        acme = (out / f"adapters/{tool}/skills/acme-authentication/SKILL.md").read_text()
+        check(f"{tool} Acme skill references its blueprint",
+              f"{release_dir}/blueprints/spa/1.0.0.json" in acme)
+    flat_modules = sorted(path.name for path in (out / "modules").glob("*.md"))
+    check("aiscb and Acme modules share one flat release directory",
+          "aiscb-web-auth.md" in flat_modules
+          and "acme-authentication.md" in flat_modules)
     check("blueprint ships unchanged",
           (out / "blueprints/spa/1.0.0.json").read_bytes()
           == (HERE / "blueprints/spa/1.0.0.json").read_bytes())
@@ -163,7 +173,7 @@ with tempfile.TemporaryDirectory() as tmp:
         digest_refused = False
     except build.BuildError as exc:
         digest_refused = "approved digest" in str(exc)
-    check("an aiscb file that misses the approved digest is refused", digest_refused)
+    check("an aiscb catalog that misses the approved digest is refused", digest_refused)
 
     # ---- install ------------------------------------------------------------
     check("a wrong manifest digest installs nothing",
@@ -209,9 +219,9 @@ with tempfile.TemporaryDirectory() as tmp:
           and (link / "overlay.md").is_file()
           and os.readlink(link) == f"releases/{manifest['bundle']}")
     check("the installed adapter resolves the versioned import path",
-          (release_dir / "secure-coding-baseline.md").is_file()
+          (release_dir / "core.md").is_file()
           and (link / "adapters/claude-code/CLAUDE.md").read_text(encoding="utf-8")
-          .startswith(f"@{release_dir}/secure-coding-baseline.md"))
+          .startswith(f"@{release_dir}/core.md"))
     lines, healthy = install.status(root)
     check("status reports a healthy install", healthy and any("match" in l for l in lines))
     check("an installed release is never overwritten",

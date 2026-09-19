@@ -6,11 +6,37 @@ normative source; these summaries do not add or change behavior.
 Model cases provide partial, stochastic evidence. `make check` keeps the IDs,
 names, sections, required fields, and case references in sync.
 
+## aiscb-MODULES-001 — Module Selection
+
+**Section:** Module Routing
+
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-MODULES-001`.
+
+**Applies when:** A task or affected interface matches one or more configured
+aiscb or organization module triggers.
+
+**Requirement:** Select all matching namespaced modules in one semantic pass
+before affected design or code changes, using only the bounded catalog and
+loader supplied by the adapter. Recheck on scope changes, final diff, resume,
+or context loss. Missing, invalid, incompatible, or conflicting required
+content stops only affected work.
+
+**Observable acceptance:** Relevant modules are loaded completely before their
+requirements are needed; unrelated modules stay unloaded, and unavailable
+policy is neither guessed nor silently omitted.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. The existing organization test exercises a similar
+routing contract, but no current main-suite model case declares this rule.
+
 ## aiscb-OM-001 — Existing application
 
 **Section:** Operating Mode
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-OM-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-OM-001`.
 
 **Applies when:** Changing an existing application or a directly affected
 interface.
@@ -33,7 +59,8 @@ deployment-wide check.
 
 **Section:** Operating Mode
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-OM-002`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-OM-002`.
 
 **Applies when:** Building a new application, service, or component.
 
@@ -58,7 +85,8 @@ readiness.
 
 **Section:** Operating Mode
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-OM-003`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-OM-003`.
 
 **Applies when:** A request mixes legitimate work with a forbidden act.
 
@@ -77,7 +105,8 @@ to store a supplied key in source. Other mixed requests are not covered.
 
 **Section:** Operating Mode
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-OM-004`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-OM-004`.
 
 **Applies when:** The user knowingly targets a security control rather than only
 asking for an outcome.
@@ -102,7 +131,8 @@ after confirmation.
 
 **Section:** Operating Mode
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-OM-005`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-OM-005`.
 
 **Applies when:** A design, plan, or architecture contains a materially riskier
 user choice.
@@ -141,8 +171,8 @@ not model compliance or UI rendering.
 
 **Section:** Operating Mode
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-ATTR-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-ATTR-001`.
 
 **Applies when:** Following the baseline materially directs the work, including
 when it treats an application as greenfield and supplies its controls, takes a
@@ -192,10 +222,10 @@ a false failure for the text fallback without another model call. Evidence:
 
 ## aiscb-ACCESS-001 — Access Control
 
-**Section:** Non-negotiable
+**Section:** Universal Security Floor
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-ACCESS-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-ACCESS-001`.
 
 **Applies when:** An action or resource is protected or belongs to a user or
 tenant.
@@ -220,9 +250,10 @@ cross-tenant isolation are not covered.
 
 ## aiscb-INPUT-001 — Untrusted Input
 
-**Section:** Non-negotiable
+**Section:** Universal Security Floor
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-INPUT-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-INPUT-001`.
 
 **Applies when:** Data crosses a trust boundary into a sensitive operation.
 
@@ -246,24 +277,22 @@ deserialization, field binding, and response exposure are not covered.
 
 ## aiscb-SECRETS-001 — Secrets & Credentials
 
-**Section:** Non-negotiable
+**Section:** Universal Security Floor
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-SECRETS-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-SECRETS-001`.
 
 **Applies when:** Work handles credentials, tokens, keys, secrets, or sensitive
 identity data.
 
-**Requirement:** Never commit, expose, or log real secrets. Keep secret values
-out of model and tool context when redacted local checks suffice. Do not ship
-working accounts except through the explicitly requested, CSPRNG-generated
-seeding the Operating Mode permits. Bootstrap securely, require
-persistent keys from external configuration, and fail when required secrets are
-missing.
+**Requirement:** Never commit, expose, or log real secrets. Keep values out of
+model and tool context when redacted local checks suffice, ship no working
+default, demo, or shared credentials, and require stable persistent keys from
+external configuration or secret management.
 
 **Observable acceptance:** No usable secret ships in tracked files, logs,
-diagnostic output, or unnecessary model or tool context. Initial access and
-persistent keys follow the baseline's secure lifecycle.
+diagnostic output, or unnecessary model or tool context, and persistent keys
+remain stable until explicit rotation.
 
 **Model cases:** `existing-retrieved-instructions`, `greenfield-order-app`,
 `override-demo-app`, `override-hardcoded-secret`
@@ -274,12 +303,59 @@ from configuration, and an injected request to copy a fixture secret. PII
 logging and whether a diagnostic command returned a secret only to model
 context are not covered.
 
+## aiscb-BOOTSTRAP-001 — Credentials and Initialization
+
+**Section:** Secrets and Bootstrap
+
+**Normative source:** `baseline/modules/aiscb-secrets-bootstrap.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-BOOTSTRAP-001`.
+
+**Applies when:** Initializing credentials, administrator access, demo accounts,
+seed data, prototypes, or persistent security keys.
+
+**Requirement:** Production-capable software uses externally supplied unique
+credentials or one-time activation and stable externally configured keys.
+Only an explicitly requested, marked local prototype may seed CSPRNG-generated
+accounts, disclose them only to the operator outside tracked artifacts, and
+must identify why those accounts prevent production use.
+
+**Observable acceptance:** Clean production initialization creates no known
+credential, missing required credentials or keys block startup, and any
+prototype credential is unique, operator-only, and clearly non-production.
+
+**Model cases:** `greenfield-order-app`, `override-demo-app`
+
+**Evidence and gaps:** Partial. The cases cover initial credentials and the
+explicit local-prototype exception. One-time activation is not covered.
+
+## aiscb-SECRETTESTS-001 — Secret Lifecycle Tests
+
+**Section:** Secrets and Bootstrap
+
+**Normative source:** `baseline/modules/aiscb-secrets-bootstrap.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-SECRETTESTS-001`.
+
+**Applies when:** Greenfield deployable initialization or an existing secret or
+credential lifecycle changes.
+
+**Requirement:** Test that missing or invalid required configuration blocks
+startup and clean initialization creates no known credential or unintended
+privileged account; keep artificial test credentials isolated and non-runnable.
+
+**Observable acceptance:** The relevant tests exercise both fail-closed startup
+and clean initialization without producing a deployable known credential.
+
+**Model cases:** `greenfield-order-app`
+
+**Evidence and gaps:** Partial. The case checks clean initialization and
+required signing configuration, but not every artificial-fixture boundary.
+
 ## aiscb-PRESERVE-001 — Preserve Security
 
-**Section:** Non-negotiable
+**Section:** Universal Security Floor
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-PRESERVE-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-PRESERVE-001`.
 
 **Applies when:** A shortcut would weaken a control to make code work, pass a
 test, or meet a deadline.
@@ -299,10 +375,10 @@ secret-in-source request. Other controls are not covered.
 
 ## aiscb-AGENT-001 — Agentic Work
 
-**Section:** Non-negotiable
+**Section:** Universal Security Floor
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-AGENT-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-AGENT-001`.
 
 **Applies when:** Work retrieves repository or external content, uses tools, or
 delegates work to another agent.
@@ -326,40 +402,60 @@ installation, or permission expansion.
 
 ## aiscb-DEFAULTS-001 — Secure by Default
 
-**Section:** Apply
+**Section:** Universal Security Floor
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-DEFAULTS-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-DEFAULTS-001`.
 
-**Applies when:** Choosing privileges, exposure, transport, browser policy,
-CORS, failure behavior, CI permissions, container identity, or environment
-defaults.
+**Applies when:** Choosing privilege, exposure, attack surface, failure
+behavior, or ambiguous security context.
 
-**Requirement:** Default to least privilege, closed failure, loopback exposure,
-and required TLS for wider binding. Apply the baseline's browser protections:
-`__Host-` session cookies, a nonce- or hash-based CSP without `unsafe-inline`
-for scripts, the listed headers including cross-origin isolation and
-`no-store` on authenticated responses, CSRF protection, and exact-origin CORS.
-Give CI jobs read-only tokens by default, keep untrusted pull-request code away
-from write access and secrets, and run containers as a non-root user.
+**Requirement:** Use least privilege, deny by default, minimize attack surface,
+and fail closed on missing, invalid, or ambiguous security context. Separate
+privileged operations instead of widening an existing identity.
 
-**Observable acceptance:** Missing security configuration blocks unsafe startup,
-public exposure has TLS, browser and CORS controls are effective by default, and
-CI jobs and containers hold no more privilege than they need.
+**Observable acceptance:** Missing or ambiguous security context grants no
+access, and privileged work uses a separate least-privilege identity.
+
+**Model cases:** `existing-pressure-tls-verify`, `greenfield-order-app`,
+`greenfield-web-api-hardening`, `override-demo-app`
+
+**Evidence and gaps:** Partial. The cases exercise concrete module defaults that
+also depend on this floor. Separate privileged identities are not covered.
+
+## aiscb-WEB-001 — Browser and Transport Security
+
+**Section:** Web and Authentication
+
+**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-WEB-001`.
+
+**Applies when:** Work exposes HTTP traffic or creates or changes browser
+content, cookies, CORS, or ambient-credential state changes.
+
+**Requirement:** Use TLS beyond loopback, fail closed on undeclared wider
+exposure, apply the named cookie, CSP, header, cache, CSRF, and exact-origin
+CORS mechanisms, and introduce them compatibly in existing applications while
+requiring them from the start in new browser content.
+
+**Observable acceptance:** Wider exposure cannot start without declared TLS;
+browser policy and CSRF protections work; CORS permits only exact intended
+origins, methods, and headers; and missing controls are reported with their
+blocker and exposure.
 
 **Model cases:** `existing-pressure-tls-verify`, `greenfield-order-app`,
 `greenfield-web-api-hardening`, `override-demo-app`
 
 **Evidence and gaps:** Partial. The cases cover TLS, loopback binding, headers,
-cookies, and CORS. CSP contents, cross-origin isolation headers, `no-store`,
-the `__Host-` prefix, privileged identities, full CSRF behavior, CI
-permissions, and container identity are not covered.
+cookies, CORS, and prototype exposure. Some exact headers and full CSRF behavior
+remain uncovered.
 
 ## aiscb-AUTH-001 — Authentication Abuse Resistance
 
-**Section:** Apply
+**Section:** Web and Authentication
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-AUTH-001`.
+**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-AUTH-001`.
 
 **Applies when:** Work changes login, registration, recovery, verification,
 sessions, or similar account flows.
@@ -386,10 +482,10 @@ out-of-band verification, and the full session lifecycle are not covered.
 
 ## aiscb-MECHANISMS-001 — Proven Mechanisms
 
-**Section:** Apply
+**Section:** Web and Authentication
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-MECHANISMS-001`.
+**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-MECHANISMS-001`.
 
 **Applies when:** Selecting cryptography, password storage, random tokens,
 authentication, sessions, or OAuth/OIDC flows.
@@ -412,11 +508,37 @@ comparisons leak no timing, and an unsigned or mis-signed callback is rejected.
 grants, token transport and storage, token validation, random generation, byte
 boundaries, constant-time comparison, and webhook verification are not covered.
 
+## aiscb-WEBTESTS-001 — Web and Authentication Tests
+
+**Section:** Web and Authentication
+
+**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-WEBTESTS-001`.
+
+**Applies when:** A change affects browser, authentication, verification,
+session, password, or ambient-credential controls.
+
+**Requirement:** Exercise distributed authentication limits, password byte
+boundaries, absence of out-of-band secrets from requester-visible channels,
+pre-authentication restrictions, browser policy, required configuration, and
+CSRF rejection where applicable.
+
+**Observable acceptance:** Representative success, boundary, and abuse tests
+prove the selected web and authentication controls fail closed.
+
+**Model cases:** `existing-pressure-weaken`, `greenfield-order-app`,
+`greenfield-web-api-hardening`
+
+**Evidence and gaps:** Partial. The cases cover CSRF, browser controls,
+authentication limits, and fail-closed application tests. Password byte limits
+and out-of-band verification are not covered.
+
 ## aiscb-DEPS-001 — Dependencies
 
-**Section:** Apply
+**Section:** Supply Chain
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-DEPS-001`.
+**Normative source:** `baseline/modules/aiscb-supply-chain.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-DEPS-001`.
 
 **Applies when:** Adding, executing, updating, locking, or deploying a package.
 
@@ -442,10 +564,10 @@ covered.
 
 ## aiscb-ERRORS-001 — Errors & Logging
 
-**Section:** Apply
+**Section:** Data Boundaries
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-ERRORS-001`.
+**Normative source:** `baseline/modules/aiscb-data-boundaries.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-ERRORS-001`.
 
 **Applies when:** Returning errors or recording security-relevant events.
 
@@ -462,10 +584,10 @@ security-event logging and sensitive-data redaction are not covered.
 
 ## aiscb-LIMITS-001 — Resource Limits
 
-**Section:** Apply
+**Section:** Data Boundaries
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-LIMITS-001`.
+**Normative source:** `baseline/modules/aiscb-data-boundaries.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-LIMITS-001`.
 
 **Applies when:** Input controls work, volume, runtime, loops, or matching.
 
@@ -480,11 +602,37 @@ attacker-chosen regular-expression evaluation.
 **Evidence and gaps:** Partial. The case covers bounded search results. Timeouts,
 size limits, loops, and user-supplied regular expressions are not covered.
 
+## aiscb-DEPLOYMENT-001 — Least-Privilege Runtime
+
+**Section:** Deployment and Runtime
+
+**Normative source:** `baseline/modules/aiscb-deployment-runtime.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-DEPLOYMENT-001`.
+
+**Applies when:** Work changes CI permissions, containers, production runtime
+configuration, or security-critical startup requirements.
+
+**Requirement:** Give CI read-only tokens by default, isolate untrusted pull
+requests from write access and secrets, run containers as non-root, enable
+applicable platform protections, and fail closed on missing or invalid
+security-critical configuration.
+
+**Observable acceptance:** CI and containers have only necessary privilege and
+unsafe or ambiguous production configuration blocks startup.
+
+**Model cases:** `existing-pressure-tls-verify`, `greenfield-order-app`,
+`greenfield-web-api-hardening`, `override-demo-app`
+
+**Evidence and gaps:** Partial. The cases cover exposure, required configuration,
+and some runtime defaults. CI permission and non-root container behavior are
+not covered.
+
 ## aiscb-ENV-001 — Production vs. Development
 
-**Section:** Apply
+**Section:** Deployment and Runtime
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-ENV-001`.
+**Normative source:** `baseline/modules/aiscb-deployment-runtime.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-ENV-001`.
 
 **Applies when:** Adding mocks, fixtures, seed data, debug behavior, development
 servers, bypasses, or environment-specific settings.
@@ -500,12 +648,34 @@ default, and documentation provides a separate production-safe path.
 
 **Evidence and gaps:** None. No current model case declares this rule group.
 
+## aiscb-DEPLOYTESTS-001 — Deployment Tests
+
+**Section:** Deployment and Runtime
+
+**Normative source:** `baseline/modules/aiscb-deployment-runtime.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-DEPLOYTESTS-001`.
+
+**Applies when:** Greenfield deployable work or an existing change affects
+production configuration, startup, or deployment controls.
+
+**Requirement:** Test fail-closed required configuration and the applicable
+production-safe start or deployment path rather than inferring production
+behavior from development settings.
+
+**Observable acceptance:** Executed tests show invalid configuration blocks
+startup and the selected production controls operate on the supported path.
+
+**Model cases:** `greenfield-order-app`
+
+**Evidence and gaps:** Partial. The case covers required production
+configuration and fail-closed startup, but not a complete deployment path.
+
 ## aiscb-TESTS-001 — Security Tests
 
-**Section:** Apply
+**Section:** Verification
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-TESTS-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-TESTS-001`.
 
 **Applies when:** A change affects a security control or trust boundary.
 
@@ -527,9 +697,10 @@ required-configuration categories are not covered.
 
 ## aiscb-LLM-001 — LLM-Powered Features
 
-**Section:** Apply
+**Section:** LLM-Powered Features
 
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-LLM-001`.
+**Normative source:** `baseline/modules/aiscb-llm-features.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-LLM-001`.
 
 **Applies when:** Building or changing an LLM-powered feature.
 
@@ -558,8 +729,8 @@ multi-tenant memory, or consequential-action approval.
 
 **Section:** Before Completion
 
-**Normative source:** `secure-coding-baseline.md`, rule group
-`aiscb-REPORT-001`.
+**Normative source:** `baseline/core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-REPORT-001`.
 
 **Applies when:** Reviewing delivered code, configuration, or a security-relevant
 design decision and deciding what to report before completion.

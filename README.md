@@ -8,7 +8,9 @@
 [![GitHub Copilot](https://img.shields.io/badge/GitHub%20Copilot-compatible-000000?logo=githubcopilot&logoColor=white)](https://github.com/features/copilot)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI%20Codex-compatible-412991?logo=openai&logoColor=white)](https://developers.openai.com/codex/)
 
-aiscb is a short set of secure-coding rules for AI coding assistants. Add it to a project's instructions once instead of repeating the same security expectations in every prompt.
+aiscb is a modular set of secure-coding rules for AI coding assistants. Use the
+short always-on core with matching modules, or the complete eager file, instead
+of repeating the same security expectations in every prompt.
 
 > **Scope and limits**
 >
@@ -30,7 +32,12 @@ echo '7aa593cc0b69dd4c2f9d21dd9a7782bbf23e5f4922c772033ff070ac1956f3ac  aiscb-se
 bash aiscb-setup.sh
 ```
 
-Choose installation for your user account or a local directory, then the tools. Outside Git, the local target is the current directory; inside a Git repository, it is the detected project root. For installation from a clone or by hand, see [Using it](#using-it). Claude Code users can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
+Choose installation for your user account or a local directory, then the tools.
+This installs the complete eager profile, which needs no module loader. Outside
+Git, the local target is the current directory; inside a Git repository, it is
+the detected project root. For the smaller modular profile, a clone, or manual
+setup, see [Using it](#using-it). Claude Code users can also use the
+[appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
 
 ## Update
 
@@ -125,7 +132,16 @@ The crypto example shows Claude Code with `aiscb-0.1.14` in the baseline session
 
 ## The rules at a glance
 
-[secure-coding-baseline.md](secure-coding-baseline.md) is normative; this is only an overview.
+The normative sources are [the core](baseline/core.md) and its
+[cataloged modules](baseline/modules/). The generated
+[complete eager artifact](secure-coding-baseline.md) contains the same rules.
+This section is only an overview.
+
+### Module routing
+
+- **Module selection** (`aiscb-MODULES-001`): Select every semantic match from
+  one flat catalog before affected work. Organization modules share the same
+  selection pass and loader as `aiscb:*` modules.
 
 ### Scope and security decisions
 
@@ -147,11 +163,19 @@ The crypto example shows Claude Code with `aiscb-0.1.14` in the baseline session
 ### Apply where relevant
 
 - **Secure defaults** (`aiscb-DEFAULTS-001`): Use least privilege, deny by default, and fail closed. Require TLS outside localhost, secure browser headers and cookies, CSRF protection, exact CORS origins, read-only CI tokens, and non-root containers.
+- **Browser and transport security** (`aiscb-WEB-001`): Require TLS beyond
+  loopback and apply the concrete cookie, browser-header, CSRF, and CORS
+  mechanisms for matching web work.
 - **Authentication abuse resistance** (`aiscb-AUTH-001`): Rate-limit authentication flows by account and source, avoid enumeration, protect verification secrets, and manage sessions server-side.
 - **Proven mechanisms** (`aiscb-MECHANISMS-001`): Use maintained libraries and vetted algorithms for cryptography, authentication, sessions, OAuth, token comparison, and webhook verification.
+- **Credentials and initialization** (`aiscb-BOOTSTRAP-001`): Bootstrap without
+  shipped credentials and keep explicitly requested prototype credentials
+  generated, local, operator-only, and clearly non-production.
 - **Dependencies** (`aiscb-DEPS-001`): Verify a dependency's exact identity, version, source, and known vulnerabilities before adding or updating it. Pin executable external references such as CI actions and container images.
 - **Errors and logging** (`aiscb-ERRORS-001`): Keep internal errors out of responses and sensitive data out of logs.
 - **Resource limits** (`aiscb-LIMITS-001`): Bound input-driven work with request size, pagination, and time limits.
+- **Least-privilege runtime** (`aiscb-DEPLOYMENT-001`): Keep CI, containers, and
+  required production configuration least-privileged and fail-closed.
 - **Production and development** (`aiscb-ENV-001`): Keep debug modes, mocks, development servers, and weakened settings out of production.
 - **LLM-powered features** (`aiscb-LLM-001`): Treat prompts and outputs as untrusted, schema-validate structured output, keep model-controlled values out of interpreters, and authorize every tool action.
 
@@ -164,7 +188,27 @@ See [`specs/requirements.md`](specs/requirements.md) for detailed applicability,
 
 ## Using it
 
-The installer supports project and user installations. For manual setup, keep `secure-coding-baseline.md` as the single source: import or symlink it where possible.
+The installer supports project and user installations with the complete eager
+profile. It is the safe fallback whenever a client or deployment cannot prove
+that matching modules load before affected work.
+
+### Choose a loading profile
+
+- **Eager:** Load [secure-coding-baseline.md](secure-coding-baseline.md). It
+  contains the core and every official module and works with the existing
+  guided installer.
+- **Modular:** Always load [baseline/core.md](baseline/core.md), expose every
+  entry in [baseline/catalog.json](baseline/catalog.json) through one verified
+  module loader, and make the catalog's semantic triggers visible at startup.
+  Put organization modules in that same flat namespaced catalog; keep the
+  organization overlay always loaded beside the core.
+
+For a concrete modular build, use the
+[organization bundle example](examples/organization-bundle/). Its generated
+release places `aiscb:*` and `acme:*` module bodies together under `modules/`
+and generates one skill plane for Claude Code, Codex, and Copilot. Loading only
+`core.md` without the catalog and loader is invalid; use the eager profile in
+that case.
 
 ### Remote setup (no checkout)
 
@@ -326,9 +370,10 @@ For Claude Code, an [appsec-advisor](https://github.com/appsec-foundry/appsec-ad
 
 ### Verify it loaded
 
-Ask `baseline?`; the answer should include `aiscb-0.1.15` and its source file. This confirms only that the baseline is in context.
+Ask `baseline?`; the answer should include `aiscb-0.1.16`, its source, and any
+loaded modules. This confirms only what is visible in context.
 
-- `aiscb-0.1.15`: this baseline.
+- `aiscb-0.1.16`: this baseline.
 
 If more than one baseline is loaded, the answer lists each one. Claude Code can also show loaded files with `/context` or `/memory`.
 
@@ -336,7 +381,7 @@ If more than one baseline is loaded, the answer lists each one. Claude Code can 
 
 You may add internal rules, approved stacks, and review policies while retaining attribution. Keep existing rule-group IDs for traceability, but give the derived baseline its own [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) ID:
 
-- `aiscb-0.1.15+acme`: a version derived from aiscb.
+- `aiscb-0.1.16+acme`: a version derived from aiscb.
 - `acme-sec-1.0.0`: an independent baseline.
 
 Alternatively, keep organization rules in a [separate file](docs/adapting-in-an-organization.md). Application requirements belong in tests, CI, review gates, and runtime controls, not in the baseline.
@@ -353,7 +398,23 @@ These resources neither certify aiscb nor define its coverage. Check time-sensit
 
 ## Development
 
-`secure-coding-baseline.md` is the normative product. At 20.4 KB (20,354 bytes), or 4,090 tokens (`o200k_base`), it remains within its roughly 4,100-token budget. It is not formally certified.
+Normative rule text lives in `baseline/core.md` and the cataloged files under
+`baseline/modules/`; `secure-coding-baseline.md` is their deterministic eager
+artifact. Current measurements use `o200k_base`:
+
+| Artifact | Bytes | Tokens |
+| --- | ---: | ---: |
+| Always-on core | 7,432 | 1,500 |
+| `aiscb:web-auth` | 4,647 | 944 |
+| `aiscb:secrets-bootstrap` | 1,885 | 349 |
+| `aiscb:deployment-runtime` | 1,562 | 294 |
+| `aiscb:llm-features` | 1,212 | 236 |
+| `aiscb:supply-chain` | 1,155 | 221 |
+| `aiscb:data-boundaries` | 631 | 139 |
+| Complete eager artifact | 18,530 | 3,683 |
+
+The budgets are roughly 1,500 tokens for the core and 4,100 for the eager
+artifact. aiscb is not formally certified.
 
 [`specs/requirements.md`](specs/requirements.md) maps rule groups to tests. Behavior changes follow the workflow in [`specs/README.md`](specs/README.md); editorial and repository-only changes need no change specification.
 

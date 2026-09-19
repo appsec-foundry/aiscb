@@ -1,8 +1,9 @@
 # How the baseline changes
 
-`secure-coding-baseline.md` in the repository root is the product: one file,
-shipped to coding assistants as it is. Nothing under `specs/` is normative for
-an assistant; it only records what the baseline contains and how it changes.
+`baseline/core.md` and the cataloged files under `baseline/modules/` are the
+normative product. `secure-coding-baseline.md` is their generated complete eager
+artifact for clients without verified module loading. Nothing under `specs/` is
+normative; it only records what the baseline contains and how it changes.
 
 - `requirements.md`: a readable catalog of the current rule groups, acceptance
   criteria, model evidence, and known gaps.
@@ -21,8 +22,8 @@ make a sourced rule easier to see; it must not add to it.
 
 ## When a change needs its own directory
 
-A change needs its own directory only when it changes
-`secure-coding-baseline.md` in a way that could alter how an assistant behaves.
+A change needs its own directory only when it changes the core or a module in a
+way that could alter how an assistant behaves.
 Repository tooling, configuration, workflow, documentation, harness, and
 test-only changes do not get a change directory while the normative baseline
 stays unchanged. Typos and rewrapping do not need one either. If you cannot tell
@@ -43,7 +44,8 @@ worked examples in `archive/`, the smallest being
    that answer; `scripts/spec_guard.py` turns identifiable writes into a
    permission prompt.
 2. Write the three files.
-3. Change the baseline, test cases, and documentation as required by the change.
+3. Change the core or modules, regenerate the eager artifact, and update test
+   cases and documentation as required.
 4. Run `make check`.
 5. Run the model cases the change affects, or note in `tasks.md` why you did
    not; either way the task is done and its box gets ticked. They are evidence,

@@ -14,6 +14,7 @@ CHECK_TESTS = tests/selfcheck.py \
               tests/test_organization.py \
               examples/claude-code-gate/test_gate.py \
               examples/organization-bundle/test_bundle.py \
+              scripts/test_build_baseline.py \
               scripts/test_spec_guard.py \
               scripts/test_show_baseline_version.py \
               scripts/test_session_switch.py \
@@ -21,6 +22,7 @@ CHECK_TESTS = tests/selfcheck.py \
 
 ## check       validate the suite itself: no model calls, seconds
 check:
+	python3 scripts/build_baseline.py --check
 	@set -e; for t in $(CHECK_TESTS); do echo "python3 $$t"; python3 $$t; done
 
 ## coverage    statement coverage of the check suite; needs the coverage package

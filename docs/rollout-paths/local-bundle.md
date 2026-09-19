@@ -25,7 +25,11 @@ Reviewed policy repository → immutable bundle → internal distribution
 
 ## Build and release
 
-Build one release containing the unchanged baseline, overlay, catalog, packs, blueprints, schemas or validators, and generated adapters. Its manifest records the release and baseline IDs and each file's size and SHA-256. Authenticate the release through a signed manifest or your organization's authenticated package distribution. A hash downloaded beside an untrusted bundle does not establish who approved it.
+Build one release containing the aiscb core, official modules, organization
+overlay and modules, one merged flat catalog, blueprints, validators, and
+generated adapters. Its manifest records both release IDs and every file's size
+and SHA-256. Authenticate it through a signed manifest or the organization's
+authenticated package distribution; a colocated hash is not authentication.
 
 Choose the supported operating systems and installation paths before generating adapters. Use a stable managed path per platform, or generate and verify the adapters for each target location. Do not ship absolute paths containing the build machine's username. The example takes `--install-root` at build time and requires that same path at installation.
 
@@ -42,21 +46,32 @@ Publish the immutable release to the internal artifact or package service your o
 | Project repositories | A bot opens a PR containing the applicable files, dependencies, and tool entry points, with references that resolve in a fresh checkout |
 | Manual fallback | The operator obtains a release and an independently authenticated digest or signature, verifies the installer, then installs and connects the tool |
 
-Copying the release directory is only half the installation. The deployment must also place or reference the generated instructions in a location the tool reads, expose the pack skills in its discovery locations, and preserve existing instructions. A shared managed instruction file must reference content with matching write protection. A user-writable installation can guide the assistant but is not centrally protected policy.
+Copying the release directory is only half the installation. The deployment
+must connect the generated core-plus-overlay instructions and expose all
+`aiscb:*` and organization modules on the same skill surface while preserving
+existing instructions.
 
 ## Adapters per tool
 
-Generate adapters from the reviewed content. Load the baseline, overlay, and discovery metadata at startup. Load pack bodies and blueprints only for matching work. Set a budget for the initial content and fail generation if it would be truncated by the supported tool's limits.
+Generate adapters from reviewed content. Load core, overlay, and merged discovery
+metadata at startup. Load module bodies and their blueprints only for matching
+work. Set an initial-context budget and fail rather than truncate policy.
 
 | Tool | Initial instructions | Packs in a project | Path-specific option |
 | --- | --- | --- | --- |
-| Claude Code | `CLAUDE.md` with verified local imports, or a managed-policy `CLAUDE.md` | `.claude/skills/<pack>/SKILL.md` in the project, or in the managed settings directory for every user of a managed machine | `.claude/rules/*.md` with `paths` |
-| Codex | Combined baseline and overlay in `AGENTS.md` | `.agents/skills/<pack>/SKILL.md` | Nested `AGENTS.md` on the startup directory chain |
-| Copilot | Combined `.github/copilot-instructions.md` | `.github/skills/<pack>/SKILL.md` on supported surfaces | `.github/instructions/*.instructions.md` with `applyTo` |
+| Claude Code | `CLAUDE.md` with the verified core import plus overlay and discovery | `.claude/skills/<publisher>-<module>/SKILL.md` | `.claude/rules/*.md` with `paths` |
+| Codex | Combined core, overlay, and discovery in `AGENTS.md` | `.agents/skills/<publisher>-<module>/SKILL.md` | Nested `AGENTS.md` on the startup directory chain |
+| Copilot | Combined `.github/copilot-instructions.md` | `.github/skills/<publisher>-<module>/SKILL.md` on supported surfaces | `.github/instructions/*.instructions.md` with `applyTo` |
 
-Claude Code expands local `@` imports at startup; importing every pack there defeats lazy loading. Its managed-policy location and managed skills directory differ by operating system. Claude Code asks before loading a project-level import that resolves outside the working directory; confirm on each supported version whether a managed entry point importing the release directory triggers that dialog, because a declined import silently drops the policy. See [Claude Code memory](https://code.claude.com/docs/en/memory) and [skills](https://code.claude.com/docs/en/skills).
+Claude Code expands local `@` imports at startup; import the core, not every
+module. Its managed-policy and managed-skills locations differ by operating
+system. Confirm whether an external project import prompts on every supported
+version, because declining it drops the policy.
 
-Codex builds its project instruction chain from the repository root to the working directory at startup. A session started at the root does not gain a child's startup instructions merely by later editing that child. Make its pack discoverable from the root and use the overlay's routing rule. Generate combined text rather than assuming an `@` import. See the official OpenAI documentation for [AGENTS.md](https://developers.openai.com/codex/guides/agents-md/) and [skills](https://developers.openai.com/codex/skills/).
+Codex builds its project instruction chain from repository root to working
+directory at startup. Make every module discoverable from the root and use the
+core routing rule. Generate combined core and overlay text rather than assuming
+an `@` import.
 
 Copilot support differs between chat, code review, IDEs, and agents. Verify the selected surface against its [instruction support matrix](https://docs.github.com/en/copilot/reference/custom-instructions-support), [skill documentation](https://docs.github.com/en/copilot/concepts/agents/about-agent-skills), and [Visual Studio skill documentation](https://learn.microsoft.com/en-us/visualstudio/ide/copilot-agent-skills?view=visualstudio) (Visual Studio 2026 18.5 or later, agent mode). Where on-demand loading is unavailable, include the applicable packs in the initial adapter and account for their size.
 
@@ -74,7 +89,9 @@ Start with [examples/organization-bundle](../../examples/organization-bundle/). 
 
 The example does not authenticate its own delivery, configure the assistant's entry points, implement session-aware activation, or validate the full nested blueprint schema. Its blueprint format is JSON only. Add those pieces for the selected deployment; do not describe copying its output as a completed rollout.
 
-For repository distribution, include the packs and blueprints as well as adapters. The example's generated absolute paths are tied to an installation root, so it needs a repository adapter before its output will work across fresh checkouts.
+For repository distribution, include the flat module directory, blueprints,
+catalog, core, overlay, and adapters. The example's absolute paths are tied to
+an installation root, so repository output needs relative-path adapters.
 
 ## Acceptance checks
 

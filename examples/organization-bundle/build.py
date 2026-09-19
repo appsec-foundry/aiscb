@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Assemble one immutable release from this directory and an approved aiscb file.
+"""Assemble one immutable release from organization and approved aiscb modules.
 
-The build copies the sources, validates the catalog and blueprints, generates
-the adapters each tool reads, and writes a manifest that records every file
-with its size and SHA-256. It refuses to build when the overlay names an aiscb
-release other than the one supplied, when a blueprint has unknown fields or a
-version that disagrees with its path, or when the catalog points at a rule,
-pack, or blueprint that does not exist.
+The build validates both catalogs, merges every namespaced module into one flat
+release directory, generates the adapters each tool reads, and writes a
+manifest that records every file with its size and SHA-256.
 
 Bundle paths in the sources are the placeholder ``<bundle-dir>``. The build
 replaces it with the versioned directory the release will be installed to, so
@@ -22,19 +19,26 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PLACEHOLDER = "<bundle-dir>"
-IMPORT_MARKER = f"@{PLACEHOLDER}/secure-coding-baseline.md\n\n"
+IMPORT_MARKER = f"@{PLACEHOLDER}/core.md\n\n"
 ID_RE = re.compile(r"`baseline-id: ([a-z][a-z0-9-]*-\d+\.\d+\.\d+)`")
 EXTENDS_RE = re.compile(r"Extends aiscb \(`(aiscb-\d+\.\d+\.\d+)`\)")
-RULE_RE = re.compile(r"\[(aiscb-[A-Z]+-\d{3})\]")
-PACK_ID_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+RULE_RE = re.compile(r"\[(aiscb-[A-Z0-9]+-\d{3})\]")
+PACK_ID_RE = re.compile(r"^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$")
 REQUIREMENT_RE = re.compile(r"^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+-\d{3}$")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 MAX_SOURCE_BYTES = 256 * 1024
 
 BLUEPRINT_KEYS = {"version", "sso", "session_cookie", "headers", "audit_events"}
 BLUEPRINT_MAJOR = 1
 PACK_KEYS = {"id", "file", "owner", "source", "trigger", "paths", "blueprints",
              "requirements"}
+AISCB_TOP_KEYS = {"schema", "baseline_id", "core", "modules"}
+AISCB_CORE_KEYS = {"file", "rules", "size", "sha256"}
+AISCB_MODULE_KEYS = {
+    "id", "publisher", "version", "file", "trigger", "paths", "requires",
+    "rules", "size", "sha256",
+}
 
 # tool -> (instruction file the tool reads, whether it can follow the import)
 ADAPTERS = {
@@ -69,6 +73,75 @@ def single(pattern: re.Pattern, text: str, what: str) -> str:
     if len(found) != 1:
         raise BuildError(f"expected exactly one {what}, found {len(found)}")
     return found[0]
+
+
+def verified_artifact(root: Path, entry: dict, expected_prefix: str) -> tuple[str, bytes]:
+    rel = entry.get("file")
+    if (not isinstance(rel, str) or Path(rel).is_absolute() or ".." in Path(rel).parts
+            or (expected_prefix and not rel.startswith(expected_prefix))):
+        raise BuildError(f"unsafe aiscb artifact path {rel!r}")
+    raw = read_bytes(root / rel)
+    if (entry.get("size") != len(raw) or not isinstance(entry.get("sha256"), str)
+            or not SHA256_RE.fullmatch(entry["sha256"])
+            or entry["sha256"] != sha256(raw)):
+        raise BuildError(f"aiscb artifact metadata does not match {rel}")
+    return rel, raw
+
+
+def load_aiscb(root: Path, approved_digest: str | None = None) -> dict:
+    """Load one verified modular aiscb source tree."""
+    if not root.is_dir():
+        raise BuildError("--aiscb must name the modular baseline directory")
+    catalog_raw = read_bytes(root / "catalog.json")
+    if approved_digest and sha256(catalog_raw) != approved_digest.lower():
+        raise BuildError("the aiscb catalog does not match the approved digest")
+    try:
+        catalog = json.loads(catalog_raw)
+    except ValueError as exc:
+        raise BuildError(f"aiscb catalog is not valid JSON: {exc}") from None
+    if not isinstance(catalog, dict) or set(catalog) != AISCB_TOP_KEYS:
+        raise BuildError(f"aiscb catalog needs exactly {sorted(AISCB_TOP_KEYS)}")
+    if catalog["schema"] != 1 or not isinstance(catalog["modules"], list):
+        raise BuildError("unsupported aiscb catalog schema")
+    core = catalog["core"]
+    if not isinstance(core, dict) or set(core) != AISCB_CORE_KEYS:
+        raise BuildError(f"aiscb core needs exactly {sorted(AISCB_CORE_KEYS)}")
+    core_rel, core_raw = verified_artifact(root, core, "")
+    if core_rel != "core.md":
+        raise BuildError("aiscb core must be core.md")
+    core_text = core_raw.decode("utf-8")
+    baseline_id = single(ID_RE, core_text, "aiscb baseline-id")
+    if catalog["baseline_id"] != baseline_id:
+        raise BuildError("aiscb catalog and core baseline IDs differ")
+
+    ids: set[str] = set()
+    files: list[tuple[str, bytes]] = [(core_rel, core_raw)]
+    modules: list[dict] = []
+    all_rules = set(RULE_RE.findall(core_text))
+    for module in catalog["modules"]:
+        if not isinstance(module, dict) or set(module) != AISCB_MODULE_KEYS:
+            raise BuildError(f"aiscb module needs exactly {sorted(AISCB_MODULE_KEYS)}")
+        module_id = module["id"]
+        if (not isinstance(module_id, str) or not PACK_ID_RE.fullmatch(module_id)
+                or not module_id.startswith("aiscb:") or module_id in ids):
+            raise BuildError(f"invalid or duplicate aiscb module ID {module_id!r}")
+        ids.add(module_id)
+        rel, raw = verified_artifact(root, module, "modules/")
+        text = raw.decode("utf-8")
+        if f"`module-id: {module_id}`" not in text:
+            raise BuildError(f"aiscb module body does not declare {module_id}")
+        trigger = module["trigger"]
+        if not isinstance(trigger, str) or not trigger.strip() or "\n" in trigger:
+            raise BuildError(f"aiscb module {module_id} needs one semantic trigger")
+        rules = set(RULE_RE.findall(text))
+        if rules != set(module["rules"]) or all_rules.intersection(rules):
+            raise BuildError(f"aiscb module rule inventory is invalid for {module_id}")
+        all_rules.update(rules)
+        files.append((rel, raw))
+        modules.append(module)
+    return {"id": baseline_id, "catalog": catalog, "catalog_raw": catalog_raw,
+            "catalog_sha256": sha256(catalog_raw), "core": core_text,
+            "files": files, "modules": modules, "rules": all_rules}
 
 
 def validate_blueprint(source: Path, rel: str) -> None:
@@ -118,6 +191,8 @@ def load_catalog(source: Path, aiscb_rules: set[str]) -> dict:
         if not isinstance(rel, str) or not rel.startswith("packs/") or "/" in rel[6:]:
             raise BuildError(f"pack {pack_id}: file must sit directly under packs/")
         text = read_text(source / rel)
+        if f"`module-id: {pack_id}`" not in text:
+            raise BuildError(f"pack {pack_id} does not declare its module-id")
         listed_files.add(rel)
         trigger = pack["trigger"]
         if (not isinstance(trigger, str) or not trigger.strip() or len(trigger) > 200
@@ -158,11 +233,8 @@ def load_catalog(source: Path, aiscb_rules: set[str]) -> dict:
 
 def build(source: Path, aiscb_path: Path, out: Path, install_root: Path,
           aiscb_sha256: str | None = None) -> tuple[dict, str]:
-    aiscb_bytes = read_bytes(aiscb_path)
-    if aiscb_sha256 and sha256(aiscb_bytes) != aiscb_sha256.lower():
-        raise BuildError("the aiscb file does not match the approved digest")
-    aiscb_text = aiscb_bytes.decode("utf-8")
-    aiscb_id = single(ID_RE, aiscb_text, "aiscb baseline-id")
+    aiscb = load_aiscb(aiscb_path, aiscb_sha256)
+    aiscb_id = aiscb["id"]
 
     overlay = read_text(source / "overlay.md")
     if not overlay.startswith(IMPORT_MARKER):
@@ -172,7 +244,7 @@ def build(source: Path, aiscb_path: Path, out: Path, install_root: Path,
     if extends != aiscb_id:
         raise BuildError(f"overlay extends {extends} but the supplied file is {aiscb_id}")
 
-    catalog = load_catalog(source, set(RULE_RE.findall(aiscb_text)))
+    organization = load_catalog(source, aiscb["rules"])
     release_dir = (install_root / "releases" / overlay_id).resolve()
 
     if out.exists() and any(out.iterdir()):
@@ -189,33 +261,80 @@ def build(source: Path, aiscb_path: Path, out: Path, install_root: Path,
     def fill(text: str) -> str:
         return text.replace(PLACEHOLDER, str(release_dir))
 
-    put("secure-coding-baseline.md", aiscb_bytes)
+    put("core.md", aiscb["files"][0][1])
+    for rel, raw in aiscb["files"][1:]:
+        put(f"modules/{Path(rel).name}", raw)
     put("overlay.md", fill(overlay).encode("utf-8"))
-    put("catalog.json", read_bytes(source / "catalog.json"))
-    for pack in catalog["packs"]:
-        put(pack["file"], fill(read_text(source / pack["file"])).encode("utf-8"))
+    put("aiscb-catalog.json", aiscb["catalog_raw"])
+
+    merged_modules = []
+    for module in aiscb["modules"]:
+        merged_modules.append({
+            "id": module["id"],
+            "publisher": "aiscb",
+            "version": module["version"],
+            "artifact": f"modules/{Path(module['file']).name}",
+            "trigger": module["trigger"],
+            "paths": module["paths"],
+            "requires": module["requires"],
+            "blueprints": [],
+            "rules": module["rules"],
+        })
+    for pack in organization["packs"]:
+        module_name = pack["id"].replace(":", "-") + ".md"
+        body = fill(read_text(source / pack["file"])).encode("utf-8")
+        put(f"modules/{module_name}", body)
         for blueprint in pack["blueprints"]:
             put(blueprint, read_bytes(source / blueprint))
+        merged_modules.append({
+            "id": pack["id"],
+            "publisher": pack["id"].split(":", 1)[0],
+            "version": overlay_id.rsplit("-", 1)[-1],
+            "artifact": f"modules/{module_name}",
+            "trigger": pack["trigger"],
+            "paths": pack["paths"],
+            "requires": [],
+            "blueprints": pack["blueprints"],
+            "rules": sorted(pack["requirements"]),
+            "owner": pack["owner"],
+            "source": pack["source"],
+            "mappings": pack["requirements"],
+        })
+
+    merged_catalog = {
+        "schema": 1,
+        "release_set": {"aiscb": aiscb_id, "organization": overlay_id},
+        "modules": merged_modules,
+    }
+    put("catalog.json", (json.dumps(merged_catalog, indent=2) + "\n").encode("utf-8"))
 
     body = fill(overlay[len(IMPORT_MARKER):])
-    combined = aiscb_text.rstrip("\n") + "\n\n" + body
+    discovery = "## Configured Module Catalog\n\n" + "\n".join(
+        f"- `{module['id']}` — {module['trigger']}"
+        for module in merged_modules
+    ) + "\n"
+    combined = aiscb["core"].rstrip("\n") + "\n\n" + body.rstrip("\n") + "\n\n" + discovery
     for tool, (name, follows_import) in ADAPTERS.items():
         if follows_import:
-            text = f"@{release_dir}/secure-coding-baseline.md\n\n{body}"
+            text = f"@{release_dir}/core.md\n\n{body.rstrip()}\n\n{discovery}"
         else:
             text = combined
         put(f"adapters/{tool}/{name}", text.encode("utf-8"))
-        for pack in catalog["packs"]:
-            skill = (f"---\nname: {pack['id']}\ndescription: {pack['trigger']}\n---\n\n"
-                     + fill(read_text(source / pack["file"])))
-            put(f"adapters/{tool}/skills/{pack['id']}/SKILL.md", skill.encode("utf-8"))
+        for module in merged_modules:
+            skill_name = module["id"].replace(":", "-")
+            description = json.dumps(f"{module['id']}: {module['trigger']}")
+            module_body = read_text(out / module["artifact"])
+            skill = (f"---\nname: {skill_name}\ndescription: {description}\n"
+                     f"---\n\n{module_body}")
+            put(f"adapters/{tool}/skills/{skill_name}/SKILL.md",
+                skill.encode("utf-8"))
     put("adapters/gateway/system-block.md", combined.encode("utf-8"))
 
     manifest = {
         "bundle": overlay_id,
         "overlay": overlay_id,
         "aiscb": aiscb_id,
-        "aiscb_sha256": sha256(aiscb_bytes),
+        "aiscb_sha256": aiscb["catalog_sha256"],
         "release_dir": str(release_dir),
         "files": dict(sorted(files.items())),
     }
@@ -227,8 +346,8 @@ def build(source: Path, aiscb_path: Path, out: Path, install_root: Path,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--aiscb", required=True, type=Path,
-                        help="the approved secure-coding-baseline.md")
-    parser.add_argument("--aiscb-sha256", help="digest the aiscb file must match")
+                        help="the approved modular aiscb baseline directory")
+    parser.add_argument("--aiscb-sha256", help="digest the aiscb catalog must match")
     parser.add_argument("--out", required=True, type=Path, help="empty output directory")
     parser.add_argument("--install-root", type=Path,
                         default=Path.home() / ".local" / "share" / "aiscb",

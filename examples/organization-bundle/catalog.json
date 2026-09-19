@@ -1,7 +1,7 @@
 {
   "packs": [
     {
-      "id": "acme-authentication",
+      "id": "acme:authentication",
       "file": "packs/authentication.md",
       "owner": "Application Security",
       "source": "policy/IAM-7",
@@ -14,7 +14,7 @@
       }
     },
     {
-      "id": "acme-deployment",
+      "id": "acme:deployment",
       "file": "packs/deployment.md",
       "owner": "Platform Engineering",
       "source": "policy/OPS-3",
@@ -22,8 +22,8 @@
       "paths": ["**/deploy/**", "**/Dockerfile", "**/compose*.y*ml"],
       "blueprints": [],
       "requirements": {
-        "ACME-EXPOSE-001": {"narrows": ["aiscb-DEFAULTS-001"]},
-        "ACME-BOOTSTRAP-001": {"narrows": ["aiscb-SECRETS-001"]}
+        "ACME-EXPOSE-001": {"narrows": ["aiscb-WEB-001", "aiscb-DEPLOYMENT-001"]},
+        "ACME-BOOTSTRAP-001": {"narrows": ["aiscb-BOOTSTRAP-001"]}
       }
     }
   ]

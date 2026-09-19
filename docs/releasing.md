@@ -12,6 +12,11 @@ Three files are shipped together. They are called the bundle:
 - `scripts/install.py`
 - `scripts/show_baseline_version.py`
 
+The bundled baseline is the generated eager profile. Modular sources live in
+`baseline/` and ship in the repository release; an organization bundle pins
+and repackages them with its overlay and modules. The standard Quick start
+keeps using the eager profile and needs no module loader.
+
 Users receive the bundle in two ways:
 
 1. **Quick start** (new installs). `setup.sh` contains the name of a bundle tag
@@ -65,10 +70,11 @@ bundle files invalidates the signature and the hashes from the steps after it.
 ### 1. Finish the content
 
 - Merge the baseline change through its specification under `specs/`.
-- Set the new `baseline-id` in `secure-coding-baseline.md`. Only change the
-  version when it has been approved explicitly.
-- Recompute the file size and the `o200k_base` token count of the baseline and
-  update both numbers in `README.md`.
+- Set the approved new `baseline-id` in `baseline/core.md` and
+  `baseline/catalog.json`, then run `python3 scripts/build_baseline.py --write`.
+  Never hand-edit `secure-coding-baseline.md`.
+- Recompute the file sizes and `o200k_base` token counts of the core and eager
+  artifact and update every measurement in `README.md`.
 
 ### 2. Update the version in the other files
 
@@ -83,6 +89,7 @@ Replace the previous version number in:
   test case
 - `scripts/test_session_switch.py`: the source ID in the derived-baseline test
 - `scripts/test_install.py`: the "Switch to a managed copy of ..." question
+- `tests/test_design_confirmation.py`: accepted baseline names
 
 ### 3. Sign the bundle
 

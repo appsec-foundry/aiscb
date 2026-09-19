@@ -2,8 +2,8 @@
 
 A worked example of the release model in
 [Adapting the baseline in an organization](../../docs/adapting-in-an-organization.md):
-an overlay, a catalog with one requirement pack, one blueprint, a build that
-turns them into an immutable release with a manifest, an installer that
+an always-on core and overlay, a flat catalog combining aiscb and organization
+modules, one blueprint, a build that turns them into an immutable release with a manifest, an installer that
 verifies and switches releases, and a LiteLLM injection hook. The build,
 installer, and standalone tests use the Python standard library; running the
 gateway hook requires LiteLLM.
@@ -18,8 +18,8 @@ implement.
 
 | File | Role |
 | --- | --- |
-| `overlay.md` | The organization's always-loaded rules; imports aiscb, names its own ID |
-| `catalog.json` | One entry per pack: trigger, owner, source, blueprints, and per requirement either `{"narrows": [...]}` naming aiscb rules or `{"organization": true}` |
+| `overlay.md` | The organization's always-loaded rules; imports the aiscb core and names its own ID and namespace |
+| `catalog.json` | Source entries for organization modules; the build merges them with the verified aiscb catalog |
 | `packs/authentication.md` | Rules loaded only for authentication work |
 | `packs/deployment.md` | Rules loaded only for exposure, proxy, container, and first-start work; carries the deployment detail aiscb itself leaves to organizations |
 | `blueprints/spa/1.0.0.json` | Approved values the pack refers to, versioned in the path |
@@ -45,7 +45,7 @@ also needs a safe parser and handling for duplicate keys and aliases.
 cd examples/organization-bundle
 python3 test_bundle.py
 
-python3 build.py --aiscb ../../secure-coding-baseline.md --out /tmp/acme-bundle \
+python3 build.py --aiscb ../../baseline --out /tmp/acme-bundle \
     --install-root /tmp/acme-root
 # prints the manifest digest; pass it to the installer through another channel
 python3 install.py --root /tmp/acme-root install /tmp/acme-bundle --manifest-sha256 <digest>
@@ -54,10 +54,10 @@ python3 install.py --root /tmp/acme-root uninstall
 ```
 
 The build refuses an overlay that names a different aiscb release than the
-file supplied, a blueprint with unknown top-level fields or a version that
+verified modular source supplied, a blueprint with unknown top-level fields or a version that
 disagrees with its path, a catalog entry that narrows an aiscb rule that does not exist, and a
-pack file without a catalog entry. Pass `--aiscb-sha256` to pin the upstream
-file to the digest your review approved.
+module file without a catalog entry. Pass `--aiscb-sha256` to pin the upstream
+catalog to the digest your review approved.
 
 The installer verifies the manifest against the digest it was given and every
 listed file against the manifest before it copies anything. Releases are
@@ -70,20 +70,27 @@ What the release contains:
 ```text
 acme-sec-1.0.0/
 ├── manifest.json
-├── secure-coding-baseline.md          unchanged aiscb
+├── core.md                            always-on aiscb core
 ├── overlay.md
-├── catalog.json
-├── packs/authentication.md
-├── packs/deployment.md
+├── catalog.json                       merged flat module catalog
+├── aiscb-catalog.json                 reviewed upstream catalog
+├── modules/
+│   ├── aiscb-web-auth.md
+│   ├── ...                            other aiscb modules
+│   ├── acme-authentication.md
+│   └── acme-deployment.md
 ├── blueprints/spa/1.0.0.json
 └── adapters/
-    ├── claude-code/CLAUDE.md          import line pointing at the versioned aiscb file, then the overlay
+    ├── claude-code/CLAUDE.md          imports the core, then carries overlay and discovery
+    ├── claude-code/skills/aiscb-web-auth/SKILL.md
     ├── claude-code/skills/acme-authentication/SKILL.md
     ├── claude-code/skills/acme-deployment/SKILL.md
-    ├── codex/AGENTS.md                aiscb followed by the overlay, marker removed
+    ├── codex/AGENTS.md                core, overlay, and merged discovery
+    ├── codex/skills/aiscb-web-auth/SKILL.md
     ├── codex/skills/acme-authentication/SKILL.md
     ├── codex/skills/acme-deployment/SKILL.md
     ├── copilot/copilot-instructions.md
+    ├── copilot/skills/aiscb-web-auth/SKILL.md
     ├── copilot/skills/acme-authentication/SKILL.md
     ├── copilot/skills/acme-deployment/SKILL.md
     └── gateway/system-block.md        the text the gateway appends
@@ -115,8 +122,8 @@ channel rather than trusting a hash beside an unverified download:
   then runs installation with the matching root and digest.
   Use this for machines outside management, and count them separately.
 
-For repositories, a bot update must include the required baseline, overlay,
-packs, and blueprints as well as the tool entry points. Adapt the example's
+For repositories, a bot update must include the core, merged module directory,
+overlay, catalog, and blueprints as well as the tool entry points. Adapt the example's
 absolute paths so references resolve in any fresh checkout; copying only
 `adapters/` is insufficient.
 

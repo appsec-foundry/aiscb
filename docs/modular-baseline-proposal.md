@@ -1,14 +1,13 @@
-# Proposal: a small always-on core with policy modules
+# Design: a small always-on core with policy modules
 
-This proposal splits aiscb into a small core that every coding session receives
+This design splits aiscb into a small core that every coding session receives
 and official modules that load only for matching work. An organization can add
 an always-on overlay, organization modules, and versioned blueprints without
 copying or weakening aiscb.
 
-This is an architecture proposal, not normative baseline text. It does not
-change `secure-coding-baseline.md`, its ID, or its version. Implementing it
-would require a baseline change specification and explicit approval of the new
-baseline ID or version.
+This document explains the architecture; normative text lives in
+`baseline/core.md` and the cataloged modules. The complete generated
+`secure-coding-baseline.md` remains the compatibility profile.
 
 ## Intended outcome
 
@@ -150,7 +149,7 @@ colliding fully qualified IDs. Each record should contain at least:
   "trigger": "HTTP endpoints, browser UI, login, SSO, sessions, cookies, tokens, passwords, CORS or CSRF",
   "paths": [],
   "requires": [],
-  "artifact": "modules/web-auth.md",
+  "artifact": "modules/aiscb-web-auth.md",
   "size": 0,
   "sha256": "<digest>"
 }
@@ -262,28 +261,26 @@ silently omit modules because a client lacks lazy loading.
 
 ## Repository and release shape
 
-A future implementation could use:
+The implementation uses:
 
 ```text
 baseline/
   core.md
   catalog.json
   modules/
-    web-auth.md
-    data-boundaries.md
-    secrets-bootstrap.md
-    supply-chain.md
-    deployment-runtime.md
-    llm-features.md
+    aiscb-web-auth.md
+    aiscb-data-boundaries.md
+    aiscb-secrets-bootstrap.md
+    aiscb-supply-chain.md
+    aiscb-deployment-runtime.md
+    aiscb-llm-features.md
 secure-coding-baseline.md       generated eager compatibility artifact
 ```
 
-The modular sources would become normative and the eager file would be a
-reproducible release artifact. This changes the repository's present contract
-that `secure-coding-baseline.md` alone is normative, so it must not happen as a
-mere file move. The change needs a specification, requirement-to-module
-mapping, exact version approval, deterministic generation, and tests proving
-that the eager artifact contains every normative rule exactly once.
+The modular sources are normative and the eager file is a reproducible release
+artifact. The change specification, requirement-to-module mapping, exact
+version approval, deterministic generation, and tests establish that the eager
+artifact contains every normative rule exactly once.
 
 Stable existing rule IDs should remain attached to their behavior. New routing
 and module-integrity behavior needs new IDs. Moving a rule between files alone
