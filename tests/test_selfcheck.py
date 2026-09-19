@@ -116,7 +116,7 @@ README = """\
 
 Ask the tool `baseline?`. The answer should include `aiscb-0.1.0`.
 
-- `aiscb-0.1.0`: this baseline.
+Current baseline: `aiscb-0.1.0`.
 """
 
 
@@ -185,8 +185,8 @@ CASES = [
      lambda r: edit(r / "baseline/aiscb-core.md", "aiscb-0.1.0", "aiscb-0.1"),
      "does not use Semantic Versioning"),
     ("README current baseline id is stale",
-     lambda r: edit(r / "README.md", "- `aiscb-0.1.0`: this baseline.",
-                    "- `aiscb-0.1.1`: this baseline."),
+     lambda r: edit(r / "README.md", "Current baseline: `aiscb-0.1.0`.",
+                    "Current baseline: `aiscb-0.1.1`."),
      "README current baseline id 'aiscb-0.1.1' does not match"),
     ("agent baseline reference is missing",
      lambda r: (r / "AGENTS.md").write_text("# Repository instructions\n"),
@@ -708,7 +708,7 @@ def identifier_guard(expected: str | None, baseline: str, readme: str | None,
 
 GOOD_BASELINE = "`baseline-id: aiscb-0.1.0`\n"
 GOOD_README = ("Ask `baseline?`. The answer should include `aiscb-0.1.0`.\n\n"
-               "- `aiscb-0.1.0`: this baseline.\n")
+               "Current baseline: `aiscb-0.1.0`.\n")
 
 identifier_guard("exactly one baseline id",
                  GOOD_BASELINE + GOOD_BASELINE, GOOD_README,
@@ -719,10 +719,10 @@ identifier_guard("does not use Semantic Versioning",
 identifier_guard("README missing at", GOOD_BASELINE, None,
                  "check_baseline_identifier reports a missing README")
 identifier_guard("must document exactly one", GOOD_BASELINE,
-                 "- `aiscb-0.1.0`: this baseline.\n",
+                 "Current baseline: `aiscb-0.1.0`.\n",
                  "check_baseline_identifier reports an undocumented verification id")
 identifier_guard("does not match", GOOD_BASELINE,
-                 GOOD_README.replace("- `aiscb-0.1.0`", "- `aiscb-0.2.0`"),
+                 GOOD_README.replace("Current baseline: `aiscb-0.1.0`", "Current baseline: `aiscb-0.2.0`"),
                  "check_baseline_identifier reports a stale README id")
 identifier_guard(None, GOOD_BASELINE, GOOD_README,
                  "check_baseline_identifier on matching files")

@@ -47,7 +47,7 @@ SEMVER = (
 BASELINE_IDENTIFIER = re.compile(rf"[a-z][a-z0-9]*(?:-[a-z0-9]+)*-{SEMVER}")
 BASELINE_ID_LINE = re.compile(r"^`baseline-id: ([^`]+)`")
 README_VERIFY_ID = re.compile(r"answer should include `([^`]+)`")
-README_CURRENT_ID = re.compile(r"^- `([^`]+)`: this baseline\.$", re.MULTILINE)
+README_CURRENT_ID = re.compile(r"^Current baseline: `([^`]+)`\.$", re.MULTILINE)
 
 REGEX_KEYS = ["forbidden_regex", "required_regex",
               "reply_forbidden_regex", "reply_required_regex", "transcript_forbidden_regex"]

@@ -4,10 +4,10 @@ Use the same local installer for official policy and an organization package.
 The core and official modules share one aiscb release. An organization overlay
 has its own release and pins the exact aiscb content it extends.
 
-This is a feature-branch integration, not yet a signed remote release. Use a
-reviewed checkout and an existing project directory. Python 3.10 or newer is
-required. Modular mode requires the assistant to execute the supplied Python
-loader; it does not grant command-execution permission. If that tool is absent
+Modular installation uses a reviewed checkout and an existing project
+directory. The signed remote bundle installs the complete baseline.
+Python 3.10 or newer is required. Modular mode requires the assistant to execute
+the supplied Python loader; it does not grant command-execution permission. If that tool is absent
 or denied, affected work must stop. Use complete output for such clients.
 
 The generated loader command uses POSIX shell quoting and Python 3.10+.
