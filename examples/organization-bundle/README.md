@@ -16,6 +16,13 @@ to complete distribution and tool setup. The [gateway rollout path](../../docs/r
 describes the remote adapter and HTTPS loader that this example does not yet
 implement.
 
+If only the LiteLLM gateway can be changed, see the separate
+[gateway-managed example](../../docs/rollout-paths/gateway-managed-loading.md).
+It keeps policy loading inside the gateway without a client skill, helper or
+MCP registration. It selects modules before each request and then preserves
+the normal answer and streaming path. It is separate from the complete-injection
+callback; use one integration per deployment.
+
 ## Files
 
 | File | Role |

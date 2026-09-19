@@ -143,11 +143,19 @@ work.
 The integration contract is documented in `docs/local-policy-installation.md`.
 The 2026 OWASP LLM and Agentic comparison, including remaining content gaps,
 is in `docs/owasp-llm-agentic-review.md`. It adds no hidden normative rules.
-Modular mode remains an explicit branch trial until actual client routing is
-evaluated. Neither file installation nor loader tests prove model compliance.
-The signed remote bundle still distributes complete output, with no runtime
-fetching of modular helpers. Extending that signed distribution is separate
-maintainer release work.
+Modular mode is now the project and user installation default. From 0.1.17,
+release packaging embeds the modular sources and helpers in the signed
+installer; it does not fetch helper code at runtime. Preparing this packaging
+does not establish that a release has been signed or published. See
+`docs/releasing.md` for publication and `docs/agent-integration-verification.md`
+for current client evidence. Neither file installation nor loader tests prove
+semantic module selection or model compliance.
+
+Gateway delivery remains separate. The original example generates complete
+content. A second LiteLLM example selects and loads modules before each
+Anthropic Messages request, without client installation. The client-callable
+HTTPS loader remains a design. See `docs/rollout-paths/gateway-https.md` and
+`docs/rollout-paths/gateway-managed-loading.md` for setup and evidence limits.
 
 ## Verification state
 
@@ -165,7 +173,9 @@ The migration separates development checks from the release gate. No root
 manifest or signature claims that this working tree is published. Historical
 bootstrap fixtures keep the published 0.1.15 path covered. New bundles are
 staged under dist/aiscb-VERSION/bundle-N and must pass `make check-release`
-after maintainer signing. Actual-client and publication checks remain pending.
+after maintainer signing. Initial CLI loading evidence is recorded in
+`docs/agent-integration-verification.md`; semantic selection, live gateway
+acceptance and publication verification are separate from these source checks.
 
 No paid model suite was run. New design and agent rules are explicitly recorded
 as lacking model evidence in the requirements catalog. Loader and installer
@@ -177,8 +187,9 @@ not real-client routing or security-behavior evidence.
 
 1. Review the core/module boundary and the module triggers, with particular
    attention to false negatives caused by semantic selection.
-2. Evaluate actual client routing and context budgets before making modular
-   loading the default or expanding the signed remote distribution.
+2. Evaluate semantic module selection and context budgets in actual clients
+   before organizational rollout. Verify the remote gateway variant separately
+   if it is implemented; local loading evidence does not cover it.
 3. If sources change, run `make build-full-baseline`, recompute
    the `o200k_base` measurements, update README, and run deterministic checks.
 4. When the version is explicitly approved, follow `docs/releasing.md`: stage,

@@ -27,12 +27,14 @@ loading, not additional baseline products.
 | Blueprint | Approved values a pack refers to: libraries, claim names, group mappings, headers, limits | Only with its pack |
 | Adapter | The generated files or gateway block that put the above into the format each assistant reads | Generated per tool |
 
-"Loaded only for matching work" works the same way in every delivery: the
+In modular delivery, "loaded only for matching work" means the
 assistant sees the core, overlay, and discovery metadata at session start and
 applies `aiscb-MODULES-001` once across all namespaces. For a local bundle, the
 project adapter exposes every module through one bounded Python loader; managed
 deployments may instead wire the generated skill surface. For a gateway, one
-loading tool accepts bounded catalog IDs. A file or URL alone loads nothing.
+loading tool accepts bounded catalog IDs, called either through a configured
+client tool or through a separate selection request at the gateway. A file or URL alone
+loads nothing.
 
 The catalog triggers and core routing rule are the selection mechanism, so test
 them with real assistant runs, not only file checks. Keep the overlay and
@@ -74,13 +76,22 @@ The core routing rule already covers every configured namespace.
 The local project integration is implemented. Other deployment shapes are:
 
 1. **Gateway injection of everything.** Append the eager aiscb artifact, overlay,
-   and all organization modules. Choose this when policy is small enough that
-   no lazy loader is worthwhile.
+   all organization modules, and referenced blueprint values. The example
+   builder already generates this block. Modular sources do not require a
+   runtime loader for this delivery; rebuild and deploy the block and its digest.
+   Choose this when policy is small enough that no lazy loader is worthwhile.
 2. **Local modular bundle.** Load core, overlay, and discovery at startup; expose
    every `aiscb:*` and organization module through one verified loader.
 3. **Gateway injection with HTTPS loading (design only).** Inject core, overlay, and merged
    catalog; retrieve all module namespaces and blueprints through one verified
-   bounded loader.
+   bounded loader. This requires a new remote adapter and loader, client tool
+   provisioning, and a shared session release. Injecting only the core does not
+   implement it. See [status and migration](rollout-paths/gateway-https.md#implementation-status-and-migration).
+4. **Gateway-managed loading.** When development systems cannot be configured,
+   let the gateway select and load modules before the normal model request.
+   The LiteLLM example supports the Anthropic Messages format, including
+   streaming. No client skill, helper or MCP registration is needed. See
+   [setup and limits](rollout-paths/gateway-managed-loading.md).
 
 | | Local bundle | Gateway injection with HTTPS loading |
 | --- | --- | --- |
@@ -91,8 +102,9 @@ The local project integration is implemented. Other deployment shapes are:
 | Main operational cost | Installing and updating each machine or repository | Operating the gateway, policy host, and download path |
 | Offline policy access | Installed release, subject to your staleness policy | Only if you provide a verified cache; otherwise affected work stops |
 
-Developer machines hold no policy files in gateway delivery, but HTTPS loading
-still needs an MCP registration or reviewed helper and network access. The
+The client-callable HTTPS variant still needs an MCP registration or reviewed
+helper and network access. Gateway-managed loading moves execution and policy
+access to the gateway and requires no local policy files or loader setup. The
 [bundle example](../examples/organization-bundle/) implements the flat local
 module release and a LiteLLM injection hook; it does not implement the HTTPS
 loader.

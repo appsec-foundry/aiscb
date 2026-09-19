@@ -18,6 +18,7 @@ CHECK_TESTS = tests/selfcheck.py \
               tests/test_organization.py \
               examples/claude-code-gate/test_gate.py \
               examples/organization-bundle/test_bundle.py \
+              examples/organization-bundle/gateway/test_managed.py \
               scripts/test_build_baseline.py \
               scripts/test_spec_guard.py \
               scripts/test_show_baseline_version.py \

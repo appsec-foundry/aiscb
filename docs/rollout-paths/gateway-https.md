@@ -2,9 +2,42 @@
 
 Use this rollout path when the gateway should supply the initial instructions centrally and the assistant should retrieve detailed policy only for matching work. Read the [shared content and overlay rules](../adapting-in-an-organization.md#define-the-shared-content) first. This is an implementation plan; the repository does not yet contain the remote adapter or policy loader.
 
+This path assumes a loader tool can be configured in the client. When only the
+gateway can be changed, use the separate
+[gateway-managed example](gateway-managed-loading.md): the gateway selects and
+loads modules before forwarding the original request. That example supports
+LiteLLM's Anthropic Messages endpoint; the client-callable HTTPS loader described
+here remains unimplemented.
+
 If the complete policy is small enough to send on every request, skip the
 policy host and loader: inject the eager aiscb artifact, overlay, and all
-organization modules as one block.
+organization modules and referenced blueprint values as one block.
+
+## Implementation status and migration
+
+Modular sources do not require an existing complete-injection deployment to
+add a loader. Rebuild its complete block from the approved sources, deploy the
+new block with its trusted digest, and activate it for fresh sessions. This
+retains the full context cost; it does not enable on-demand loading.
+
+| Delivery | Repository status | Deployment work |
+| --- | --- | --- |
+| Complete gateway injection | Example builder and hook exist; tests stub LiteLLM | Deploy the generated block and digest; complete and verify the hook for every supported request format |
+| Core, overlay and catalog with a client-callable loader | Design only; no remote adapter or policy loader | Implement the loader, provision its tool in clients, publish verified artifacts, and bind injection and loading to the same session release |
+| Core, overlay and catalog with gateway-managed loading | LiteLLM Messages example with a separate selection call | Deploy the wrapper and verified policy snapshot; no client loader installation |
+
+The modular option reduces initial policy context and centralizes policy
+delivery. It also introduces a loading service or helper and an availability
+dependency. Core-only injection, a catalog of URLs, or a gateway connection
+without a callable loader does not provide a modular integration. A remote
+tool can avoid local policy files; a shell helper still needs local provisioning.
+Loaded modules add context, and compaction may require loading them again.
+
+For complete injection, identify the integration as complete in the delivered
+instructions, with all modules already supplied. The example currently
+concatenates the core and overlay without an explicit installation-mode label;
+verify that the client recognizes this mode rather than expecting a loader.
+Do not combine it with another local baseline installation inadvertently.
 
 ## Deployment inputs
 
@@ -30,6 +63,9 @@ Assistant ── selected artifact ID ──→ loader ── HTTPS ──→ po
 The gateway supplies initial instructions. The assistant selects every matching
 `aiscb:*` and organization module in one pass and calls one bounded loader.
 Gateway injection itself installs no skills, tools, or network access.
+Supply the core's discovery and loader instructions again after context loss.
+Recheck module selection on scope changes, final diff, resume and compaction;
+return full verified bodies when required content is no longer in context.
 
 The catalog includes `mcp-clients-servers` and `llm-retrieval-memory` automatically
 when built from the current source. These are coding rules, not a deployed MCP
@@ -82,6 +118,16 @@ Choose an implementation that the supported assistants can actually call:
 | Remote tool, for example MCP | An authenticated service that accepts an artifact ID, resolves it within the approved release, performs the checks, and returns the verified content |
 
 The shell helper can use existing command-line tools; it needs the execution environment to reach the policy host. A remote loader needs that access from its server; the client needs access to the loader. Both need explicit tool configuration. A centrally hosted loader avoids distributing a helper to each machine, but adds a service to operate. An assistant-generated download command can demonstrate the flow; it is not a substitute for a reviewed loader in an organization rollout.
+
+A skill can describe when and how to call the loader; it does not itself
+provide the executable retrieval and verification function. A separate skill
+is optional here because the injected catalog and loader instructions can
+provide that guidance. With a remote tool, provision its registration and
+authorization in each supported client, potentially through managed
+configuration; developers need not install a local helper or policy bundle.
+With a shell helper, install it where the assistant executes commands, which
+may be a remote workspace rather than the developer's machine. Neither form
+becomes callable merely by mentioning it in the injected prompt.
 
 Give the loader a bounded contract. For example, `load_policy(release, artifact_id)` accepts only IDs from the caller's authorized release and returns the ID, version, digest, and full verified content. This is an interface to implement, not a built-in tool. Do not accept arbitrary model-supplied URLs or let a requested release bypass the caller's assigned policy. Register the tool and describe its use in the injected overlay.
 
@@ -146,7 +192,19 @@ loader. HTTPS loading would require the remote catalog, loader, full blueprint
 schema validation, client provisioning, and session-to-release assignment
 described here. Tests use a stubbed LiteLLM import, not a real gateway or model.
 Verify request formats with the exact gateway and client versions you deploy.
+The current hook passes requests without a `system` field through unchanged;
+it does not implement the unsupported-format rejection required above. Such a
+request can reach the model without policy. Complete format handling or reject
+these requests before using this example on a mandatory-policy route.
 
 ## Acceptance checks
 
 Run the common [verification cases](../adapting-in-an-organization.md#verify-before-rollout) through each actual client and gateway route. Also test unsupported inference formats, retries, streaming and tool calls, cross-caller artifact access, session identity reuse, release changes during a session, and any cache. Verify that a failed download returns no usable policy and that the assistant stops affected work. A loader unit test cannot establish that the assistant invokes it.
+
+For the modular variant, capture initial context to confirm that core, overlay,
+catalog and loader instructions arrive without module bodies. Exercise a task
+matching both official and organization modules, including dependencies and
+blueprints, then a scope change and context compaction. Verify that full required
+content is loaded before affected work resumes. Repeat with an unavailable
+loader, unknown ID, corrupt body and mismatched release. Report these results
+separately from complete-injection tests; neither variant proves the other.

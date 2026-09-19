@@ -46,10 +46,17 @@ coding module does not implement the future HTTPS/MCP policy-loader service.
 Deterministic tests exercise module inclusion, dependency order, all generated
 tool adapters, gateway complete content, CLI formats, corruption/refusal, update
 and removal. They do not establish application controls or real model behavior.
-The existing signed three-file distribution remains complete-only; changed
-bundle bytes still require maintainer signing and bootstrap refresh. Full
+At the time of this module review, the signed distribution was complete-only.
+Subsequent 0.1.17 packaging embeds modular sources and helpers in the signed
+installer and defaults to modular installation; see
+[release packaging](releasing.md) and [current client evidence](agent-integration-verification.md#current-branch-evidence-2026-09-19).
+Changed bundle bytes still require maintainer signing and bootstrap refresh. Full
 `make check` results are recorded in `specs/changes/mcp-retrieval/tasks.md`.
 
 No real-client routing, production gateway, cross-platform rollout, or paid
 model evaluation was performed for this change. These remain rollout acceptance
-work; modular installation is not promoted to a proven default.
+work. The later modular installation default does not establish semantic
+selection or model compliance. The gateway example still injects complete
+content; [client-callable remote loading](rollout-paths/gateway-https.md) remains
+a design. The later [gateway-managed example](rollout-paths/gateway-managed-loading.md)
+selects and loads modules before each request; it does not use MCP.
