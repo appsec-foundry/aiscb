@@ -68,6 +68,17 @@ Use a harmless probe that asks for organization baseline IDs and their already-l
 
 ## Acceptance cases for the installer
 
+### Complete release 0.1.16 (2026-09-19)
+
+The published bundle was downloaded over HTTPS and its maintainer signature,
+file sizes and hashes verified. A changed installer was rejected. Fresh project
+installations with Claude Code 2.1.278 and Codex CLI 0.154.0 sent the complete,
+unchanged baseline in their API requests to a local test server. The test used
+isolated homes and no real credentials or model calls.
+
+This verifies loading of the complete release on those two CLI versions. It
+does not verify model compliance, modular selection, or Copilot/IDE loading.
+
 ### Current branch evidence (2026-09-19)
 
 The project installer tests all three entry points in modular and complete mode,

@@ -14,9 +14,8 @@ Install it once instead of repeating security expectations in every prompt.
 
 Current baseline: `aiscb-0.1.16`.
 
-The 0.1.16 release is being prepared. Until it is signed and published, the
-Quick start installs 0.1.15. Use a [reviewed checkout](#from-a-repository-clone)
-for 0.1.16.
+The Quick start installs the signed 0.1.16 release. For modular installation,
+use a [reviewed checkout](#modular-installation).
 
 > **Scope and limits**
 >
@@ -33,8 +32,8 @@ Use the guided installer to install or update aiscb. The complete command verifi
 curl --proto '=https' \
   --fail --silent --show-error \
   --output aiscb-setup.sh \
-  https://raw.githubusercontent.com/appsec-foundry/aiscb/6deb1bd83c627a54c31570899a4dd1dc40f690c1/setup.sh &&
-echo '7aa593cc0b69dd4c2f9d21dd9a7782bbf23e5f4922c772033ff070ac1956f3ac  aiscb-setup.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/aiscb/5f6d0ced024b3ab3f7b2396e7f198d456f56e377/setup.sh &&
+echo '3256f0359a58aa86c43089dfae2324a40a4402ac494cbcee7b9fdda8780d7554  aiscb-setup.sh' |
   sha256sum --check &&
 bash aiscb-setup.sh
 ```
@@ -263,8 +262,7 @@ surface you use, instruction limits, and loading checks.
 
 Start a fresh session after installing 0.1.16. Ask `baseline?`; the
 answer should include `aiscb-0.1.16`,
-its source, loaded modules, and any overlays. Until the new release is published,
-the remote Quick start installs 0.1.15, so that is the expected answer there.
+its source, loaded modules, and any overlays.
 
 The answer reports what the assistant sees in context; it does not prove that
 all rules are followed. Check the client's loaded instructions too, as described

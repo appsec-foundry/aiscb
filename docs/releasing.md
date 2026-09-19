@@ -95,10 +95,10 @@ publication or make a multi-step GitHub release atomic.
 
 ## Existing installations and migration
 
-Historical releases keep their Git-tree files and tags unchanged. The current
-README still pins the published 0.1.15 bootstrap. Its archived setup, manifest
-and signature in `tests/fixtures/published-bootstrap/` are immutable compatibility
-fixtures, not a second development release.
+Historical releases keep their Git-tree files and tags unchanged. The published
+0.1.15 bootstrap, manifest and signature remain archived in
+`tests/fixtures/published-bootstrap/` as immutable compatibility fixtures.
+The current README pins the 0.1.16 asset bootstrap.
 
 The new updater supports legacy Git-tree files and, when a file is absent,
 the same release's assets. Both paths still require the signed manifest before
