@@ -19,41 +19,9 @@ to try this work.
 
 > **Scope and limits**
 >
-> AISCB provides security instructions that guide how AI coding agents plan, generate code, use tools, make design decisions, and review changes. It does not enforce security deterministically: agents may misapply or ignore instructions, and those instructions may not remain in context throughout a session.
+> aiscb provides security instructions that guide how AI coding agents plan, generate code, use tools, make design decisions, and review changes. It does not enforce security deterministically: agents may misapply or ignore instructions, and those instructions may not remain in context throughout a session.
 >
 > Keep peer review, tests, SAST, SCA, secret scanning, and CI gates in place, and enforce rules that must hold with deterministic guards such as permission boundaries, hooks, or the [Claude Code gate](examples/claude-code-gate/). Data protection beyond secrets, credentials, and log content is out of scope.
-
-## Structure and context budget
-
-The [core](baseline/aiscb-core.md) is always loaded. The assistant uses the
-[catalog](baseline/catalog.json) to select and load all modules matching the
-task, including their dependencies. An optional organization overlay adds local
-rules without weakening the baseline.
-
-| Component | Bytes | Tokens (`o200k_base`) |
-| --- | ---: | ---: |
-| Always-on core | 7,897 | 1,593 |
-| `aiscb:web-auth` | 5,074 | 1,017 |
-| `aiscb:secrets-bootstrap` | 1,885 | 349 |
-| `aiscb:deployment-runtime` | 1,562 | 294 |
-| `aiscb:llm-features` | 1,123 | 223 |
-| `aiscb:agent-systems` | 2,050 | 398 |
-| `aiscb:supply-chain` | 1,155 | 221 |
-| `aiscb:data-boundaries` | 1,726 | 346 |
-| `aiscb:retrieval-memory` | 1,547 | 301 |
-| `aiscb:mcp-integrations` | 2,206 | 408 |
-| Complete baseline (core + all modules) | 26,234 | 5,150 |
-
-These are rule-text measurements for `aiscb-0.1.16`, not the total session
-context; other tokenizers give different counts. Add the discovery catalog,
-loading instructions, and any overlay. Unloaded module bodies consume no
-context, but their catalog entries do. `agent-systems` and `retrieval-memory`
-also load `llm-features`; `mcp-integrations` also loads `data-boundaries`.
-Shared dependencies need only be loaded once.
-
-For clients without reliable modular loading, `make build-full-baseline`
-generates the complete baseline under `dist/dev/aiscb-0.1.16/`. It contains the
-same rules, is not maintained separately, and is not checked into Git.
 
 ## Quick start
 
@@ -166,6 +134,32 @@ The same prompt, with and without aiscb. These are illustrative examples from in
 </table>
 
 The crypto example shows Claude Code with `aiscb-0.1.14` in the baseline session.
+
+## Structure and context budget
+
+The [core](baseline/aiscb-core.md) gives the assistant rules for every task,
+such as protecting secrets and reviewing changes. For specific work, the
+assistant loads matching modules from the [catalog](baseline/catalog.json)—for
+example, `web-auth` when building a login. An organization can add its own rules
+through an overlay; those rules cannot weaken the baseline.
+
+| Component | Covers | Tokens (`o200k_base`) |
+| --- | --- | ---: |
+| Always-on core | Design, security defaults, review, and module selection | 1,593 |
+| `aiscb:web-auth` | Web endpoints, authentication, and sessions | 1,017 |
+| `aiscb:secrets-bootstrap` | Credentials, keys, and first-start setup | 349 |
+| `aiscb:deployment-runtime` | Deployment, containers, and production configuration | 294 |
+| `aiscb:llm-features` | Prompts, model output, and generated code | 223 |
+| `aiscb:agent-systems` | Agent actions, permissions, and delegation | 398 |
+| `aiscb:supply-chain` | Dependencies, installers, and external downloads | 221 |
+| `aiscb:data-boundaries` | Files, outbound requests, errors, and resource limits | 346 |
+| `aiscb:retrieval-memory` | RAG, context caches, and persistent memory | 301 |
+| `aiscb:mcp-integrations` | MCP clients, servers, and transports | 408 |
+| Complete baseline | Core and all modules, for clients without modular loading | 5,150 |
+
+Counts cover rule text only; the catalog, loading instructions, and overlays
+add context. `agent-systems` and `retrieval-memory` also load `llm-features`;
+`mcp-integrations` also loads `data-boundaries`. Shared dependencies load once.
 
 ## The rules at a glance
 
@@ -409,7 +403,7 @@ Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files un
 `baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.16/` is
 their deterministic compatibility artifact. See
 [Structure and context budget](#structure-and-context-budget) for current
-byte and token measurements.
+token measurements.
 
 The provisional budgets are roughly 1,500 tokens for the core and 4,100 for
 the eager artifact. The expanded rules currently
