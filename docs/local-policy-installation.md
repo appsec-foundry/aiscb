@@ -37,7 +37,7 @@ loads. Installation does not remove inherited policy.
 
 Start a fresh session from the project root. Confirm `baseline?`, then exercise
 a task requiring modules. Selecting `aiscb:agent-systems` must return both
-`aiscb:llm-features` and `aiscb:agent-systems` before affected work. The loader
+`aiscb:llm-applications` and `aiscb:agent-systems` before affected work. The loader
 verifies the pinned snapshot, rejects unknown IDs and invalid dependencies,
 and emits nothing on failure. It cannot establish that the assistant invokes
 it or follows the rules: test actual clients before organizational rollout.
@@ -122,9 +122,13 @@ at each target location. Repository-wide portable adapters remain rollout work.
 | --- | --- |
 | Configure a local stdio MCP server | `mcp-integrations` and its `data-boundaries` dependency; `supply-chain` when executing/installing its package |
 | Build protected HTTP MCP | `mcp-integrations`, `data-boundaries`, `web-auth`; other matching modules still apply |
-| Build RAG without agent actions | `retrieval-memory` and its `llm-features` dependency; no automatic agent module |
+| Build RAG without agent actions | `retrieval-memory` and its `llm-applications` dependency; no automatic agent module |
 | Build an agent with persistent memory and MCP actions | All three domain modules plus their dependencies and other semantic matches |
 | Use an existing MCP tool during unrelated editing | No MCP implementation trigger from tool use alone |
+| Change the system prompt of an application's LLM summarizer | `llm-applications`; other task-specific matches still apply |
+| Fix ordinary code or a documentation typo using the assistant's tools | No `llm-applications` trigger from the assistant's prompts, tool use, or code generation alone |
+| Change a login flow in an application without LLM features | `web-auth` and other task-specific matches; no `llm-applications` trigger from assistant activity alone |
+| Change archive extraction in an application without LLM features | `data-boundaries` and other task-specific matches; no `llm-applications` trigger from assistant activity alone |
 
 Run these scenarios with actual supported clients, including unavailable-loader
 and corrupt-artifact cases. Unit tests prove dependency resolution and installed

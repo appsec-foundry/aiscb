@@ -20,7 +20,7 @@ authorization, provenance, and controlled memory writes.
 Apply identity/resource permissions before retrieved content reaches the model;
 preserve provenance and authorize persistent writes independently of content.
 
-Acceptance: retrieval-memory depends on llm-features, covers caches and revoked
+Acceptance: retrieval-memory depends on llm-applications, covers caches and revoked
 access, and requires cross-identity and poisoning boundary tests.
 
 ## MCPRET-003 Existing-module gaps

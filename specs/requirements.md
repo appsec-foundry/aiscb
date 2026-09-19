@@ -887,14 +887,16 @@ a new application ships fail-closed tests, including representative malformed,
 unsafe-markup, and cross-user LLM-output cases. Byte-length, out-of-band, and
 required-configuration categories are not covered.
 
-## aiscb-LLM-001 — LLM-Powered Features
+## aiscb-LLM-001 — LLM Applications
 
-**Section:** LLM-Powered Features
+**Section:** LLM Applications
 
-**Normative source:** `baseline/modules/aiscb-llm-features.md`, published in
+**Normative source:** `baseline/modules/aiscb-llm-applications.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-LLM-001`.
 
-**Applies when:** Building or changing an LLM-powered feature.
+**Applies when:** Designing or changing LLM features in the system being built.
+The coding assistant's own prompts, tool use, or code generation alone do not
+trigger this module; its own untrusted-input boundary remains in aiscb-AGENT-001.
 
 **Requirement:** Treat prompts, retrieval, memory, outputs, and tool input as
 untrusted. Validate structured output deterministically against strict schemas
@@ -915,7 +917,10 @@ tenant boundaries; intended generated-code execution is sandboxed.
 allow-list, numeric range, SQL parameterization, safe Markdown rendering,
 owner-bound model-selected resources, and representative negative tests. It
 does not cover generated-code sandboxes, process invocation, URLs, paths,
-multi-tenant memory, or consequential-action approval.
+multi-tenant memory, or consequential-action approval. It loads the complete
+baseline and does not demonstrate modular selection or the assistant-activity
+exclusion. Installer and loader tests verify discovery and dependency loading,
+not model routing decisions.
 
 ## aiscb-AGENCY-001 — Minimum Agency
 

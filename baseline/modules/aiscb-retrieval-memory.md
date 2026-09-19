@@ -3,7 +3,7 @@
 `module-id: aiscb:retrieval-memory`. Load when building or changing LLM retrieval,
 RAG, vector stores, context caches, or persistent model/agent memory; not ordinary
 database queries or the coding assistant's own context.
-Requires `aiscb:llm-features`.
+Requires `aiscb:llm-applications`.
 
 ## Retrieval and Memory
 

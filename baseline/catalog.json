@@ -21,8 +21,8 @@
       "aiscb-TESTS-001",
       "aiscb-REPORT-001"
     ],
-    "size": 7897,
-    "sha256": "077ece973cb4692f6d4e2386cf37a4d40b2fee70d5866e1982bb23380e9ea298"
+    "size": 7780,
+    "sha256": "394b5c072c9621a0a5137ddcb3ddcd42386f3ddb37084836415a58ff5c223c65"
   },
   "modules": [
     {
@@ -106,18 +106,18 @@
       "sha256": "0c7e760a552862a5ff16949064f4d48b740fa4b8b87decef0fde67bd4f619fe7"
     },
     {
-      "id": "aiscb:llm-features",
+      "id": "aiscb:llm-applications",
       "publisher": "aiscb",
       "version": "0.1.16",
-      "file": "modules/aiscb-llm-features.md",
-      "trigger": "Prompts, retrieval, memory, model output, agents, tool calls, generated code, or model-selected resources",
+      "file": "modules/aiscb-llm-applications.md",
+      "trigger": "Designing or changing LLM features in the system being built: prompts, retrieval, memory, model output, agents, tool calls, generated code, or model-selected resources; not merely the coding assistant's own prompts, tool use, or code generation",
       "paths": [],
       "requires": [],
       "rules": [
         "aiscb-LLM-001"
       ],
-      "size": 1123,
-      "sha256": "dbd93cc8293d6b2f0fdbc1a7a431cd6f4b911591ce3ce73486fd73b65083d7dd"
+      "size": 1255,
+      "sha256": "60cea6faab4ce793db08992790c9d54b14d9e37f7a8a98003efe6ef9b8f25c1b"
     },
     {
       "id": "aiscb:agent-systems",
@@ -127,7 +127,7 @@
       "trigger": "Designing or changing model-directed tool execution, autonomous workflows, action permissions or approvals, delegation, or multi-agent orchestration in the system being built",
       "paths": [],
       "requires": [
-        "aiscb:llm-features"
+        "aiscb:llm-applications"
       ],
       "rules": [
         "aiscb-AGENCY-001",
@@ -135,8 +135,8 @@
         "aiscb-AGENTBOUNDS-001",
         "aiscb-AGENTTESTS-001"
       ],
-      "size": 2050,
-      "sha256": "42ca7e90e88d3404a59afef4c165865a9dc432dae08f7af66f21c9f00d81a305"
+      "size": 2054,
+      "sha256": "66f2a3c3e694963830d71486b9d92319f0b31a43896dda169e462bf218ecc1e7"
     },
     {
       "id": "aiscb:retrieval-memory",
@@ -146,15 +146,15 @@
       "trigger": "Building or changing LLM retrieval, RAG, vector stores, context caches, or persistent model/agent memory; not ordinary database queries or the coding assistant's own context",
       "paths": [],
       "requires": [
-        "aiscb:llm-features"
+        "aiscb:llm-applications"
       ],
       "rules": [
         "aiscb-RETRIEVAL-001",
         "aiscb-MEMORY-001",
         "aiscb-RETRIEVALTESTS-001"
       ],
-      "size": 1547,
-      "sha256": "41395bf913ce50f3ae7c1579f14fdb648e87f94612fb14c2c5db03f49b2b2171"
+      "size": 1551,
+      "sha256": "9a03e8429565b1dc84fc7537d7561ba77f2b786769e655db8296ba25aad97b28"
     },
     {
       "id": "aiscb:mcp-integrations",

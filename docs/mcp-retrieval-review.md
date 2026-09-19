@@ -27,7 +27,7 @@ memory gaps closed, along with remaining non-goals.
 
 The catalog drives complete assembly, local snapshots, organization skills,
 and the gateway's complete block. There is no separate module copy list in the
-installer. MCP requires data-boundaries; retrieval-memory requires llm-features.
+installer. MCP requires data-boundaries; retrieval-memory requires llm-applications.
 Other semantic matches still apply. Package delivery is not model selection.
 
 The installer now offers explicit `--complete` as well as `--modular`; omitting

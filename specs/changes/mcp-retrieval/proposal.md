@@ -21,6 +21,6 @@ release publication, or claim of model-tested routing.
 ## Compatibility
 
 Keep aiscb-0.1.16 and generate complete output from the same catalog. MCP does
-not require agent-systems; retrieval-memory requires llm-features. Existing
+not require agent-systems; retrieval-memory requires llm-applications. Existing
 signed remote distribution remains complete-only until a separate approved
 distribution change. Local updates must not mix releases across tool entries.

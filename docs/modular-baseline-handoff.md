@@ -65,20 +65,20 @@ Current `o200k_base` measurements are:
 
 | Artifact | Bytes | Tokens |
 | --- | ---: | ---: |
-| Always-on core | 7,897 | 1,593 |
+| Always-on core | 7,780 | 1,558 |
 | `aiscb:web-auth` | 5,074 | 1,017 |
 | `aiscb:secrets-bootstrap` | 1,885 | 349 |
 | `aiscb:deployment-runtime` | 1,562 | 294 |
-| `aiscb:llm-features` | 1,123 | 223 |
-| `aiscb:agent-systems` | 2,050 | 398 |
+| `aiscb:llm-applications` | 1,255 | 246 |
+| `aiscb:agent-systems` | 2,054 | 398 |
 | `aiscb:supply-chain` | 1,155 | 221 |
 | `aiscb:data-boundaries` | 1,726 | 346 |
-| `aiscb:retrieval-memory` | 1,547 | 301 |
+| `aiscb:retrieval-memory` | 1,551 | 301 |
 | `aiscb:mcp-integrations` | 2,206 | 408 |
-| Complete eager artifact | 26,234 | 5,150 |
+| Complete eager artifact | 26,257 | 5,138 |
 
-The core exceeds its provisional 1,500-token target by 93 tokens; complete
-output exceeds its 4,100-token target by 1,050. Further reduction
+The core exceeds its provisional 1,500-token target by 58 tokens; complete
+output exceeds its 4,100-token target by 1,038. Further reduction
 should be evaluated against lost always-on behavior, not treated as an
 automatic goal. In particular, do not shorten the Security-note contract merely
 to improve the headline number.
@@ -130,9 +130,9 @@ work.
   digest. Status, update-by-reinstallation, and guarded uninstall are available.
 - `scripts/policy_loader.py` accepts only catalog IDs, verifies the pinned
   package, resolves dependencies, and emits complete bodies and blueprints.
-- `aiscb:agent-systems` depends on `aiscb:llm-features`; it covers minimum
+- `aiscb:agent-systems` depends on `aiscb:llm-applications`; it covers minimum
   agency, action authority, bounded execution, and agent-boundary tests.
-- `aiscb:retrieval-memory` depends on `aiscb:llm-features`;
+- `aiscb:retrieval-memory` depends on `aiscb:llm-applications`;
   `aiscb:mcp-integrations` depends on `aiscb:data-boundaries`, not agent-systems.
   File/SSRF mechanisms stay in data-boundaries and webhook replay in web-auth.
 - `--complete` installs all content through the same local adapter; updates

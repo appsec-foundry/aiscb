@@ -121,9 +121,9 @@ domain-specific test matrices.
 | `aiscb:secrets-bootstrap` | Credentials, keys, tokens, signing, first-start setup, seed data, demo accounts or secret rotation | Secret-context minimization, initial administrator setup, persistent keys, prototype credentials, disclosure channels, and clean-initialization tests |
 | `aiscb:supply-chain` | Adding or updating packages, CI actions, container images, build tools, downloads, installers or generated lockfiles | Dependency identity and vulnerability checks, immutable references, integrity or authenticity, reviewed install scripts, lockfiles, frozen installs, and scanning |
 | `aiscb:deployment-runtime` | Public binding, TLS termination, proxying, containers, CI permissions, production configuration, debug or development modes | Loopback and TLS behavior, non-root containers, least-privilege CI, required startup configuration, production/development separation, and deployment tests |
-| `aiscb:llm-features` | Prompts, retrieval, memory, model output, agents, tool calls, generated code or model-selected resources | Strict output schemas, safe rendering, separation from interpreters, execution sandboxes, tenant isolation, and LLM-specific review |
-| `aiscb:agent-systems` | Building model-directed tool execution, autonomous workflows, action permissions, approvals, delegation or multi-agent orchestration | Minimum agency, external action authorization, bound approvals, bounded execution, safe retries and agent-boundary tests; depends on `aiscb:llm-features` |
-| `aiscb:retrieval-memory` | Building LLM retrieval, RAG, vector stores, context caches or persistent model/agent memory | Source-level permissions, provenance, controlled writes and boundary tests; depends on `aiscb:llm-features` |
+| `aiscb:llm-applications` | Designing or changing LLM features in the system being built, including prompts, retrieval, memory, model output, agents, tool calls, generated code or model-selected resources; not merely the coding assistant's own activity | Strict output schemas, safe rendering, separation from interpreters, execution sandboxes, tenant isolation, and LLM-specific review |
+| `aiscb:agent-systems` | Building model-directed tool execution, autonomous workflows, action permissions, approvals, delegation or multi-agent orchestration | Minimum agency, external action authorization, bound approvals, bounded execution, safe retries and agent-boundary tests; depends on `aiscb:llm-applications` |
+| `aiscb:retrieval-memory` | Building LLM retrieval, RAG, vector stores, context caches or persistent model/agent memory | Source-level permissions, provenance, controlled writes and boundary tests; depends on `aiscb:llm-applications` |
 | `aiscb:mcp-integrations` | Building or configuring MCP clients, servers, proxies, transport or discovery | HTTP credential/consent boundaries and local process trust; depends on `aiscb:data-boundaries`, not agent-systems |
 
 The LLM module retains output validation, safe sinks, code sandboxing, and data
@@ -288,7 +288,7 @@ baseline/
     aiscb-secrets-bootstrap.md
     aiscb-supply-chain.md
     aiscb-deployment-runtime.md
-    aiscb-llm-features.md
+    aiscb-llm-applications.md
     aiscb-agent-systems.md
 dist/dev/aiscb-VERSION/secure-coding-baseline.md   generated compatibility output
 ```

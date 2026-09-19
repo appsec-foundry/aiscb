@@ -20,7 +20,7 @@ confirmation that agentic systems must be an additional module.
 Provide minimum agency, independently authorized actions, bound approvals,
 limited delegation and execution, cancellation, safe retries, and boundary tests.
 
-Acceptance: aiscb:agent-systems declares aiscb:llm-features as a dependency;
+Acceptance: aiscb:agent-systems declares aiscb:llm-applications as a dependency;
 the LLM module retains output handling, sandboxing, and data isolation.
 
 ## AGSYS-003 Modular integration

@@ -2,7 +2,7 @@
 
 `module-id: aiscb:agent-systems`. Load when designing or changing model-directed
 tool execution, autonomous workflows, action permissions or approvals,
-delegation, or multi-agent orchestration. Requires `aiscb:llm-features`.
+delegation, or multi-agent orchestration. Requires `aiscb:llm-applications`.
 The trigger concerns the system being built, not the coding assistant's own tools.
 
 ## Agent Systems

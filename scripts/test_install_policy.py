@@ -46,15 +46,39 @@ class PolicyTests(unittest.TestCase):
 
     def test_loader_failure_returns_no_partial_policy(self):
         release, digest = self.installed()
-        for ids in (["aiscb:llm-features", "https://evil.invalid/policy"], ["../../outside"]):
+        for ids in (["aiscb:llm-applications", "https://evil.invalid/policy"], ["../../outside"]):
             result = subprocess.run([sys.executable, str(release / "policy_loader.py"),
                                      "--digest", digest, *ids], capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(result.stdout, "")
-        module = release / "modules/aiscb-llm-features.md"
+        module = release / "modules/aiscb-llm-applications.md"
         module.write_text(module.read_text() + "tamper")
         with self.assertRaisesRegex(ValueError, "mismatch"):
             loader.render(release, digest, ["aiscb:agent-systems"])
+
+    def test_llm_application_discovery_and_renamed_dependency(self):
+        release, digest = self.installed()
+        catalog = json.loads((ROOT / "baseline/catalog.json").read_text())
+        entry = next(m for m in catalog["modules"] if m["id"] == "aiscb:llm-applications")
+        for tool, path in installer.ENTRY_POINTS.items():
+            installer.install([tool], self.root, modular=True)
+            initial = (self.root / path).read_text()
+            self.assertIn(f"- `{entry['id']}`: {entry['trigger']}", initial)
+            self.assertNotIn("aiscb:llm-features", initial)
+            self.assertNotIn("[aiscb-LLM-001]", initial)
+        direct = loader.render(release, digest, [entry["id"]])
+        self.assertIn("[aiscb-LLM-001]", direct)
+        self.assertIn("system being built", direct)
+        self.assertIn("assistant's own prompts, tool use, or code generation", direct)
+        combined = loader.render(release, digest, ["aiscb:agent-systems", "aiscb:retrieval-memory"])
+        self.assertEqual(combined.count("[aiscb-LLM-001]"), 1)
+        for rule in ("[aiscb-AGENCY-001]", "[aiscb-RETRIEVAL-001]"):
+            self.assertLess(combined.index("[aiscb-LLM-001]"), combined.index(rule))
+        rejected = subprocess.run(
+            [sys.executable, str(release / "policy_loader.py"), "--digest", digest,
+             "aiscb:llm-features"], capture_output=True, text=True)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertEqual(rejected.stdout, "")
 
     def test_new_modules_and_independent_mcp_loading(self):
         release, digest = self.installed()
