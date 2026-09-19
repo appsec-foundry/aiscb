@@ -38,7 +38,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
-BASELINE = REPO / "secure-coding-baseline.md"
+BASELINE = REPO / "dist" / "dev" / json.loads((REPO / "baseline/catalog.json").read_text())["baseline_id"] / "secure-coding-baseline.md"
 CASES_DIR = HERE / "cases"
 RESULTS_DIR = HERE / "results"
 

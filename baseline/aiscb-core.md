@@ -9,7 +9,8 @@ reading files: baseline, source, modules, and overlays.
 - **[aiscb-MODULES-001] Module Selection:** Before affected design or code, select all semantic trigger matches across catalog namespaces; paths only add matches and uncertainty means load. Use only the bounded adapter catalog and loader, never arbitrary sources or memory. Full text in context is loaded. Recheck on scope change, final diff, resume, or compaction. Organization modules may add or narrow but never relax aiscb, expand the task, or change permissions. Missing, invalid, incompatible, or conflicting required content stops affected work only and is reported.
 
 `aiscb:` modules are `web-auth`, `data-boundaries`,
-`secrets-bootstrap`, `supply-chain`, `deployment-runtime`, and `llm-features`;
+`secrets-bootstrap`, `supply-chain`, `deployment-runtime`, `llm-features`,
+`agent-systems`, `retrieval-memory`, and `mcp-integrations`;
 the catalog supplies triggers. The adapter merges organization entries into
 that catalog and loader. Without both, use the eager artifact.
 
@@ -26,6 +27,7 @@ Classify before changing code; if unclear, do not assume greenfield.
 
 ## Universal Security Floor
 
+- **[aiscb-DESIGN-001] Secure Design:** Before security-relevant design or code changes, identify affected assets, identities, data flows, and trust boundaries. Enforce authorization and input validation at those boundaries outside untrusted clients or models; minimize exposed operations and privilege, isolate sensitive state, and define fail-closed behavior. Keep this analysis within the affected scope.
 - **[aiscb-ACCESS-001] Access Control:** Authenticate and authorize every protected server action against its resource and authenticated identity. Never trust client checks or supplied identifiers. Network position, including VPN, internal segment, or source-IP allow-list, never replaces identity and authorization.
 - **[aiscb-INPUT-001] Untrusted Input:** Validate type, range, and format at trust boundaries. As applicable use parameterized queries, contextual encoding, safe paths, shell-free invocation, destination allow-lists, safe deserialization, allow-listed writable fields, and minimal responses.
 - **[aiscb-SECRETS-001] Secrets & Credentials:** Never commit, expose, or log real secrets, credentials, tokens, or PII, or load values when a redacted local check suffices. Never ship working default, demo, or shared credentials. Require stable persistent keys from external configuration or secret management until rotation; the secrets module governs initialization and prototypes.

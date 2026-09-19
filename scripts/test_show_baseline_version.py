@@ -289,10 +289,20 @@ def check_arguments(failures: list[str]) -> None:
 
 def check_installed_script(failures: list[str]) -> None:
     """The way an agent runs it: the real script, as its own process."""
+    import build_baseline
+    with tempfile.TemporaryDirectory(prefix="aiscb-hook-installed-") as tmp:
+        root = Path(tmp)
+        installed = root / HELPER.name
+        installed.write_bytes(HELPER.read_bytes())
+        (root / BASELINE).write_bytes(build_baseline.validate()[2])
+        check_script_at(installed, failures)
+
+
+def check_script_at(installed: Path, failures: list[str]) -> None:
     for argv, check in (([], lambda text: VALID_ID in text),
                         (["--output", "json"],
                          lambda text: VALID_ID in json.loads(text)["systemMessage"])):
-        proc = subprocess.run([sys.executable, str(HELPER), *argv],
+        proc = subprocess.run([sys.executable, str(installed), *argv],
                               capture_output=True, text=True, timeout=20)
         if proc.returncode != 0:
             failures.append(

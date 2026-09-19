@@ -31,6 +31,13 @@ The gateway supplies initial instructions. The assistant selects every matching
 `aiscb:*` and organization module in one pass and calls one bounded loader.
 Gateway injection itself installs no skills, tools, or network access.
 
+The catalog includes `mcp-integrations` and `retrieval-memory` automatically
+when built from the current source. These are coding rules, not a deployed MCP
+loader. A future MCP policy-loader service itself needs the MCP integration
+controls, but merely calling it must not trigger MCP implementation rules for
+an unrelated task. The current example still injects all modules and blueprints;
+new modules therefore increase every request's context in that example.
+
 ## Publish the release and catalog
 
 Generate the gateway block and hosted artifacts from one reviewed release set.
@@ -132,7 +139,13 @@ eager aiscb artifact, overlay, and all organization modules, with no loader.
 
 Claude Code reaches LiteLLM through its Anthropic Messages route. Confirm that the pre-call hook fires for that route in the deployed LiteLLM version, that the request's `system` field arrives as a list of blocks, and that the appended block survives streaming and tool-call turns. Other clients use other formats; add a branch per format and reject formats the hook does not handle on routes that require policy.
 
-The [repository example](../../examples/organization-bundle/gateway/) implements the injection hook: it checks the configured block's digest at startup and appends it in `async_pre_call_hook`. Its builder generates that block from the local overlay, including local catalog references, so it needs a remote adapter for HTTPS loading. The example also leaves out the remote catalog, HTTPS loader, full blueprint schema validation, client provisioning, and session-to-release assignment. Its tests exercise the hook with a stubbed LiteLLM import; they are not an end-to-end gateway or model test. Verify the request shape with the exact gateway and client versions you deploy.
+The [repository example](../../examples/organization-bundle/gateway/) implements
+the injection hook and verifies its block's digest at startup. The generated
+block contains complete policy and blueprint values; it does not rely on a
+loader. HTTPS loading would require the remote catalog, loader, full blueprint
+schema validation, client provisioning, and session-to-release assignment
+described here. Tests use a stubbed LiteLLM import, not a real gateway or model.
+Verify request formats with the exact gateway and client versions you deploy.
 
 ## Acceptance checks
 

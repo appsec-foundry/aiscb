@@ -30,3 +30,6 @@ __pycache__/
 
 # Bootstrap copy the quick start downloads into the working directory
 aiscb-setup.sh
+
+# Generated development and immutable release staging artifacts
+/dist/

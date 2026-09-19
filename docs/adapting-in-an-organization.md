@@ -10,6 +10,12 @@ flat namespaced plane selected only for matching work. The
 
 The guide is an implementation recommendation, not part of the normative baseline. Acme names, versions, URLs, and digest placeholders are examples to replace.
 
+For a working project installation, start with
+[local installation and overlays](local-policy-installation.md). One command
+installs the core, overlay, combined discovery, and verified local loader. The
+broader rollout variants below describe managed deployments and future gateway
+loading, not additional baseline products.
+
 ## How the layers fit together
 
 | Part | Content | In context |
@@ -24,7 +30,8 @@ The guide is an implementation recommendation, not part of the normative baselin
 "Loaded only for matching work" works the same way in every delivery: the
 assistant sees the core, overlay, and discovery metadata at session start and
 applies `aiscb-MODULES-001` once across all namespaces. For a local bundle, the
-adapter exposes every module through one skill surface. For a gateway, one
+project adapter exposes every module through one bounded Python loader; managed
+deployments may instead wire the generated skill surface. For a gateway, one
 loading tool accepts bounded catalog IDs. A file or URL alone loads nothing.
 
 The catalog triggers and core routing rule are the selection mechanism, so test
@@ -55,7 +62,7 @@ Two sessions on the same machine then differ like this:
 - A developer asks for SSO login. The single selection pass chooses both
   `aiscb:web-auth` and `acme:authentication`; the Acme module then loads its
   blueprint for issuer, claim, and approved group values.
-- A developer asks to fix footer layout. Nothing matches, so no module body
+- A developer asks to edit unrelated prose. Nothing matches, so no module body
   loads; only the core, overlay, and discovery metadata remain in context.
 
 To wire a requirement, write a namespaced module with stable rule IDs, put
@@ -64,14 +71,14 @@ The core routing rule already covers every configured namespace.
 
 ## Choose a delivery
 
-Three deliveries exist, from simplest to most involved:
+The local project integration is implemented. Other deployment shapes are:
 
 1. **Gateway injection of everything.** Append the eager aiscb artifact, overlay,
    and all organization modules. Choose this when policy is small enough that
    no lazy loader is worthwhile.
 2. **Local modular bundle.** Load core, overlay, and discovery at startup; expose
-   every `aiscb:*` and organization module on one skill surface.
-3. **Gateway injection with HTTPS loading.** Inject core, overlay, and merged
+   every `aiscb:*` and organization module through one verified loader.
+3. **Gateway injection with HTTPS loading (design only).** Inject core, overlay, and merged
    catalog; retrieve all module namespaces and blueprints through one verified
    bounded loader.
 
@@ -97,6 +104,11 @@ The content is the same for every delivery. Keep it in a policy repository, revi
 Give organization requirements stable IDs. Record whether each narrows named aiscb rules or stands alone as an organization requirement. The overlay and packs may narrow the baseline, never relax it. Keep rationale and history in the policy repository, outside the assistant's routine context.
 
 ### The overlay
+
+The example overlay includes a specification-first workflow: load policy,
+specify and approve requirements, implement, then verify. Adapt the
+[project workflow template](../examples/project-workflow.md) to your process.
+Keep application specifications in the project, not in security modules.
 
 The overlay is the part every session pays for, so it carries only what every session needs:
 

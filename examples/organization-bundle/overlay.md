@@ -1,4 +1,4 @@
-@<bundle-dir>/core.md
+@<bundle-dir>/aiscb-core.md
 
 # Acme Secure Coding Overlay
 
@@ -19,3 +19,8 @@ rules may narrow aiscb but never relax it.
 - **[ACME-TENANT-001]** (narrows aiscb-ACCESS-001): Bind every protected query
   to the authenticated identity and tenant. Never take effective tenant or
   permissions from request data.
+- **[ACME-WORKFLOW-001]** Before implementation, load applicable policy and
+  specify scope, sourced requirements, security decisions and observable
+  acceptance criteria; obtain explicit approval, implement, then verify against
+  them. A small change may use a short conversational specification. Renew
+  approval for material scope or requirement changes; report unverified criteria.

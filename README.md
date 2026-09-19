@@ -8,9 +8,14 @@
 [![GitHub Copilot](https://img.shields.io/badge/GitHub%20Copilot-compatible-000000?logo=githubcopilot&logoColor=white)](https://github.com/features/copilot)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI%20Codex-compatible-412991?logo=openai&logoColor=white)](https://developers.openai.com/codex/)
 
-aiscb is a modular set of secure-coding rules for AI coding assistants. Use the
-short always-on core with matching modules, or the complete eager file, instead
-of repeating the same security expectations in every prompt.
+aiscb gives AI coding assistants a shared secure-coding baseline: an always-on
+core and task-specific modules, extended by an optional organization overlay.
+Install it once instead of repeating security expectations in every prompt.
+
+This feature branch adds secure design and agent-system rules and a local
+module loader. It is not a published release. The remote command below still
+installs the signed 0.1.15 bundle; use [the local branch installation](#local-branch-installation)
+to try this work.
 
 > **Scope and limits**
 >
@@ -132,9 +137,10 @@ The crypto example shows Claude Code with `aiscb-0.1.14` in the baseline session
 
 ## The rules at a glance
 
-The normative sources are [the core](baseline/core.md) and its
+The normative sources are [the core](baseline/aiscb-core.md) and its
 [cataloged modules](baseline/modules/). The generated
-[complete eager artifact](secure-coding-baseline.md) contains the same rules.
+complete compatibility output contains the same rules; build it with
+`make build-full-baseline`.
 This section is only an overview.
 
 ### Module routing
@@ -154,6 +160,9 @@ This section is only an overview.
 
 ### Non-negotiable rules
 
+- **Secure design** (`aiscb-DESIGN-001`): Identify affected assets, identities,
+  data flows, and trust boundaries before security-relevant changes; enforce
+  controls at those boundaries and define fail-closed behavior.
 - **Access control** (`aiscb-ACCESS-001`): Authenticate and authorize every protected server action against its resource; client-supplied IDs prove nothing.
 - **Untrusted input** (`aiscb-INPUT-001`): Validate input at every trust boundary and use safe, contextual APIs for queries, output, paths, processes, and field binding.
 - **Secrets and credentials** (`aiscb-SECRETS-001`): Keep secrets out of code, logs, docs, and unnecessary context. Never ship default credentials; load persistent keys from external configuration or secret management.
@@ -174,10 +183,22 @@ This section is only an overview.
 - **Dependencies** (`aiscb-DEPS-001`): Verify a dependency's exact identity, version, source, and known vulnerabilities before adding or updating it. Pin executable external references such as CI actions and container images.
 - **Errors and logging** (`aiscb-ERRORS-001`): Keep internal errors out of responses and sensitive data out of logs.
 - **Resource limits** (`aiscb-LIMITS-001`): Bound input-driven work with request size, pagination, and time limits.
+- **Files and outbound requests** (`aiscb-FILES-001`, `aiscb-EGRESS-001`):
+  Constrain untrusted file handling, extraction, and input-influenced destinations.
+- **Webhook replay** (`aiscb-WEBHOOK-001`): Authenticate and deduplicate deliveries before side effects.
 - **Least-privilege runtime** (`aiscb-DEPLOYMENT-001`): Keep CI, containers, and
   required production configuration least-privileged and fail-closed.
 - **Production and development** (`aiscb-ENV-001`): Keep debug modes, mocks, development servers, and weakened settings out of production.
-- **LLM-powered features** (`aiscb-LLM-001`): Treat prompts and outputs as untrusted, schema-validate structured output, keep model-controlled values out of interpreters, and authorize every tool action.
+- **LLM-powered features** (`aiscb-LLM-001`): Validate untrusted model output,
+  use safe sinks, sandbox generated code, and isolate tenant data and memory.
+- **Agent systems** (`aiscb-AGENCY-001`, `aiscb-AGENTAUTH-001`,
+  `aiscb-AGENTBOUNDS-001`, `aiscb-AGENTTESTS-001`): Minimize tools and autonomy,
+  authorize actions outside the model, bind approvals to concrete actions,
+  restrict delegation, bound execution, and test cancellation and safe retries.
+- **Retrieval and memory**: Enforce source permissions before model exposure,
+  preserve provenance, and authorize persistent memory changes outside the model.
+- **MCP integrations**: Separate HTTP authorization from local process trust;
+  constrain credentials, discovery, consent, state handles, and server starts.
 
 ### Tests and reporting
 
@@ -188,27 +209,40 @@ See [`specs/requirements.md`](specs/requirements.md) for detailed applicability,
 
 ## Using it
 
-The installer supports project and user installations with the complete eager
-profile. It is the safe fallback whenever a client or deployment cannot prove
-that matching modules load before affected work.
+There is one normative baseline: core plus modules, versioned together.
+`secure-coding-baseline.md` is an optional complete output for clients that
+cannot load modules; it is never maintained separately. Generate it with
+`make build-full-baseline` into `dist/dev/aiscb-0.1.16/`. Generated files are not
+checked into Git. This repository itself loads core, catalog and selected modules.
 
-### Choose a loading profile
+### Local branch installation
 
-- **Eager:** Load [secure-coding-baseline.md](secure-coding-baseline.md). It
-  contains the core and every official module and works with the existing
-  guided installer.
-- **Modular:** Always load [baseline/core.md](baseline/core.md), expose every
-  entry in [baseline/catalog.json](baseline/catalog.json) through one verified
-  module loader, and make the catalog's semantic triggers visible at startup.
-  Put organization modules in that same flat namespaced catalog; keep the
-  organization overlay always loaded beside the core.
+From this reviewed checkout, install into an existing project:
 
-For a concrete modular build, use the
-[organization bundle example](examples/organization-bundle/). Its generated
-release places `aiscb:*` and `acme:*` module bodies together under `modules/`
-and generates one skill plane for Claude Code, Codex, and Copilot. Loading only
-`core.md` without the catalog and loader is invalid; use the eager profile in
-that case.
+```bash
+python3 scripts/install.py codex --modular --into /path/to/project
+```
+
+Replace `codex` with `claude` or `copilot`, or name several tools. The installer
+connects each tool's instruction file to the core, discovery catalog, and a
+bounded local loader. It preserves unrelated instructions. A Python 3.10+
+execution tool must be available to the assistant; no skill discovery is
+required. Restart the assistant after installation.
+
+Modular loading is an explicit branch trial until real-client routing tests
+establish reliable loading. For clients without command execution, replace
+`--modular` with `--complete` to embed every module. Existing user-level and
+remote installations continue to use that complete output.
+
+With an organization package, add `--organization /path/to/bundle
+--organization-sha256 TRUSTED_MANIFEST_DIGEST` to the same command. The overlay
+loads beside the core; organization modules share its catalog and loader.
+Obtain the digest through your organization's trusted distribution channel.
+See [local installation and overlays](docs/local-policy-installation.md) for
+building, updating, checking, and removing a package.
+
+The [MCP and retrieval integration review](docs/mcp-retrieval-review.md)
+explains module boundaries and remaining rollout verification.
 
 ### Remote setup (no checkout)
 
@@ -270,95 +304,32 @@ AISCB_DISABLE=1 codex
 
 Start normally to restore the baseline. Other instructions and permissions remain active. A project installation always loads the baseline statically, so `AISCB_DISABLE=1` leaves it active; guided setup offers to remove startup hooks an earlier version added to a project. The switch does not disable separate overlays or organization packages. Start a new conversation, then check with `baseline?`. See [scope and troubleshooting](docs/session-switch.md).
 
-### Claude Code
+### Coding-agent compatibility
 
-Claude Code does **not** load `AGENTS.md` automatically. Use one of its own instruction locations:
+| Client | Project entry point | Modular use |
+| --- | --- | --- |
+| Claude Code | `CLAUDE.md` | Embedded core/overlay and loader; this repository uses explicit local imports |
+| Codex | `AGENTS.md` | Embedded core/overlay and loader; no assumed `@` import |
+| Copilot | `.github/copilot-instructions.md` | Only on a surface with file access and permitted Python command execution |
 
-- **Project:** import the baseline from `CLAUDE.md`:
+Use the installer with `claude`, `codex`, or `copilot`; it preserves existing
+instructions and refuses conflicting integrations. Choose `--complete` when
+runtime loading is unavailable, **provided the surface accepts the entire
+instruction block without truncation**. Neither mode guarantees model compliance.
 
-  ```markdown
-  # CLAUDE.md
-  @secure-coding-baseline.md
-  ```
+Current Claude Code can also load `AGENTS.md` conditionally; retaining the
+explicit `CLAUDE.md` import avoids depending on that newer behavior.
+See [Claude's memory documentation](https://code.claude.com/docs/en/memory).
+Copilot Chat, CLI, cloud agent, code review and inline completion are different
+surfaces: a working file installation does not prove support on all of them.
+See the [Copilot support matrix](https://docs.github.com/en/copilot/reference/custom-instructions-support)
+and our [integration verification guide](docs/agent-integration-verification.md).
 
-  If `AGENTS.md` already contains the rules, import it with `@AGENTS.md`.
-
-- **Project without `CLAUDE.md`:** link or copy the baseline to `.claude/rules/secure-coding-baseline.md`. Claude Code resolves rule-file symlinks normally.
-
-- **User:** import it from `~/.claude/CLAUDE.md` with an absolute path:
-
-  ```markdown
-  @/absolute/path/to/secure-coding-baseline.md
-  ```
-
-- **Organization:** deploy it as a managed-policy `CLAUDE.md`. See the [organization setup](https://code.claude.com/docs/en/admin-setup).
-
-### GitHub Copilot
-
-Copilot's coding agent and VS Code support `AGENTS.md`. For other Copilot surfaces, `.github/copilot-instructions.md` has the broadest support.
-
-- **Project:** copy the baseline into `.github/copilot-instructions.md`. Append it if that file already exists:
-
-  ```bash
-  mkdir -p .github
-  # New file:
-  cp secure-coding-baseline.md .github/copilot-instructions.md
-  # Existing file: append the baseline:
-  cat secure-coding-baseline.md >> .github/copilot-instructions.md
-  ```
-
-- **Separate file:** most surfaces also support a path-specific instruction file:
-
-  ```bash
-  mkdir -p .github/instructions
-  { printf -- '---\napplyTo: "**"\n---\n'; cat secure-coding-baseline.md; } \
-    > .github/instructions/secure-coding.instructions.md
-  ```
-
-  Support varies by surface. Use `copilot-instructions.md` for the broadest coverage; see the [support matrix](https://docs.github.com/en/copilot/reference/custom-instructions-support).
-
-- **Your account:** paste it into personal custom instructions for Copilot Chat on GitHub.
-- **Your computer:** guided setup installs one `applyTo: "**"` instruction under `~/.copilot/instructions/`; Copilot CLI and Copilot Chat/agent in VS Code both load it.
-- **Visual Studio 2026 personal instructions:** copy the baseline to `%USERPROFILE%\copilot-instructions.md` on Windows, or append it if the file already contains personal preferences. Visual Studio also saves user-level Copilot preferences there; guided setup does not manage this file. See [Visual Studio's instructions documentation](https://learn.microsoft.com/en-us/visualstudio/ide/copilot-context-overview?view=visualstudio).
-- **Organization:** add it under Organization settings → Copilot → Custom instructions. GitHub.com, Visual Studio 2026 18.8 or later, and VS Code can use these instructions for Copilot Chat in organization repositories. In VS Code, enable `github.copilot.chat.organizationInstructions.enabled`; in Visual Studio, check **Tools → Options → GitHub → Copilot → Copilot Chat** if organization instructions are disabled. See [organization custom instructions](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-organization-instructions), [VS Code](https://code.visualstudio.com/docs/agent-customization/custom-instructions), and [Visual Studio 2026](https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-notes).
-
-These instructions guide Copilot Chat and agents; VS Code does not apply them to inline suggestions as you type. See [VS Code's custom instructions documentation](https://code.visualstudio.com/docs/agent-customization/custom-instructions).
-
-### AGENTS.md
-
-Many coding agents read [`AGENTS.md`](https://agents.md/). Check the compatibility list for the tools you use.
-
-`AGENTS.md` has no portable import syntax shared by coding agents, so use a symlink to avoid a second copy:
-
-```bash
-# One file on disk, two names:
-ln -s secure-coding-baseline.md AGENTS.md
-```
-
-If `AGENTS.md` already exists, or the checkout does not support symlinks, copy or append the baseline instead:
-
-```bash
-# New file:
-cp secure-coding-baseline.md AGENTS.md
-# Existing AGENTS.md: append the baseline:
-cat secure-coding-baseline.md >> AGENTS.md
-```
-
-**Codex** reads the root `AGENTS.md`. If the project has none, add this to `~/.codex/config.toml`:
-
-```toml
-project_doc_fallback_filenames = ["secure-coding-baseline.md"]
-```
-
-For user-wide instructions, use `~/.codex/AGENTS.md`. See the [Codex guide](https://developers.openai.com/codex/guides/agents-md/) and [organization setup](https://developers.openai.com/codex/enterprise/admin-setup/).
-
-**Other tools:** add this to the project-instructions file they read:
-
-```markdown
-Before making any code changes, read `secure-coding-baseline.md` in this repository and follow all rules defined there.
-```
-
-This is a reference, not an automatic import.
+For manual complete-file installation, first build or obtain the verified
+release artifact and copy it into the target project. Do not link another
+project to this checkout's disposable `dist/dev/` output. Preserve existing
+instructions, avoid duplicate baseline copies, and verify loading in a fresh
+session.
 
 ### Organization-wide
 
@@ -396,25 +367,35 @@ Research suggests that explicit, concrete, persistent security instructions impr
 
 These resources neither certify aiscb nor define its coverage. Check time-sensitive advice against current sources.
 
+The [LLM and agentic alignment review](docs/owasp-llm-agentic-review.md) compares
+the current 2026 OWASP lists with the modules, including partial coverage and
+remaining gaps. It is not a compliance claim or model-test evidence.
+
 ## Development
 
-Normative rule text lives in `baseline/core.md` and the cataloged files under
-`baseline/modules/`; `secure-coding-baseline.md` is their deterministic eager
-artifact. Current measurements use `o200k_base`:
+Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under
+`baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.16/` is
+their deterministic compatibility artifact. Current measurements use `o200k_base`:
 
 | Artifact | Bytes | Tokens |
 | --- | ---: | ---: |
-| Always-on core | 7,432 | 1,500 |
-| `aiscb:web-auth` | 4,647 | 944 |
+| Always-on core | 7,897 | 1,593 |
+| `aiscb:web-auth` | 5,074 | 1,017 |
 | `aiscb:secrets-bootstrap` | 1,885 | 349 |
 | `aiscb:deployment-runtime` | 1,562 | 294 |
-| `aiscb:llm-features` | 1,212 | 236 |
+| `aiscb:llm-features` | 1,123 | 223 |
+| `aiscb:agent-systems` | 2,050 | 398 |
 | `aiscb:supply-chain` | 1,155 | 221 |
-| `aiscb:data-boundaries` | 631 | 139 |
-| Complete eager artifact | 18,530 | 3,683 |
+| `aiscb:data-boundaries` | 1,726 | 346 |
+| `aiscb:retrieval-memory` | 1,547 | 301 |
+| `aiscb:mcp-integrations` | 2,206 | 408 |
+| Complete eager artifact | 26,234 | 5,150 |
 
-The budgets are roughly 1,500 tokens for the core and 4,100 for the eager
-artifact. aiscb is not formally certified.
+The provisional budgets are roughly 1,500 tokens for the core and 4,100 for
+the eager artifact. The expanded rules currently
+exceed them by 93 and 1,050 tokens respectively; these are visible design targets,
+not a reason to silently drop controls. Adapter discovery and overlay text add
+to the actual session context. aiscb is not formally certified.
 
 [`specs/requirements.md`](specs/requirements.md) maps rule groups to tests. Behavior changes follow the workflow in [`specs/README.md`](specs/README.md); editorial and repository-only changes need no change specification.
 

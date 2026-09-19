@@ -6,8 +6,14 @@ an always-on overlay, organization modules, and versioned blueprints without
 copying or weakening aiscb.
 
 This document explains the architecture; normative text lives in
-`baseline/core.md` and the cataloged modules. The complete generated
-`secure-coding-baseline.md` remains the compatibility profile.
+`baseline/aiscb-core.md` and the cataloged modules. The complete generated
+The generated `secure-coding-baseline.md` under versioned `dist/` remains the
+compatibility output, not a tracked source file.
+
+The feature branch now implements a project-local bounded loader and installer;
+see [local installation and overlays](local-policy-installation.md). Generate
+the optional complete artifact with `make build-full-baseline`. It is one
+output of the modular sources, not a separately maintained baseline.
 
 ## Intended outcome
 
@@ -115,7 +121,16 @@ domain-specific test matrices.
 | `aiscb:secrets-bootstrap` | Credentials, keys, tokens, signing, first-start setup, seed data, demo accounts or secret rotation | Secret-context minimization, initial administrator setup, persistent keys, prototype credentials, disclosure channels, and clean-initialization tests |
 | `aiscb:supply-chain` | Adding or updating packages, CI actions, container images, build tools, downloads, installers or generated lockfiles | Dependency identity and vulnerability checks, immutable references, integrity or authenticity, reviewed install scripts, lockfiles, frozen installs, and scanning |
 | `aiscb:deployment-runtime` | Public binding, TLS termination, proxying, containers, CI permissions, production configuration, debug or development modes | Loopback and TLS behavior, non-root containers, least-privilege CI, required startup configuration, production/development separation, and deployment tests |
-| `aiscb:llm-features` | Prompts, retrieval, memory, model output, agents, tool calls, generated code or model-selected resources | Strict output schemas, safe rendering, separation from interpreters, execution sandboxes, per-action authorization, approvals, tenant isolation, and LLM-specific review |
+| `aiscb:llm-features` | Prompts, retrieval, memory, model output, agents, tool calls, generated code or model-selected resources | Strict output schemas, safe rendering, separation from interpreters, execution sandboxes, tenant isolation, and LLM-specific review |
+| `aiscb:agent-systems` | Building model-directed tool execution, autonomous workflows, action permissions, approvals, delegation or multi-agent orchestration | Minimum agency, external action authorization, bound approvals, bounded execution, safe retries and agent-boundary tests; depends on `aiscb:llm-features` |
+| `aiscb:retrieval-memory` | Building LLM retrieval, RAG, vector stores, context caches or persistent model/agent memory | Source-level permissions, provenance, controlled writes and boundary tests; depends on `aiscb:llm-features` |
+| `aiscb:mcp-integrations` | Building or configuring MCP clients, servers, proxies, transport or discovery | HTTP credential/consent boundaries and local process trust; depends on `aiscb:data-boundaries`, not agent-systems |
+
+The LLM module retains output validation, safe sinks, code sandboxing, and data
+isolation. Action authorization and approval move into agent-systems. The core
+adds the scoped secure-design step: affected assets, identities, data flows,
+trust boundaries, enforcing controls, and fail-closed behavior. The new agent
+trigger concerns the system being built, not the coding assistant's tool use.
 
 Some work selects several modules. Adding OIDC login, for example, normally
 selects `aiscb:web-auth`, `aiscb:secrets-bootstrap`, and possibly
@@ -265,7 +280,7 @@ The implementation uses:
 
 ```text
 baseline/
-  core.md
+  aiscb-core.md
   catalog.json
   modules/
     aiscb-web-auth.md
@@ -274,7 +289,8 @@ baseline/
     aiscb-supply-chain.md
     aiscb-deployment-runtime.md
     aiscb-llm-features.md
-secure-coding-baseline.md       generated eager compatibility artifact
+    aiscb-agent-systems.md
+dist/dev/aiscb-VERSION/secure-coding-baseline.md   generated compatibility output
 ```
 
 The modular sources are normative and the eager file is a reproducible release

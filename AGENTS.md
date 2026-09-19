@@ -1,15 +1,20 @@
 # Repository instructions
 
-This repository publishes the normative sources in `baseline/core.md` and
-`baseline/modules/`. `secure-coding-baseline.md` is their generated complete
-eager artifact for clients that cannot load modules reliably. These rules are
+This repository publishes the normative sources in `baseline/aiscb-core.md` and
+`baseline/modules/`. Complete output is generated under `dist/`, never tracked.
+It is a compatibility artifact for clients without modular loading. These rules are
 the product; everything else exists to keep them correct and deliverable.
 
 Before doing any repository work, read and follow
-[`secure-coding-baseline.md`](secure-coding-baseline.md). It contains the full
-normative rule set and governs the code you write or change here exactly as in
-any project that installs the eager profile. It is referenced, not embedded —
-open it, or the rules are not in your context at all.
+[`baseline/aiscb-core.md`](baseline/aiscb-core.md), then read
+[`baseline/catalog.json`](baseline/catalog.json) before selecting modules.
+From the repository root, load every matching ID with
+`python3 scripts/repository_policy.py MODULE_ID [MODULE_ID ...]`.
+The loader verifies source hashes, rejects unknown IDs, and includes dependencies.
+Use `--catalog` to inspect discovery without loading bodies. Recheck on scope
+changes or lost context. If loading fails, stop affected work; never substitute
+remembered rules or an unverified dist file. The trusted boundary here is this
+reviewed checkout, not a self-authenticating catalog hash.
 
 [`README.md`](README.md) explains why the baseline exists and what it covers.
 Keep it clear, concise, and written for users: lead with the action and outcome,
@@ -21,7 +26,7 @@ Four limits from it bind every edit to the baseline text:
 
 - It stays compact. Size is a criterion, not only correctness; the README states
   the current budgets. After every change to a normative core or module,
-  regenerate `secure-coding-baseline.md`, recompute the core and eager file
+  run `make build-full-baseline`, recompute the core and complete file
   sizes and GPT token counts with `o200k_base`, and update every value in
   `README.md`; never carry previous measurements forward by assumption.
 - It stays tool-neutral. The same text ships to Claude Code, Copilot, Codex, and
@@ -32,8 +37,13 @@ Four limits from it bind every edit to the baseline text:
   the application being built, and application-specific requirements do not
   belong in it.
 
-Use specification-driven development for every change to the core or a module
-that could alter how an assistant behaves. Read
+Before implementation, state requirements, sources, scope, security decisions,
+and observable acceptance criteria; obtain explicit approval, then implement
+and verify against them. Renew approval for material scope or behavior changes.
+A small change may use a short specification in the conversation.
+
+Use a recorded change specification for every core or module change that could
+alter how an assistant behaves. Read
 [`specs/README.md`](specs/README.md) before changing the baseline—it describes
 how baseline changes run here. Changes limited to repository tooling,
 configuration, workflow, documentation, the harness, or tests do not get a
@@ -44,8 +54,8 @@ Four rules hold no matter how small the baseline change looks:
 - Requirements come only from an explicit user request, existing repository
   documentation, or commit history that clearly establishes the behavior. Name
   the source. If none of them settles a question, ask instead of deciding it.
-- Normative rule text lives only in `baseline/core.md` and the cataloged files
-  under `baseline/modules/`. `secure-coding-baseline.md` is generated from them
+- Normative rule text lives only in `baseline/aiscb-core.md` and the cataloged files
+  under `baseline/modules/`. Complete output under `dist/` is generated from them
   and must not be hand-edited. The readable requirements catalog and change
   specifications live under `specs/`; they may explain behavior but must not
   add or change it.
@@ -63,12 +73,12 @@ Four rules hold no matter how small the baseline change looks:
   the exact new value. A request to change the baseline text is not version
   approval.
 
-Run `make check` after changing the baseline sources, catalog, generated eager
+Run `make check` after changing the baseline sources, catalog, generated complete
 artifact, specs, test metadata, or harness. It calls no model, takes seconds,
 verifies modular assembly, and also holds this file to its own contract:
-`AGENTS.md` must require agents to read and follow the eager baseline through
-the reference above, must not carry a generated copy of it, and `CLAUDE.md`
-must import both files exactly once.
+`AGENTS.md` must require the core, catalog and repository loader, and must not
+embed generated rules. `CLAUDE.md` imports AGENTS and core exactly once.
+`.github/copilot-instructions.md` points to the same workflow and loader.
 
 The remote quick start is a two-level verified distribution path. `README.md`
 pins and hashes `setup.sh`; remote `setup.sh` pins one versioned bundle and
@@ -88,16 +98,14 @@ only then runs the guided setup of the staged bundle. It never installs a file
 the manifest does not pin, and a refusal points at the current Quick start.
 The private key never enters the repository, CI, or an assistant's context.
 
-Whenever any of the three bundled files changes, run
-`make sign-bundle KEY=<release key>` so `bundle.json` and `bundle.json.sig`
-describe the committed files, then create a new bundle tag; never move or reuse
-a published bundle tag. Recompute every bundle hash in `setup.sh` from the exact
-commit the tag names, retain download size limits, and update the tests that
-identify the bundle. The release sequence is: sign, commit and check the bundle
-files with the manifest and signature, create the bundle tag on that commit,
-then change `setup.sh` to the new tag and hashes. A documentation-only commit
-does not need a new bundle, and the release tag may point at one as long as its
-tree carries the signed manifest for the bundled files it contains.
+Release bundles are staged under `dist/aiscb-VERSION/bundle-N`, with stable
+filenames, an exact-byte manifest and signature. They are release assets, not
+tracked source files. Never overwrite or reuse a published release/bundle.
+`make check` validates sources and development behavior without a private key;
+`make check-release BUNDLE_DIR=...` must additionally verify the staged signature
+and content before publication. Sign only with the maintainer's key. Preserve
+the existing published bootstrap pins until approved replacement assets exist;
+do not make a development checkout masquerade as a published bundle.
 [`docs/releasing.md`](docs/releasing.md) spells the sequence out with its
 commands, the key setup, and the rotation; signing needs the maintainer's key,
 so an assistant prepares a release up to that step and reports it.

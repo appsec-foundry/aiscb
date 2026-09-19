@@ -2184,12 +2184,14 @@ with tempfile.TemporaryDirectory() as tmp:
 
 setup_script = install.REPO / "setup.sh"
 setup_content = setup_script.read_text(encoding="utf-8")
-setup_digest = hashlib.sha256(setup_script.read_bytes()).hexdigest()
+published_fixture = install.REPO / "tests/fixtures/published-bootstrap"
+setup_digest = hashlib.sha256((published_fixture / "setup.sh").read_bytes()).hexdigest()
 readme = (install.REPO / "README.md").read_text(encoding="utf-8")
 quick_start = readme.split("## Quick start", 1)[1].split("\n## ", 1)[0]
 normalized_quick_start = " ".join(quick_start.split())
-check("the quick start pins the exact remote bootstrap content",
-      f"echo '{setup_digest} aiscb-setup.sh' | sha256sum --check"
+check("the quick start pins the exact published bootstrap fixture",
+      "6deb1bd83c627a54c31570899a4dd1dc40f690c1/setup.sh" in quick_start
+      and f"echo '{setup_digest} aiscb-setup.sh' | sha256sum --check"
       in normalized_quick_start)
 bundle_hashes = {
     install.BASELINE: hashlib.sha256(install.SOURCE.read_bytes()).hexdigest(),
@@ -2203,7 +2205,8 @@ bundle_hashes = {
 check("the remote bootstrap pins and hashes one coherent bundle",
       "bundle_ref=\"aiscb-bundle-0.1.15-2\"" in setup_content
       and "/branches/main" not in setup_content
-      and all(digest in setup_content for digest in bundle_hashes.values())
+      and all(entry["sha256"] in setup_content for entry in
+              json.loads((published_fixture / "bundle.json").read_text())["files"].values())
       and "--interactive --offline" in setup_content
       and setup_content.count("--max-filesize") == 1,
       setup_content)
@@ -2222,7 +2225,10 @@ check("setup.sh is executable and reaches the installer",
 with tempfile.TemporaryDirectory() as tmp:
     sandbox = Path(tmp)
     remote_setup = sandbox / "remote-setup.sh"
-    remote_setup.write_bytes(setup_script.read_bytes())
+    fixture_setup = setup_content
+    for name, entry in json.loads((published_fixture / "bundle.json").read_text())["files"].items():
+        fixture_setup = fixture_setup.replace(entry["sha256"], bundle_hashes[name])
+    remote_setup.write_text(fixture_setup)
     remote_setup.chmod(0o755)
     mock_bin = sandbox / "bin"
     mock_bin.mkdir()
@@ -2259,7 +2265,12 @@ with tempfile.TemporaryDirectory() as tmp:
     environment = os.environ.copy()
     environment["PATH"] = f"{mock_bin}{os.pathsep}{environment['PATH']}"
     environment["aiscb_test_ref"] = "aiscb-bundle-0.1.15-2"
-    environment["aiscb_test_repo"] = str(install.REPO)
+    download_tree = sandbox / "download-tree"
+    for name in install.BUNDLE_FILES:
+        target = download_tree / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((install.SOURCE if name == install.BASELINE else install.REPO / name).read_bytes())
+    environment["aiscb_test_repo"] = str(download_tree)
     remote = subprocess.run(
         ["sh", str(remote_setup), "--help"],
         capture_output=True,
@@ -3403,6 +3414,8 @@ def release_tree_fetcher(
         calls.append(url)
         if url == install.LATEST_RELEASE_URL:
             return release
+        if url == f"https://api.github.com/repos/{install.GITHUB_REPOSITORY}/releases/tags/{tag}":
+            return release
         prefix = install.CONTENTS_ROOT_URL + "/"
         if not url.startswith(prefix):
             raise AssertionError(f"unexpected update URL {url}")
@@ -3424,7 +3437,8 @@ with tempfile.TemporaryDirectory() as tmp:
     trusted = (release_signer,)
 
     current_files = {
-        name: (install.REPO / name).read_bytes() for name in install.BUNDLE_FILES
+        name: (install.SOURCE if name == install.BASELINE else install.REPO / name).read_bytes()
+        for name in install.BUNDLE_FILES
     }
     current_manifest = install.manifest_document(current_files)
     parsed = install.parse_manifest(current_manifest)
@@ -3633,18 +3647,14 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a derived baseline is not replaced by the official release",
           code == 2 and not calls and not runs, str(lines))
 
-    committed_manifest = install.REPO / install.MANIFEST_NAME
-    committed_signature = install.REPO / install.SIGNATURE_NAME
-    check("the committed manifest describes the bundled files",
-          committed_manifest.is_file()
-          and committed_manifest.read_bytes() == current_manifest,
-          "run: make sign-bundle KEY=<release key>")
+    committed_manifest = published_fixture / install.MANIFEST_NAME
+    committed_signature = published_fixture / install.SIGNATURE_NAME
     committed_error = (
-        verification_error(current_manifest, committed_signature.read_bytes(),
+        verification_error(committed_manifest.read_bytes(), committed_signature.read_bytes(),
                            install.ALLOWED_SIGNERS)
         if committed_signature.is_file() else "no signature file"
     )
-    check("the committed manifest carries a signature from a key install.py trusts",
+    check("the published compatibility fixture carries a trusted release signature",
           committed_error is None, committed_error or "")
 
     import bundle_manifest  # noqa: E402

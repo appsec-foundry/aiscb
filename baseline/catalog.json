@@ -2,7 +2,7 @@
   "schema": 1,
   "baseline_id": "aiscb-0.1.16",
   "core": {
-    "file": "core.md",
+    "file": "aiscb-core.md",
     "rules": [
       "aiscb-MODULES-001",
       "aiscb-OM-001",
@@ -11,6 +11,7 @@
       "aiscb-OM-004",
       "aiscb-OM-005",
       "aiscb-ATTR-001",
+      "aiscb-DESIGN-001",
       "aiscb-ACCESS-001",
       "aiscb-INPUT-001",
       "aiscb-SECRETS-001",
@@ -20,8 +21,8 @@
       "aiscb-TESTS-001",
       "aiscb-REPORT-001"
     ],
-    "size": 7432,
-    "sha256": "ae5c0c979a383e5b836e63fa04c59a4e6a88b8e2b9643b42f3995941af122d5e"
+    "size": 7897,
+    "sha256": "077ece973cb4692f6d4e2386cf37a4d40b2fee70d5866e1982bb23380e9ea298"
   },
   "modules": [
     {
@@ -33,13 +34,14 @@
       "paths": [],
       "requires": [],
       "rules": [
+        "aiscb-WEBHOOK-001",
         "aiscb-WEB-001",
         "aiscb-AUTH-001",
         "aiscb-MECHANISMS-001",
         "aiscb-WEBTESTS-001"
       ],
-      "size": 4647,
-      "sha256": "216e4200ea89533e773f6a995a9d4c43cd9cd53612c54fffc32bc4f5164f7847"
+      "size": 5074,
+      "sha256": "2e19e793a724b188fc7636fc4ba88dc1174d392db860a671b0a03930c71be21f"
     },
     {
       "id": "aiscb:data-boundaries",
@@ -51,10 +53,12 @@
       "requires": [],
       "rules": [
         "aiscb-ERRORS-001",
-        "aiscb-LIMITS-001"
+        "aiscb-LIMITS-001",
+        "aiscb-FILES-001",
+        "aiscb-EGRESS-001"
       ],
-      "size": 631,
-      "sha256": "c44184271ad96dc450283e32c01069c0c9ea0cc6ad884fc733477a67db94b39c"
+      "size": 1726,
+      "sha256": "b0a5d1c257124aa628fceb1fa3422d422df0d8cd5172b63f071e09d54d069f60"
     },
     {
       "id": "aiscb:secrets-bootstrap",
@@ -112,8 +116,63 @@
       "rules": [
         "aiscb-LLM-001"
       ],
-      "size": 1212,
-      "sha256": "f4c7107017ef398645701e40d26fd1f210e2e4fd4ff7fca04b4786ef26e245dc"
+      "size": 1123,
+      "sha256": "dbd93cc8293d6b2f0fdbc1a7a431cd6f4b911591ce3ce73486fd73b65083d7dd"
+    },
+    {
+      "id": "aiscb:agent-systems",
+      "publisher": "aiscb",
+      "version": "0.1.16",
+      "file": "modules/aiscb-agent-systems.md",
+      "trigger": "Designing or changing model-directed tool execution, autonomous workflows, action permissions or approvals, delegation, or multi-agent orchestration in the system being built",
+      "paths": [],
+      "requires": [
+        "aiscb:llm-features"
+      ],
+      "rules": [
+        "aiscb-AGENCY-001",
+        "aiscb-AGENTAUTH-001",
+        "aiscb-AGENTBOUNDS-001",
+        "aiscb-AGENTTESTS-001"
+      ],
+      "size": 2050,
+      "sha256": "42ca7e90e88d3404a59afef4c165865a9dc432dae08f7af66f21c9f00d81a305"
+    },
+    {
+      "id": "aiscb:retrieval-memory",
+      "publisher": "aiscb",
+      "version": "0.1.16",
+      "file": "modules/aiscb-retrieval-memory.md",
+      "trigger": "Building or changing LLM retrieval, RAG, vector stores, context caches, or persistent model/agent memory; not ordinary database queries or the coding assistant's own context",
+      "paths": [],
+      "requires": [
+        "aiscb:llm-features"
+      ],
+      "rules": [
+        "aiscb-RETRIEVAL-001",
+        "aiscb-MEMORY-001",
+        "aiscb-RETRIEVALTESTS-001"
+      ],
+      "size": 1547,
+      "sha256": "41395bf913ce50f3ae7c1579f14fdb648e87f94612fb14c2c5db03f49b2b2171"
+    },
+    {
+      "id": "aiscb:mcp-integrations",
+      "publisher": "aiscb",
+      "version": "0.1.16",
+      "file": "modules/aiscb-mcp-integrations.md",
+      "trigger": "Building or changing MCP clients, servers, proxies, transports, discovery, or server installation/configuration; not merely using an existing MCP tool",
+      "paths": [],
+      "requires": [
+        "aiscb:data-boundaries"
+      ],
+      "rules": [
+        "aiscb-MCPAUTH-001",
+        "aiscb-MCPLOCAL-001",
+        "aiscb-MCPTESTS-001"
+      ],
+      "size": 2206,
+      "sha256": "3ff69009c5085b262e6577bdcdce4dc4e0b66ffd5cdaabeee2930ab696003109"
     }
   ]
 }

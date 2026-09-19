@@ -2,12 +2,14 @@
 # so the expensive targets run the free self-check before spending anything.
 
 .DEFAULT_GOAL := check
-.PHONY: check coverage setup update status sign-bundle install uninstall install-claude \
+.PHONY: check check-release build-release build-full-baseline coverage setup update status sign-bundle install uninstall install-claude \
         install-codex install-copilot dry-run test-smoke test-quick test-rule test-confirmation \
         test test-all test-fast test-organization clean-results help
 
 # Both check and coverage run this suite, so it is listed once.
 CHECK_TESTS = tests/selfcheck.py \
+              scripts/test_install_policy.py \
+              scripts/test_repository_policy.py \
               tests/test_selfcheck.py \
               tests/test_run.py \
               tests/test_design_confirmation.py \
@@ -20,14 +22,21 @@ CHECK_TESTS = tests/selfcheck.py \
               scripts/test_session_switch.py \
               scripts/test_install.py
 
+## build-full-baseline generate the optional complete compatibility file and source hashes
+build-full-baseline:
+	python3 scripts/build_baseline.py --write
+
 ## check       validate the suite itself: no model calls, seconds
 check:
 	python3 scripts/build_baseline.py --check
+	python3 scripts/build_baseline.py --write
 	@set -e; for t in $(CHECK_TESTS); do echo "python3 $$t"; python3 $$t; done
 
 ## coverage    statement coverage of the check suite; needs the coverage package
 ##             ARGS=--xml=coverage.xml also writes a report for CI upload
 coverage:
+	python3 scripts/build_baseline.py --check
+	python3 scripts/build_baseline.py --write
 	python3 scripts/coverage_report.py $(ARGS) $(CHECK_TESTS)
 
 ## setup       guided install and update; ARGS=--offline skips the release check
@@ -41,11 +50,20 @@ update: setup
 status:
 	python3 scripts/install.py --status $(ARGS)
 
-## sign-bundle write bundle.json for the bundled files and sign it before the
-##             bundle commit: make sign-bundle KEY=~/.ssh/aiscb-release
+## sign-bundle sign a staged release before publication; requires BUNDLE_DIR and KEY
 sign-bundle:
-	@test -n "$(KEY)" || { echo "usage: make sign-bundle KEY=~/.ssh/aiscb-release"; exit 1; }
-	python3 scripts/bundle_manifest.py --sign $(KEY)
+	@test -n "$(KEY)" || { echo "usage: make sign-bundle BUNDLE_DIR=<staged-release> KEY=<release-key>"; exit 1; }
+	@test -n "$(BUNDLE_DIR)" || { echo "BUNDLE_DIR must name a staged release"; exit 1; }
+	python3 scripts/bundle_manifest.py --bundle-dir "$(BUNDLE_DIR)" --sign "$(KEY)"
+
+## build-release stage immutable release bytes; VERSION approval is explicit
+build-release:
+	python3 scripts/build_release.py --version "$(VERSION)" --revision "$(REVISION)"
+
+## check-release verify a staged signed release before publication
+check-release:
+	@test -n "$(BUNDLE_DIR)" || { echo "BUNDLE_DIR is required"; exit 1; }
+	python3 scripts/bundle_manifest.py --bundle-dir "$(BUNDLE_DIR)" --verify
 
 ## uninstall   remove what the installer placed; ARGS=--user for the user level
 uninstall:

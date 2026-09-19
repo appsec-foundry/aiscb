@@ -9,7 +9,9 @@ installer, and standalone tests use the Python standard library; running the
 gateway hook requires LiteLLM.
 
 It is an example for "Acme", not a product. Copy it, replace the Acme content,
-and keep the checks. Follow the [local bundle rollout path](../../docs/rollout-paths/local-bundle.md)
+and keep the checks. Install the result into a project with the
+[local policy installer](../../docs/local-policy-installation.md), which wires
+the tool instructions and a verified dependency loader. Follow the [local bundle rollout path](../../docs/rollout-paths/local-bundle.md)
 to complete distribution and tool setup. The [gateway rollout path](../../docs/rollout-paths/gateway-https.md)
 describes the remote adapter and HTTPS loader that this example does not yet
 implement.
@@ -67,10 +69,17 @@ the current release no longer matches the manifest.
 
 What the release contains:
 
+All official modules come from the upstream catalog, including MCP integrations
+and retrieval/memory. Their dependencies are included in generated skill bodies;
+the gateway block includes all modules. The project installer offers `--modular`
+or `--complete` and connects entry points itself, unlike this directory's
+managed-machine installer. Do not wire both adapters into the same client.
+
 ```text
 acme-sec-1.0.0/
 ├── manifest.json
-├── core.md                            always-on aiscb core
+├── complete-policy.md                generated compatibility output
+├── aiscb-core.md                            always-on aiscb core
 ├── overlay.md
 ├── catalog.json                       merged flat module catalog
 ├── aiscb-catalog.json                 reviewed upstream catalog
@@ -132,7 +141,7 @@ absolute paths so references resolve in any fresh checkout; copying only
 - Manifest signatures. The example authenticates the manifest with a digest
   delivered out of band, the way `setup.sh` in this repository does. A package
   signature or a signed manifest replaces that in production.
-- Wiring the adapters into each tool. The release only places the files; the
+- Managed-machine wiring of the generated skill adapters. The example installer only places the files; the
   managed settings, import lines, or skill links are the deployment job's
   work, as described under
   [Adapters per tool](../../docs/rollout-paths/local-bundle.md#adapters-per-tool).
@@ -141,7 +150,7 @@ absolute paths so references resolve in any fresh checkout; copying only
   tests.
 - Staleness policy for offline machines and a session-aware switch for tools
   that pick up skill changes live; both are decisions, not code.
-- A gateway-only remote adapter. The generated `system-block.md` still refers
-  to the local catalog. The example has no HTTPS loader, remote catalog,
+- A gateway-only remote adapter. The generated `system-block.md` contains
+  complete policy and blueprint values because no loader is available. The example has no HTTPS loader, remote catalog,
   full blueprint schema validation, or session-to-release assignment. Gateway
   tests use a stubbed LiteLLM import, not a running proxy or real model.

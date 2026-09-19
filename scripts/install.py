@@ -43,6 +43,10 @@ else:
     VERSION_HOOK_SOURCE = REPO / VERSION_HOOK_NAME
     LOCAL_ORIGIN = "installed copy"
 SOURCE = REPO / BASELINE
+if (REPO / "baseline/catalog.json").is_file():
+    # Reviewed checkout: generated compatibility content is never a source file.
+    import build_baseline
+    SOURCE = build_baseline.EAGER
 # SHA-256 of every hook helper this installer has shipped, the current one last.
 # Only an unchanged copy of one of these is replaced, so edited or foreign code
 # in that place survives. Append the new digest whenever the helper changes.
@@ -379,7 +383,30 @@ def fetch_release_file(
 ) -> bytes:
     """Read one file of the release tree through the contents API."""
     query = urllib.parse.urlencode({"ref": ref})
-    payload = fetch_json(f"{CONTENTS_ROOT_URL}/{path}?{query}")
+    try:
+        payload = fetch_json(f"{CONTENTS_ROOT_URL}/{path}?{query}")
+    except urllib.error.HTTPError as missing:
+        if missing.code != 404:
+            raise
+        # New releases publish generated files as assets, not source-tree files.
+        release = fetch_json(f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/tags/{urllib.parse.quote(ref, safe='')}")
+        if not isinstance(release, dict) or release.get("tag_name") != ref or release.get("draft") or release.get("prerelease"):
+            raise ValueError("invalid asset release")
+        assets = release.get("assets", [])
+        if not isinstance(assets, list):
+            raise ValueError("invalid release assets")
+        name = Path(path).name
+        matches = [a for a in assets if isinstance(a, dict) and a.get("name") == name]
+        if not matches:
+            raise missing
+        if len(matches) != 1:
+            raise ValueError("duplicate release asset")
+        asset = matches[0]
+        expected = f"https://github.com/{GITHUB_REPOSITORY}/releases/download/{urllib.parse.quote(ref, safe='')}/{name}"
+        if (asset.get("browser_download_url") != expected or type(asset.get("size")) is not int
+                or not 0 < asset["size"] <= limit):
+            raise ValueError("invalid release asset URL or size")
+        return read_release_asset(expected, limit)
     if not isinstance(payload, dict) or payload.get("type") != "file":
         raise ValueError(f"release {path} is not a file")
     if payload.get("encoding") != "base64" or not isinstance(payload.get("content"), str):
@@ -391,6 +418,34 @@ def fetch_release_file(
         raise ValueError(f"release {path} is not valid base64") from error
     if len(content) > limit:
         raise ValueError(f"release {path} is too large")
+    return content
+
+
+class _AssetRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+        validate_asset_url(new_url)
+        return super().redirect_request(request, file_pointer, code, message, headers, new_url)
+
+
+def validate_asset_url(url):
+    parsed = urllib.parse.urlsplit(url)
+    if (parsed.scheme != "https" or parsed.netloc not in
+            {"github.com", "release-assets.githubusercontent.com"}):
+        raise ValueError("unexpected release asset destination")
+
+
+def read_release_asset(url, limit):
+    validate_asset_url(url)
+    opener = urllib.request.build_opener(_AssetRedirectHandler())
+    with opener.open(urllib.request.Request(url, headers={"User-Agent": "aiscb-setup"}),
+                     timeout=ONLINE_TIMEOUT) as response:
+        validate_asset_url(response.geturl())
+        size = response.headers.get("Content-Length")
+        if size and int(size) > limit:
+            raise ValueError("release asset exceeds size limit")
+        content = response.read(limit + 1)
+    if len(content) > limit:
+        raise ValueError("release asset exceeds size limit")
     return content
 
 
@@ -4276,7 +4331,62 @@ def main(argv: list[str] | None = None) -> int:
         help="with --user, opt in to AISCB_DISABLE=1 for new Claude/Codex sessions; "
              "migrate managed links only",
     )
+    policy_format = parser.add_mutually_exclusive_group()
+    policy_format.add_argument("--modular", action="store_true",
+                        help="local project adapter with a verified Python module loader")
+    policy_format.add_argument("--complete", action="store_true",
+                        help="local project adapter containing every module, without runtime loading")
+    parser.add_argument("--organization", type=Path,
+                        help="built organization bundle; requires its trusted manifest digest")
+    parser.add_argument("--organization-sha256",
+                        help="organization manifest digest received through a trusted channel")
     args = parser.parse_args(argv)
+
+    if (REPO / "baseline/catalog.json").is_file() and not (args.modular or args.complete or args.organization):
+        try:
+            catalog, artifacts, complete = build_baseline.validate()
+            if build_baseline.CATALOG.read_bytes() != build_baseline.render_catalog(catalog, artifacts):
+                raise ValueError("stale source metadata; run make build-full-baseline")
+            build_baseline.write_complete(complete)
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+
+    local_record = (args.into or Path.cwd()) / ".aiscb/installation.json"
+    local_policy = args.modular or args.complete or args.organization is not None
+    if args.organization_sha256 and not args.organization:
+        parser.error("--organization-sha256 requires --organization")
+    if local_policy or (local_record.exists() and not args.user
+                        and (args.status or args.uninstall)):
+        if (args.user or args.interactive or args.update or args.session_switch
+                or args.refresh_update_cache):
+            parser.error("local policy installation takes tools, --into, --modular/--complete, and optional --organization")
+        if args.organization and not args.organization_sha256:
+            parser.error("--organization requires --organization-sha256 from a trusted channel")
+        if args.offline and not args.status:
+            parser.error("local policy installation is already offline")
+        selected_tools = args.tools or list(TOOLS)
+        if any(tool not in TOOLS for tool in selected_tools):
+            parser.error("unknown tool")
+        try:
+            # Only present in a reviewed checkout; never fetch missing helpers.
+            import install_policy
+            root = (args.into or Path.cwd()).resolve()
+            if args.status:
+                print(install_policy.status(root))
+            elif args.uninstall:
+                print(install_policy.uninstall(root))
+            else:
+                for line in install_policy.install(selected_tools, root, modular=args.modular,
+                                                  bundle=args.organization,
+                                                  expected=args.organization_sha256):
+                    print(line)
+        except (ImportError, OSError, ValueError, KeyError, TypeError, RecursionError) as exc:
+            print(f"Local policy setup refused: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if local_record.exists() and not args.user:
+        parser.error("this project uses local policy; update with --modular/--complete/--organization or uninstall it first")
 
     if args.session_switch and (args.interactive or args.status or args.offline
                                or args.uninstall or args.refresh_update_cache or args.update):

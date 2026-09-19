@@ -13,8 +13,8 @@ surrounding application.
 
 | Baseline rule | Blocked edit |
 | --- | --- |
-| [`aiscb-PRESERVE-001`](../../secure-coding-baseline.md#non-negotiable) | Disabling TLS certificate verification, for example `verify=False`, `rejectUnauthorized: false`, or `curl -k` |
-| [`aiscb-PRESERVE-001`](../../secure-coding-baseline.md#non-negotiable) | Adding a switch that disables authentication, authorization, or CSRF protection, for example `SKIP_AUTH` or `WTF_CSRF_ENABLED = False` |
+| [`aiscb-PRESERVE-001`](../../baseline/aiscb-core.md#universal-security-floor) | Disabling TLS certificate verification, for example `verify=False`, `rejectUnauthorized: false`, or `curl -k` |
+| [`aiscb-PRESERVE-001`](../../baseline/aiscb-core.md#universal-security-floor) | Adding a switch that disables authentication, authorization, or CSRF protection, for example `SKIP_AUTH` or `WTF_CSRF_ENABLED = False` |
 
 Only text added through Claude Code's `Write`, `Edit`, and `NotebookEdit` tools
 is checked. The example directory itself is excluded so its patterns and tests

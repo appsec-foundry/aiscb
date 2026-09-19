@@ -1,6 +1,18 @@
 # Rollout path: local bundle
 
-Use this rollout path to distribute the baseline and organization policy files to developer machines or project repositories. Read the [shared content and overlay rules](../adapting-in-an-organization.md#define-the-shared-content) first. This is an implementation plan, not a ready-to-install package.
+For project installations, use the implemented
+[local policy installer](../local-policy-installation.md). This rollout path
+describes the additional managed-machine distribution and skill wiring an
+organization can build around the same package. Read the
+[shared content and overlay rules](../adapting-in-an-organization.md#define-the-shared-content) first.
+
+The project installer uses direct instruction blocks and a Python loader, not
+the generated skill adapters described below. Choose one integration; do not
+install both. Its `--complete` option embeds the same cataloged content without
+runtime loading. Updates cover every already-managed tool, require stopped
+sessions, and are not a multi-file transaction. Its absolute loader paths need
+regeneration after moving a checkout. See the linked installation guide for
+update, rollback, drift handling, and the MCP/RAG selection acceptance matrix.
 
 For each client entry point and evidence that instructions actually loaded, use the [agent integration and verification guide](../agent-integration-verification.md).
 

@@ -1,8 +1,9 @@
 # How the baseline changes
 
-`baseline/core.md` and the cataloged files under `baseline/modules/` are the
-normative product. `secure-coding-baseline.md` is their generated complete eager
-artifact for clients without verified module loading. Nothing under `specs/` is
+`baseline/aiscb-core.md` and the cataloged files under `baseline/modules/` are the
+normative product. `make build-full-baseline` generates complete output under
+`dist/dev/aiscb-VERSION/`, never tracked, for clients without verified modular
+loading. Nothing under `specs/` is
 normative; it only records what the baseline contains and how it changes.
 
 - `requirements.md`: a readable catalog of the current rule groups, acceptance

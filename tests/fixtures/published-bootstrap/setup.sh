@@ -8,8 +8,7 @@ script_name=${0##*/}
 if [ "$script_name" = "setup.sh" ] \
     && [ -f "$script_dir/scripts/install.py" ] \
     && [ -f "$script_dir/scripts/show_baseline_version.py" ] \
-    && { [ -f "$script_dir/baseline/catalog.json" ] \
-         || [ -f "$script_dir/secure-coding-baseline.md" ]; }; then
+    && [ -f "$script_dir/secure-coding-baseline.md" ]; then
     cd "$script_dir"
     exec python3 scripts/install.py --interactive "$@"
 fi

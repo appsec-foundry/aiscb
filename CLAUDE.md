@@ -1,2 +1,2 @@
 @AGENTS.md
-@secure-coding-baseline.md
+@baseline/aiscb-core.md

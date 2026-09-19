@@ -6,18 +6,22 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path, PurePosixPath
+
+from policy_loader import safe_path
 
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ROOT = ROOT / "baseline"
 CATALOG = SOURCE_ROOT / "catalog.json"
-EAGER = ROOT / "secure-coding-baseline.md"
 
 BASELINE_ID = "aiscb-0.1.16"
 VERSION = "0.1.16"
+EAGER = ROOT / "dist" / "dev" / BASELINE_ID / "secure-coding-baseline.md"
 MODULE_ID = re.compile(r"aiscb:[a-z][a-z0-9-]*")
 RULE_ID = re.compile(r"aiscb-[A-Z][A-Z0-9]*-\d{3}")
 RULE_BULLET = re.compile(r"^- \*\*\[(aiscb-[^\]]+)\] [^:]+:\*\*")
@@ -45,9 +49,9 @@ def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
     return result
 
 
-def load_catalog() -> dict:
+def load_catalog(path: Path | None = None) -> dict:
     try:
-        value = json.loads(CATALOG.read_text(encoding="utf-8"),
+        value = json.loads((path or CATALOG).read_text(encoding="utf-8"),
                            object_pairs_hook=pairs)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise Invalid(f"cannot read catalog: {exc}") from exc
@@ -64,17 +68,23 @@ def load_catalog() -> dict:
     return value
 
 
-def source_path(relative: object, *, module: bool) -> Path:
+def source_path(relative: object, *, module: bool, root: Path | None = None) -> Path:
     if not isinstance(relative, str):
         raise Invalid("artifact path must be a string")
     logical = PurePosixPath(relative)
     expected_parent = PurePosixPath("modules") if module else PurePosixPath(".")
     if (logical.is_absolute() or ".." in logical.parts or logical.suffix != ".md"
             or (module and logical.parent != expected_parent)
-            or (not module and logical != PurePosixPath("core.md"))):
+            or (not module and logical != PurePosixPath("aiscb-core.md"))):
         raise Invalid(f"unsafe or unexpected artifact path: {relative!r}")
-    path = SOURCE_ROOT.joinpath(*logical.parts)
-    if path.is_symlink() or not path.is_file():
+    root = root or SOURCE_ROOT
+    path = root.joinpath(*logical.parts)
+    for part in [path, *path.parents]:
+        if part.is_symlink():
+            raise Invalid(f"artifact path contains a symlink: {relative}")
+        if part == root:
+            break
+    if not path.is_file():
         raise Invalid(f"artifact must be a regular file: {relative}")
     return path
 
@@ -82,13 +92,13 @@ def source_path(relative: object, *, module: bool) -> Path:
 def text_and_bytes(path: Path) -> tuple[str, bytes]:
     raw = path.read_bytes()
     if not raw or len(raw) > 128 * 1024:
-        raise Invalid(f"artifact has invalid size: {path.relative_to(ROOT)}")
+        raise Invalid(f"artifact has invalid size: {path.name}")
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise Invalid(f"artifact is not UTF-8: {path.relative_to(ROOT)}") from exc
+        raise Invalid(f"artifact is not UTF-8: {path.name}") from exc
     if not text.endswith("\n"):
-        raise Invalid(f"artifact must end with a newline: {path.relative_to(ROOT)}")
+        raise Invalid(f"artifact must end with a newline: {path.name}")
     return text, raw
 
 
@@ -114,17 +124,18 @@ def string_list(value: object, name: str) -> list[str]:
     return value
 
 
-def validate() -> tuple[dict, list[tuple[dict, bytes]], bytes]:
-    catalog = load_catalog()
+def validate(root: Path | None = None) -> tuple[dict, list[tuple[dict, bytes]], bytes]:
+    source_root = root or SOURCE_ROOT
+    catalog = load_catalog(source_root / "catalog.json" if root else None)
     core = catalog["core"]
-    core_path = source_path(core["file"], module=False)
+    core_path = source_path(core["file"], module=False, root=source_root)
     core_text, core_raw = text_and_bytes(core_path)
     identifiers = BASELINE_LINE.findall(core_text)
     if identifiers != [BASELINE_ID]:
         raise Invalid(f"core must declare exactly {BASELINE_ID}")
     actual_core_rules = rules(core_text, "core")
     if string_list(core["rules"], "core rules") != actual_core_rules:
-        raise Invalid("core rule list does not match core.md")
+        raise Invalid("core rule list does not match aiscb-core.md")
 
     seen_modules: set[str] = set()
     seen_rules = set(actual_core_rules)
@@ -149,7 +160,7 @@ def validate() -> tuple[dict, list[tuple[dict, bytes]], bytes]:
         if module_id in requires:
             raise Invalid(f"module {module_id} requires itself")
 
-        path = source_path(module["file"], module=True)
+        path = source_path(module["file"], module=True, root=source_root)
         text, raw = text_and_bytes(path)
         if MODULE_LINE.findall(text) != [module_id]:
             raise Invalid(f"{module['file']} must declare exactly {module_id}")
@@ -187,12 +198,12 @@ def validate() -> tuple[dict, list[tuple[dict, bytes]], bytes]:
     for module_id in known_ids:
         visit(module_id)
 
-    listed_files = {SOURCE_ROOT / module["file"] for module, _ in modules}
-    actual_files = set((SOURCE_ROOT / "modules").glob("*.md"))
+    listed_files = {source_root / module["file"] for module, _ in modules}
+    actual_files = set((source_root / "modules").glob("*.md"))
     if listed_files != actual_files:
-        missing = sorted(str(path.relative_to(SOURCE_ROOT))
+        missing = sorted(str(path.relative_to(source_root))
                          for path in listed_files - actual_files)
-        unlisted = sorted(str(path.relative_to(SOURCE_ROOT))
+        unlisted = sorted(str(path.relative_to(source_root))
                           for path in actual_files - listed_files)
         raise Invalid(f"module inventory mismatch; missing={missing}, unlisted={unlisted}")
 
@@ -222,9 +233,23 @@ def stale_outputs() -> list[str]:
     failures = []
     if CATALOG.read_bytes() != render_catalog(catalog, artifacts):
         failures.append("baseline/catalog.json metadata is stale")
-    if not EAGER.is_file() or EAGER.read_bytes() != eager:
+    if EAGER.exists() and EAGER.read_bytes() != eager:
         failures.append("secure-coding-baseline.md is not the generated eager artifact")
     return failures
+
+
+def write_complete(raw: bytes) -> None:
+    """Write only the bounded development path, without following links."""
+    target = safe_path(ROOT, EAGER.relative_to(ROOT).as_posix())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=".baseline-", dir=target.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(raw)
+        os.replace(name, target)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
 
 
 def main() -> int:
@@ -238,7 +263,7 @@ def main() -> int:
         rendered_catalog = render_catalog(catalog, artifacts)
         if args.write:
             CATALOG.write_bytes(rendered_catalog)
-            EAGER.write_bytes(eager)
+            write_complete(eager)
             print(f"wrote {EAGER.relative_to(ROOT)} and {CATALOG.relative_to(ROOT)}")
             return 0
         failures = stale_outputs()

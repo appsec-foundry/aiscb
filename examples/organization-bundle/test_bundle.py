@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory() as tmp:
     out = work / "bundle"
     manifest, digest = build.build(HERE, AISCB, out, root)
     aiscb_id = build.single(build.ID_RE,
-                            (AISCB / "core.md").read_text(encoding="utf-8"), "id")
+                            (AISCB / "aiscb-core.md").read_text(encoding="utf-8"), "id")
     release_dir = root.resolve() / "releases" / manifest["bundle"]
 
     # ---- build output -------------------------------------------------------
@@ -95,13 +95,16 @@ with tempfile.TemporaryDirectory() as tmp:
     check("no bundle-dir placeholder survives the build", not leftovers, str(leftovers))
     claude = (out / "adapters/claude-code/CLAUDE.md").read_text(encoding="utf-8")
     check("Claude Code adapter imports the versioned aiscb core",
-          claude.startswith(f"@{release_dir}/core.md\n\n# Acme"))
+          claude.startswith(f"@{release_dir}/aiscb-core.md\n\n# Acme"))
     codex = (out / "adapters/codex/AGENTS.md").read_text(encoding="utf-8")
     check("Codex adapter is aiscb followed by the overlay without the marker",
           codex.startswith("# AI Secure Coding Baseline") and "@<bundle-dir>" not in codex
           and "# Acme Secure Coding Overlay" in codex and codex.count("baseline-id:") == 2)
-    check("gateway block equals the combined adapter",
-          (out / "adapters/gateway/system-block.md").read_bytes() == codex.encode("utf-8"))
+    check("gateway without a loader gets complete policy",
+          (out / "adapters/gateway/system-block.md").read_bytes()
+          == (out / "complete-policy.md").read_bytes()
+          and "[aiscb-AGENTAUTH-001]" in (out / "complete-policy.md").read_text()
+          and "[ACME-" in (out / "complete-policy.md").read_text())
     for tool in build.ADAPTERS:
         for skill_name, module_id in (("aiscb-web-auth", "aiscb:web-auth"),
                                       ("acme-authentication", "acme:authentication")):
@@ -219,9 +222,9 @@ with tempfile.TemporaryDirectory() as tmp:
           and (link / "overlay.md").is_file()
           and os.readlink(link) == f"releases/{manifest['bundle']}")
     check("the installed adapter resolves the versioned import path",
-          (release_dir / "core.md").is_file()
+          (release_dir / "aiscb-core.md").is_file()
           and (link / "adapters/claude-code/CLAUDE.md").read_text(encoding="utf-8")
-          .startswith(f"@{release_dir}/core.md"))
+          .startswith(f"@{release_dir}/aiscb-core.md"))
     lines, healthy = install.status(root)
     check("status reports a healthy install", healthy and any("match" in l for l in lines))
     check("an installed release is never overwritten",

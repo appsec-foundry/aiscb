@@ -12,7 +12,7 @@ Build the adapters from one verified release. Put the baseline and short organiz
 
 | Client and scope | Entry point to generate | What to check |
 | --- | --- | --- |
-| Claude Code, project | `CLAUDE.md` or `.claude/CLAUDE.md` containing the combined text, or a local `@path` import to a reviewed file inside the checkout; `.claude/rules/*.md` is another supported route | Claude Code does not load `AGENTS.md` on its own. `@` is an import, and a project import outside the working directory can require approval. |
+| Claude Code, project | `CLAUDE.md` or `.claude/CLAUDE.md` containing combined text, or a local `@path` import | Current versions conditionally load AGENTS.md too; keep explicit imports for older/restricted sessions. External imports can require approval. |
 | Claude Code, user or managed | `~/.claude/CLAUDE.md` or a [managed-policy `CLAUDE.md`](https://code.claude.com/docs/en/memory#deploy-organization-wide-claudemd) | Resolve the actual Claude configuration directory. Managed locations differ on macOS, Linux/WSL, and Windows. |
 | Codex, project | Combined text in root `AGENTS.md`; use a nested `AGENTS.md` only for work started in its directory chain | `AGENTS.override.md` can replace `AGENTS.md` in the same directory. Codex has no portable `@` file import. |
 | Codex, user | Combined text in `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) | `AGENTS.override.md` at that level replaces the normal file. Codex CLI and the IDE extension share configuration layers; verify the actual home and trusted project. |
@@ -67,6 +67,34 @@ Perform these checks in a fresh session opened from the intended repository and 
 Use a harmless probe that asks for organization baseline IDs and their already-loaded source files **from the current instruction context, without opening files**. Keep the expected ID out of the question. Compare the answer with the approved release, then inspect the source view above. A correct answer alone can be guessed or learned from repository search; a visible source alone does not prove the model follows the rule. For a behavior test, run one representative, reversible task in an isolated fixture and inspect the resulting diff.
 
 ## Acceptance cases for the installer
+
+### Current branch evidence (2026-09-19)
+
+The project installer tests all three entry points in modular and complete mode,
+including dependency loading, existing user text, drift, update and uninstall.
+The repository adapter separately tests Claude imports, the short Copilot entry
+point, and core/catalog/loader references. No real Claude, Copilot or Codex
+session was run for this migration; all surfaces remain configured but unverified.
+
+The repository's Copilot entry is a short read-and-load instruction, not an
+automatic import. A surface unable to read files or execute the loader cannot
+use this adapter. Complete mode is an alternative only where the full block fits
+and is actually loaded. There is no automatic IDE/feature capability detection.
+Do not claim inline-completion or every Copilot code-review surface support.
+
+Claude's documented default loads CLAUDE.md instead of AGENTS.md when both
+exist. An explicit `@AGENTS.md` import remains supported and is deduplicated when
+AGENTS is also discovered. In installed projects that independently embed the
+same policy in both files, a non-default setting loading both may duplicate
+context; inspect `/context` and select one integration. Source:
+[Claude memory and AGENTS behavior](https://code.claude.com/docs/en/memory#agentsmd).
+
+Before release, run a fresh-session matrix for each actual client: startup from
+root and subdirectory, MCP-only and RAG tasks, multi-module selection, missing
+loader, corrupted source, new session after update, and preserved user policy.
+Record exact client versions, execution permissions and instruction-size limits.
+
+### Remaining real-client acceptance cases
 
 - Fresh checkout, existing unrelated instructions, edited managed block, foreign symlink, unreadable or invalid entry point, and uninstall after a manual edit.
 - No CLI but the VS Code extension is active; CLI on `PATH` but no extension; extension installed but disabled; another VS Code profile; SSH/WSL/container window; Visual Studio installed without Copilot Chat; missing login or organization entitlement.

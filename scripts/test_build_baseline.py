@@ -35,8 +35,7 @@ def fixture():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         shutil.copytree(ROOT / "baseline", root / "baseline")
-        shutil.copy2(ROOT / "secure-coding-baseline.md",
-                     root / "secure-coding-baseline.md")
+        (root / "secure-coding-baseline.md").write_bytes(BUILD.validate()[2])
         BUILD.SOURCE_ROOT = root / "baseline"
         BUILD.CATALOG = BUILD.SOURCE_ROOT / "catalog.json"
         BUILD.EAGER = root / "secure-coding-baseline.md"

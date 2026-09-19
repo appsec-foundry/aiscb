@@ -1,5 +1,10 @@
 # Tasks
 
+The approved follow-up in `../agent-systems/` renames the core, adds secure
+design and agent-system rules, and implements project-local module installation
+with organization overlays. Its task record contains current verification and
+OWASP review evidence. The release boundary below remains outstanding.
+
 - [x] Add the normative core, official modules, flat catalog, and deterministic eager builder.
 - [x] Update the complete eager baseline to `aiscb-0.1.16` without losing existing requirements.
 - [x] Add deterministic validation and mutation coverage for modular artifacts.

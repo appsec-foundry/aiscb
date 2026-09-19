@@ -17,9 +17,13 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parents[2] / "scripts"))
+import build_baseline
+from policy_loader import closure
+
 HERE = Path(__file__).resolve().parent
 PLACEHOLDER = "<bundle-dir>"
-IMPORT_MARKER = f"@{PLACEHOLDER}/core.md\n\n"
+IMPORT_MARKER = f"@{PLACEHOLDER}/aiscb-core.md\n\n"
 ID_RE = re.compile(r"`baseline-id: ([a-z][a-z0-9-]*-\d+\.\d+\.\d+)`")
 EXTENDS_RE = re.compile(r"Extends aiscb \(`(aiscb-\d+\.\d+\.\d+)`\)")
 RULE_RE = re.compile(r"\[(aiscb-[A-Z0-9]+-\d{3})\]")
@@ -96,6 +100,13 @@ def load_aiscb(root: Path, approved_digest: str | None = None) -> dict:
     if approved_digest and sha256(catalog_raw) != approved_digest.lower():
         raise BuildError("the aiscb catalog does not match the approved digest")
     try:
+        _, artifacts, _ = build_baseline.validate(root)
+        for entry, raw in artifacts:
+            if entry["size"] != len(raw) or entry["sha256"] != sha256(raw):
+                raise BuildError("aiscb artifact metadata does not match its source")
+    except (build_baseline.Invalid, OSError, TypeError, KeyError) as exc:
+        raise BuildError(str(exc)) from exc
+    try:
         catalog = json.loads(catalog_raw)
     except ValueError as exc:
         raise BuildError(f"aiscb catalog is not valid JSON: {exc}") from None
@@ -107,8 +118,8 @@ def load_aiscb(root: Path, approved_digest: str | None = None) -> dict:
     if not isinstance(core, dict) or set(core) != AISCB_CORE_KEYS:
         raise BuildError(f"aiscb core needs exactly {sorted(AISCB_CORE_KEYS)}")
     core_rel, core_raw = verified_artifact(root, core, "")
-    if core_rel != "core.md":
-        raise BuildError("aiscb core must be core.md")
+    if core_rel != "aiscb-core.md":
+        raise BuildError("aiscb core must be aiscb-core.md")
     core_text = core_raw.decode("utf-8")
     baseline_id = single(ID_RE, core_text, "aiscb baseline-id")
     if catalog["baseline_id"] != baseline_id:
@@ -245,6 +256,14 @@ def build(source: Path, aiscb_path: Path, out: Path, install_root: Path,
         raise BuildError(f"overlay extends {extends} but the supplied file is {aiscb_id}")
 
     organization = load_catalog(source, aiscb["rules"])
+    seen_ids = {m["id"] for m in aiscb["modules"]}
+    seen_paths = {m["file"] for m in aiscb["modules"]}
+    for pack in organization["packs"]:
+        target = "modules/" + pack["id"].replace(":", "-") + ".md"
+        if pack["id"].startswith("aiscb:") or pack["id"] in seen_ids or target in seen_paths:
+            raise BuildError("organization namespace or artifact collides with another module")
+        seen_ids.add(pack["id"])
+        seen_paths.add(target)
     release_dir = (install_root / "releases" / overlay_id).resolve()
 
     if out.exists() and any(out.iterdir()):
@@ -261,7 +280,7 @@ def build(source: Path, aiscb_path: Path, out: Path, install_root: Path,
     def fill(text: str) -> str:
         return text.replace(PLACEHOLDER, str(release_dir))
 
-    put("core.md", aiscb["files"][0][1])
+    put("aiscb-core.md", aiscb["files"][0][1])
     for rel, raw in aiscb["files"][1:]:
         put(f"modules/{Path(rel).name}", raw)
     put("overlay.md", fill(overlay).encode("utf-8"))
@@ -316,19 +335,31 @@ def build(source: Path, aiscb_path: Path, out: Path, install_root: Path,
     combined = aiscb["core"].rstrip("\n") + "\n\n" + body.rstrip("\n") + "\n\n" + discovery
     for tool, (name, follows_import) in ADAPTERS.items():
         if follows_import:
-            text = f"@{release_dir}/core.md\n\n{body.rstrip()}\n\n{discovery}"
+            text = f"@{release_dir}/aiscb-core.md\n\n{body.rstrip()}\n\n{discovery}"
         else:
             text = combined
         put(f"adapters/{tool}/{name}", text.encode("utf-8"))
         for module in merged_modules:
             skill_name = module["id"].replace(":", "-")
             description = json.dumps(f"{module['id']}: {module['trigger']}")
-            module_body = read_text(out / module["artifact"])
+            inventory = {entry["id"]: entry for entry in merged_modules}
+            selected = [inventory[module_id] for module_id in closure(inventory, [module["id"]])]
+            module_body = "\n\n".join(read_text(out / entry["artifact"]).rstrip()
+                                         for entry in selected) + "\n"
+            for blueprint in sorted({p for entry in selected for p in entry["blueprints"]}):
+                module_body += "\nBlueprint values: " + blueprint + "\n" + read_text(out / blueprint)
             skill = (f"---\nname: {skill_name}\ndescription: {description}\n"
                      f"---\n\n{module_body}")
             put(f"adapters/{tool}/skills/{skill_name}/SKILL.md",
                 skill.encode("utf-8"))
-    put("adapters/gateway/system-block.md", combined.encode("utf-8"))
+    # The gateway has no loader: ship complete policy, not unresolved module references.
+    eager = aiscb["core"].rstrip() + "\n\n" + body.rstrip() + "\n\n"
+    eager += "\n\n".join(read_text(out / m["artifact"]).rstrip() for m in merged_modules)
+    for blueprint in sorted({p for m in merged_modules for p in m["blueprints"]}):
+        eager += "\n\nBlueprint values: " + blueprint + "\n" + read_text(out / blueprint)
+    eager += "\n"
+    put("complete-policy.md", eager.encode("utf-8"))
+    put("adapters/gateway/system-block.md", eager.encode("utf-8"))
 
     manifest = {
         "bundle": overlay_id,

@@ -9,7 +9,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 GATE = HERE / "gate.py"
-BASELINE = HERE.parent.parent / "secure-coding-baseline.md"
+REPO = HERE.parent.parent
+BASELINE = REPO / "dist" / "dev" / json.loads((REPO / "baseline/catalog.json").read_text())["baseline_id"] / "secure-coding-baseline.md"
 SETTINGS = HERE / "settings.example.json"
 
 sys.path.insert(0, str(HERE))

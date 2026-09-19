@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 CASES = HERE / "cases"
-BASELINE = ROOT / "secure-coding-baseline.md"
+BASELINE = ROOT / "baseline/aiscb-core.md"
 README = ROOT / "README.md"
 AGENTS = ROOT / "AGENTS.md"
 CLAUDE = ROOT / "CLAUDE.md"
@@ -24,7 +24,7 @@ INDEX = ROOT / "specs" / "requirements.md"
 CHANGES = ROOT / "specs" / "changes"
 ARCHIVE = ROOT / "specs" / "archive"
 CHANGE_FILES = ("proposal.md", "requirements.md", "tasks.md")
-AGENTS_BASELINE_REFERENCE = "[`secure-coding-baseline.md`](secure-coding-baseline.md)"
+AGENTS_BASELINE_REFERENCE = "[`baseline/aiscb-core.md`](baseline/aiscb-core.md)"
 AGENTS_BASELINE_MARKER = "GENERATED SECURE CODING BASELINE"
 REQUIREMENT_ID = re.compile(r"aiscb-[A-Z][A-Z0-9]*-\d{3}")
 GROUP_BULLET = re.compile(r"- \*\*\[(aiscb-[^\]]+)\] (.+?):\*\*")
@@ -80,7 +80,10 @@ def load_baseline_groups() -> dict[str, tuple[str, str]]:
 
     groups: dict[str, tuple[str, str]] = {}
     section = ""
-    for lineno, line in enumerate(BASELINE.read_text(encoding="utf-8").splitlines(), 1):
+    text = BASELINE.read_text(encoding="utf-8")
+    for module in sorted((BASELINE.parent / "modules").glob("*.md")):
+        text += "\n" + module.read_text(encoding="utf-8")
+    for lineno, line in enumerate(text.splitlines(), 1):
         if line.startswith("## "):
             section = line[3:].strip()
         bullet = GROUP_BULLET.match(line) if line.startswith("- **") else None
@@ -137,16 +140,20 @@ def check_agent_instructions() -> None:
     agents = AGENTS.read_text(encoding="utf-8")
     if AGENTS_BASELINE_REFERENCE not in agents or "read and follow" not in agents:
         problems.append("AGENTS.md must require agents to read and follow "
-                        "secure-coding-baseline.md")
+                        "baseline/aiscb-core.md")
+    if "baseline/catalog.json" not in agents or "scripts/repository_policy.py" not in agents:
+        problems.append("AGENTS.md must name the catalog and repository loader")
     if AGENTS_BASELINE_MARKER in agents:
-        problems.append("AGENTS.md must reference secure-coding-baseline.md instead of "
+        problems.append("AGENTS.md must reference baseline/aiscb-core.md instead of "
                         "embedding a generated baseline block")
 
     if not CLAUDE.is_file():
         problems.append(f"Claude instructions missing at {CLAUDE}")
         return
     imports = CLAUDE.read_text(encoding="utf-8").splitlines()
-    for expected in ("@AGENTS.md", "@secure-coding-baseline.md"):
+    if "@secure-coding-baseline.md" in imports:
+        problems.append("CLAUDE.md must not import generated complete output")
+    for expected in ("@AGENTS.md", "@baseline/aiscb-core.md"):
         if imports.count(expected) != 1:
             problems.append(f"CLAUDE.md must import {expected[1:]} exactly once")
 
@@ -222,7 +229,7 @@ def check_requirement_catalog(groups: dict[str, tuple[str, str]]) -> None:
             problems.append(f"catalog puts {requirement_id} in {section!r}, "
                             f"baseline has it in {expected_section!r}")
         source = fields.get("Normative source", "")
-        if source and ("secure-coding-baseline.md" not in source
+        if source and ("baseline/" not in source
                        or requirement_id not in source):
             problems.append(f"catalog entry {requirement_id} does not name its baseline rule group")
 

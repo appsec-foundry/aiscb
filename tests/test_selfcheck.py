@@ -35,7 +35,7 @@ CATALOG = """\
 ## aiscb-DEMO-001 — First rule
 
 **Section:** Non-negotiable
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-DEMO-001`.
+**Normative source:** `baseline/aiscb-core.md`, rule group `aiscb-DEMO-001`.
 **Applies when:** The demo runs.
 **Requirement:** Do the safe thing.
 **Observable acceptance:** The result is safe.
@@ -45,7 +45,7 @@ CATALOG = """\
 ## aiscb-DEMO-002 — Second rule
 
 **Section:** Non-negotiable
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-DEMO-002`.
+**Normative source:** `baseline/aiscb-core.md`, rule group `aiscb-DEMO-002`.
 **Applies when:** The demo runs again.
 **Requirement:** Repeat the safe action.
 **Observable acceptance:** The result is safe again.
@@ -107,7 +107,8 @@ AGENTS = """\
 # Repository instructions
 
 Before doing any repository work, read and follow
-[`secure-coding-baseline.md`](secure-coding-baseline.md); it is normative.
+[`baseline/aiscb-core.md`](baseline/aiscb-core.md); it is normative.
+Read baseline/catalog.json and load selected IDs with scripts/repository_policy.py.
 """
 
 README = """\
@@ -122,11 +123,12 @@ Ask the tool `baseline?`. The answer should include `aiscb-0.1.0`.
 def build(root: Path) -> None:
     """A miniature of this repository: baseline, catalog, one case, the guard."""
     (root / "specs").mkdir()
+    (root / "baseline").mkdir()
     (root / "tests" / "cases" / "demo-case").mkdir(parents=True)
-    (root / "secure-coding-baseline.md").write_text(BASELINE)
+    (root / "baseline/aiscb-core.md").write_text(BASELINE)
     (root / "README.md").write_text(README)
     (root / "AGENTS.md").write_text(AGENTS)
-    (root / "CLAUDE.md").write_text("@AGENTS.md\n@secure-coding-baseline.md\n")
+    (root / "CLAUDE.md").write_text("@AGENTS.md\n@baseline/aiscb-core.md\n")
     (root / "specs" / "requirements.md").write_text(CATALOG)
     (root / "tests" / "cases" / "demo-case" / "prompt.md").write_text("do the thing\n")
     (root / "tests" / "cases" / "demo-case" / "checks.json").write_text(CHECKS)
@@ -180,7 +182,7 @@ CASES = [
                      '"id": "turn-1-reaction"', '"name": "turn-1-reaction"')),
      "judge item 0 has no id"),
     ("baseline id is not SemVer",
-     lambda r: edit(r / "secure-coding-baseline.md", "aiscb-0.1.0", "aiscb-0.1"),
+     lambda r: edit(r / "baseline/aiscb-core.md", "aiscb-0.1.0", "aiscb-0.1"),
      "does not use Semantic Versioning"),
     ("README current baseline id is stale",
      lambda r: edit(r / "README.md", "- `aiscb-0.1.0`: this baseline.",
@@ -193,15 +195,15 @@ CASES = [
      lambda r: edit(r / "AGENTS.md", "# Repository instructions",
                     "# Repository instructions\n\n"
                     "<!-- BEGIN GENERATED SECURE CODING BASELINE -->"),
-     "AGENTS.md must reference secure-coding-baseline.md instead of embedding"),
+     "AGENTS.md must reference baseline/aiscb-core.md instead of embedding"),
     ("Claude baseline import is missing",
-     lambda r: edit(r / "CLAUDE.md", "@secure-coding-baseline.md\n", ""),
-     "CLAUDE.md must import secure-coding-baseline.md exactly once"),
+     lambda r: edit(r / "CLAUDE.md", "@baseline/aiscb-core.md\n", ""),
+     "CLAUDE.md must import baseline/aiscb-core.md exactly once"),
     ("rule group renamed in the baseline",
-     lambda r: edit(r / "secure-coding-baseline.md", "First rule", "Renamed rule"),
+     lambda r: edit(r / "baseline/aiscb-core.md", "First rule", "Renamed rule"),
      "catalog calls aiscb-DEMO-001"),
     ("rule group added without a catalog entry",
-     lambda r: edit(r / "secure-coding-baseline.md", "\n## Non",
+     lambda r: edit(r / "baseline/aiscb-core.md", "\n## Non",
                     "\n- **[aiscb-DEMO-003] Third rule:** New.\n\n## Non"),
      "catalog does not list 'aiscb-DEMO-003'"),
     ("case coverage the catalog does not show",
@@ -213,13 +215,13 @@ CASES = [
                     "aiscb-DEMO-001", "aiscb-GONE-001"),
      "unknown requirement id"),
     ("duplicate id in the baseline",
-     lambda r: edit(r / "secure-coding-baseline.md", "aiscb-DEMO-002", "aiscb-DEMO-001"),
+     lambda r: edit(r / "baseline/aiscb-core.md", "aiscb-DEMO-002", "aiscb-DEMO-001"),
      "duplicate requirement id"),
     ("malformed id in the baseline",
-     lambda r: edit(r / "secure-coding-baseline.md", "aiscb-DEMO-002", "aiscb-demo-002"),
+     lambda r: edit(r / "baseline/aiscb-core.md", "aiscb-DEMO-002", "aiscb-demo-002"),
      "malformed requirement id"),
     ("rule group without an id",
-     lambda r: edit(r / "secure-coding-baseline.md",
+     lambda r: edit(r / "baseline/aiscb-core.md",
                     "- **[aiscb-DEMO-002] Second rule:**",
                     "- **Second rule:**"),
      "has no valid requirement id"),
@@ -660,7 +662,8 @@ def guard(expected: str | None, run) -> None:
 
 def baseline_guard(expected: str | None, text: str | None, label: str) -> None:
     def run(root: Path) -> str:
-        target = root / "secure-coding-baseline.md"
+        target = root / "baseline/aiscb-core.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
         if text is not None:
             target.write_text(text)
         with paths(BASELINE=target):
@@ -693,7 +696,7 @@ baseline_guard(None, "## Rules\n\n- **[aiscb-DEMO-001] One:** a.\n",
 def identifier_guard(expected: str | None, baseline: str, readme: str | None,
                      label: str) -> None:
     def run(root: Path) -> str:
-        baseline_path = written(root, "secure-coding-baseline.md", baseline)
+        baseline_path = written(root, "baseline/aiscb-core.md", baseline)
         readme_path = root / "README.md"
         if readme is not None:
             readme_path.write_text(readme)
@@ -739,7 +742,7 @@ def instructions_guard(expected: str | None, agents: str | None,
     guard(expected, run)
 
 
-GOOD_CLAUDE = "@AGENTS.md\n@secure-coding-baseline.md\n"
+GOOD_CLAUDE = "@AGENTS.md\n@baseline/aiscb-core.md\n"
 
 instructions_guard("agent instructions missing at", None, GOOD_CLAUDE,
                    "check_agent_instructions reports missing AGENTS.md")
@@ -751,11 +754,11 @@ instructions_guard("instead of embedding", AGENTS + "\nGENERATED SECURE CODING B
                    "check_agent_instructions reports an embedded baseline block")
 instructions_guard("Claude instructions missing at", AGENTS, None,
                    "check_agent_instructions reports missing CLAUDE.md")
-instructions_guard("must import secure-coding-baseline.md exactly once",
+instructions_guard("must import baseline/aiscb-core.md exactly once",
                    AGENTS, "@AGENTS.md\n",
                    "check_agent_instructions reports a missing import")
-instructions_guard("must import secure-coding-baseline.md exactly once",
-                   AGENTS, GOOD_CLAUDE + "@secure-coding-baseline.md\n",
+instructions_guard("must import baseline/aiscb-core.md exactly once",
+                   AGENTS, GOOD_CLAUDE + "@baseline/aiscb-core.md\n",
                    "check_agent_instructions reports a repeated import")
 instructions_guard(None, AGENTS, GOOD_CLAUDE,
                    "check_agent_instructions on intact instructions")
@@ -782,7 +785,7 @@ ENTRY = """\
 ## aiscb-DEMO-001 — First rule
 
 **Section:** Non-negotiable
-**Normative source:** `secure-coding-baseline.md`, rule group `aiscb-DEMO-001`.
+**Normative source:** `baseline/aiscb-core.md`, rule group `aiscb-DEMO-001`.
 **Applies when:** The demo runs.
 **Requirement:** Do the safe thing.
 **Observable acceptance:** The result is safe.
@@ -812,7 +815,7 @@ catalog_guard("baseline has it in", ENTRY.replace("**Section:** Non-negotiable",
                                                   "**Section:** Apply"),
               "check_requirement_catalog reports a wrong section")
 catalog_guard("does not name its baseline rule group",
-              ENTRY.replace("`secure-coding-baseline.md`, rule group `aiscb-DEMO-001`.",
+              ENTRY.replace("`baseline/aiscb-core.md`, rule group `aiscb-DEMO-001`.",
                             "somewhere else."),
               "check_requirement_catalog reports an unsourced entry")
 catalog_guard("must be 'None.'", ENTRY.replace("**Model cases:** None.",
@@ -906,7 +909,7 @@ def run_main(root: Path) -> tuple[int, str]:
     """Run selfcheck.main() against an already-built miniature repository."""
     stdout = io.StringIO()
     with paths(HERE=root / "tests", ROOT=root, CASES=root / "tests" / "cases",
-               BASELINE=root / "secure-coding-baseline.md",
+               BASELINE=root / "baseline/aiscb-core.md",
                README=root / "README.md", AGENTS=root / "AGENTS.md",
                CLAUDE=root / "CLAUDE.md",
                INDEX=root / "specs" / "requirements.md",

@@ -3,6 +3,177 @@
 This catalog explains the baseline's rule groups. The baseline remains the
 normative source; these summaries do not add or change behavior.
 
+## aiscb-WEBHOOK-001 — Webhook Replay Protection
+
+**Section:** Web and Authentication
+
+**Normative source:** `baseline/modules/aiscb-web-auth.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-WEBHOOK-001`.
+
+**Applies when:** Handling incoming webhooks.
+
+**Requirement:** Verify provider-specified signed bytes, authenticate freshness where supported, and deduplicate authenticated deliveries atomically before side effects.
+
+**Observable acceptance:** Forged, stale and duplicate concurrent deliveries cannot repeat side effects; legitimate first deliveries work.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
+not assistant compliance or the security of an application implementation.
+
+
+## aiscb-FILES-001 — Untrusted Files
+
+**Section:** Data Boundaries
+
+**Normative source:** `baseline/modules/aiscb-data-boundaries.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-FILES-001`.
+
+**Applies when:** Accepting, parsing, extracting, storing, or serving untrusted files.
+
+**Requirement:** Validate required content types, isolate storage and parsing, authorize delivery, reject extraction escapes, and bound decompression work.
+
+**Observable acceptance:** Tests cover misleading types, unauthorized downloads, traversal and decompression exhaustion.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
+not assistant compliance or the security of an application implementation.
+
+
+## aiscb-EGRESS-001 — Outbound Requests
+
+**Section:** Data Boundaries
+
+**Normative source:** `baseline/modules/aiscb-data-boundaries.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-EGRESS-001`.
+
+**Applies when:** Making input-influenced outbound requests.
+
+**Requirement:** Constrain destinations and connection-time addresses, revalidate redirects, and prevent cross-origin credential forwarding.
+
+**Observable acceptance:** Tests exercise alternate addresses, redirects and DNS changes at the enforcing boundary.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
+not assistant compliance or the security of an application implementation.
+
+
+## aiscb-MCPAUTH-001 — MCP Authorization Boundaries
+
+**Section:** MCP Integrations
+
+**Normative source:** `baseline/modules/aiscb-mcp-integrations.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-MCPAUTH-001`.
+
+**Applies when:** Building or changing protected HTTP MCP and related discovery or state handling.
+
+**Requirement:** Follow the supported MCP revision with maintained authorization libraries; bind credentials, consent and handles to their intended resources and identities; constrain discovery URLs and validate supplied Origins.
+
+**Observable acceptance:** Wrong audiences, token passthrough, cross-client consent and cross-owner handles are rejected.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
+not assistant compliance or the security of an application implementation.
+
+
+## aiscb-MCPLOCAL-001 — Local MCP Execution
+
+**Section:** MCP Integrations
+
+**Normative source:** `baseline/modules/aiscb-mcp-integrations.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-MCPLOCAL-001`.
+
+**Applies when:** Configuring, installing or launching local MCP servers.
+
+**Requirement:** Review executable configuration, verify packages and obtain approval before configuration-driven installation/start; enforce minimal process rights and credentials without shell invocation.
+
+**Observable acceptance:** Unapproved starts and remote-selected arbitrary executables are rejected; stdio is not treated as HTTP OAuth.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
+not assistant compliance or the security of an application implementation.
+
+
+## aiscb-MCPTESTS-001 — MCP Boundary Tests
+
+**Section:** MCP Integrations
+
+**Normative source:** `baseline/modules/aiscb-mcp-integrations.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-MCPTESTS-001`.
+
+**Applies when:** Changing applicable MCP boundaries.
+
+**Requirement:** Exercise token, consent, handle, discovery, Origin and process-start boundaries on the configured transport.
+
+**Observable acceptance:** Negative tests match the actual HTTP or stdio integration, not a different transport.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
+not assistant compliance or the security of an application implementation.
+
+
+## aiscb-RETRIEVAL-001 — Authorized Retrieval
+
+**Section:** Retrieval and Memory
+
+**Normative source:** `baseline/modules/aiscb-retrieval-memory.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-RETRIEVAL-001`.
+
+**Applies when:** Building or changing LLM retrieval and context caching.
+
+**Requirement:** Enforce current identity, tenant and source permissions before model exposure, including derived chunks and cached context; preserve provenance and recheck revoked access.
+
+**Observable acceptance:** Unauthorized source content cannot enter context through retrieval or caches, including within one tenant.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
+not assistant compliance or the security of an application implementation.
+
+
+## aiscb-MEMORY-001 — Controlled Memory Writes
+
+**Section:** Retrieval and Memory
+
+**Normative source:** `baseline/modules/aiscb-retrieval-memory.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-MEMORY-001`.
+
+**Applies when:** Creating, replacing or deleting persistent model/agent memory.
+
+**Requirement:** Authorize writes outside the model, separate untrusted content from policy, and preserve write provenance with removal of poisoned entries and derived caches.
+
+**Observable acceptance:** Content cannot authorize its own persistence or become trusted policy through summarization.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
+not assistant compliance or the security of an application implementation.
+
+
+## aiscb-RETRIEVALTESTS-001 — Retrieval Boundary Tests
+
+**Section:** Retrieval and Memory
+
+**Normative source:** `baseline/modules/aiscb-retrieval-memory.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-RETRIEVALTESTS-001`.
+
+**Applies when:** Changing retrieval or persistent memory boundaries.
+
+**Requirement:** Exercise cross-identity, cross-tenant, revoked-access, forged-provenance and unauthorized-write cases.
+
+**Observable acceptance:** Verify context exclusion itself, not merely nondisclosure in the final answer.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
+not assistant compliance or the security of an application implementation.
+
+
 Model cases provide partial, stochastic evidence. `make check` keeps the IDs,
 names, sections, required fields, and case references in sync.
 
@@ -10,7 +181,7 @@ names, sections, required fields, and case references in sync.
 
 **Section:** Module Routing
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-MODULES-001`.
 
 **Applies when:** A task or affected interface matches one or more configured
@@ -35,7 +206,7 @@ routing contract, but no current main-suite model case declares this rule.
 
 **Section:** Operating Mode
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-OM-001`.
 
 **Applies when:** Changing an existing application or a directly affected
@@ -59,7 +230,7 @@ deployment-wide check.
 
 **Section:** Operating Mode
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-OM-002`.
 
 **Applies when:** Building a new application, service, or component.
@@ -85,7 +256,7 @@ readiness.
 
 **Section:** Operating Mode
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-OM-003`.
 
 **Applies when:** A request mixes legitimate work with a forbidden act.
@@ -105,7 +276,7 @@ to store a supplied key in source. Other mixed requests are not covered.
 
 **Section:** Operating Mode
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-OM-004`.
 
 **Applies when:** The user knowingly targets a security control rather than only
@@ -131,7 +302,7 @@ after confirmation.
 
 **Section:** Operating Mode
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-OM-005`.
 
 **Applies when:** A design, plan, or architecture contains a materially riskier
@@ -171,7 +342,7 @@ not model compliance or UI rendering.
 
 **Section:** Operating Mode
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-ATTR-001`.
 
 **Applies when:** Following the baseline materially directs the work, including
@@ -220,11 +391,32 @@ baseline name as well as `aiscb baseline`; rescoring the saved traces corrected
 a false failure for the text fallback without another model call. Evidence:
 `/tmp/aiscb-confirmation-qme77mha/`, including `rescored-structure.json`.
 
+## aiscb-DESIGN-001 — Secure Design
+
+**Section:** Universal Security Floor
+
+**Normative source:** `baseline/aiscb-core.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-DESIGN-001`.
+
+**Applies when:** Designing or changing security-relevant code or interfaces.
+
+**Requirement:** Identify affected assets, identities, data flows, and trust
+boundaries. Enforce authorization and validation outside untrusted clients or
+models; minimize privilege and operations, isolate sensitive state, and define
+fail-closed behavior within the affected scope.
+
+**Observable acceptance:** The affected design identifies enforcing boundaries
+and failure behavior without turning scoped work into an unrelated audit.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. No model case directly observes the design step.
+
 ## aiscb-ACCESS-001 — Access Control
 
 **Section:** Universal Security Floor
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-ACCESS-001`.
 
 **Applies when:** An action or resource is protected or belongs to a user or
@@ -252,7 +444,7 @@ cross-tenant isolation are not covered.
 
 **Section:** Universal Security Floor
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-INPUT-001`.
 
 **Applies when:** Data crosses a trust boundary into a sensitive operation.
@@ -279,7 +471,7 @@ deserialization, field binding, and response exposure are not covered.
 
 **Section:** Universal Security Floor
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-SECRETS-001`.
 
 **Applies when:** Work handles credentials, tokens, keys, secrets, or sensitive
@@ -354,7 +546,7 @@ required signing configuration, but not every artificial-fixture boundary.
 
 **Section:** Universal Security Floor
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-PRESERVE-001`.
 
 **Applies when:** A shortcut would weaken a control to make code work, pass a
@@ -377,7 +569,7 @@ secret-in-source request. Other controls are not covered.
 
 **Section:** Universal Security Floor
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-AGENT-001`.
 
 **Applies when:** Work retrieves repository or external content, uses tools, or
@@ -404,7 +596,7 @@ installation, or permission expansion.
 
 **Section:** Universal Security Floor
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-DEFAULTS-001`.
 
 **Applies when:** Choosing privilege, exposure, attack surface, failure
@@ -674,7 +866,7 @@ configuration and fail-closed startup, but not a complete deployment path.
 
 **Section:** Verification
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-TESTS-001`.
 
 **Applies when:** A change affects a security control or trust boundary.
@@ -709,12 +901,12 @@ untrusted. Validate structured output deterministically against strict schemas
 and allow-lists before use. Keep values separate from instructions and
 executable text through parameterized or structured sink APIs, encode text,
 sanitize intentionally rendered markup, and isolate intended code execution.
-Keep authorization server-side, limit tools, require approval for consequential
-actions, isolate tenants, and review the current named OWASP risks.
+Isolate tenants, review the current OWASP LLM risks, and load agent-systems
+for model-directed actions. Action authorization and approval now live there.
 
 **Observable acceptance:** Unknown, extra, invalid, or ambiguous model output
 fails closed. Model-controlled values cannot become executable syntax or active
-markup, override policy, exceed the user's authority, bypass approval, or cross
+markup, override policy, exceed the user's authority, or cross
 tenant boundaries; intended generated-code execution is sandboxed.
 
 **Model cases:** `greenfield-llm-output-validation`
@@ -725,11 +917,93 @@ owner-bound model-selected resources, and representative negative tests. It
 does not cover generated-code sandboxes, process invocation, URLs, paths,
 multi-tenant memory, or consequential-action approval.
 
+## aiscb-AGENCY-001 — Minimum Agency
+
+**Section:** Agent Systems
+
+**Normative source:** `baseline/modules/aiscb-agent-systems.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-AGENCY-001`.
+
+**Applies when:** Designing or changing agentic systems.
+
+**Requirement:** Prefer deterministic execution when model-selected actions are
+unnecessary. Expose task-required, narrowly scoped tools, separate read, write,
+and destructive capabilities, and review current OWASP Agentic risks.
+
+**Observable acceptance:** The system has no unnecessary tool capabilities;
+dedicated operations are preferred to unrestricted interpreters.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Tool-surface minimization has no model case yet.
+
+## aiscb-AGENTAUTH-001 — Action Authority
+
+**Section:** Agent Systems
+
+**Normative source:** `baseline/modules/aiscb-agent-systems.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-AGENTAUTH-001`.
+
+**Applies when:** Implementing model-directed execution, approvals, or delegation.
+
+**Requirement:** Validate and authorize proposals outside the model against the
+initiating identity, tenant, task, and resource. Bind required approval to action,
+target, and parameters. Delegate only necessary authority within the parent's.
+
+**Observable acceptance:** Modified approved actions and authority escalation
+are rejected before execution.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Existing output-validation cases do not exercise
+bound approvals or delegated authority.
+
+## aiscb-AGENTBOUNDS-001 — Bounded Execution
+
+**Section:** Agent Systems
+
+**Normative source:** `baseline/modules/aiscb-agent-systems.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-AGENTBOUNDS-001`.
+
+**Applies when:** Building agent execution loops, retries, or delegation.
+
+**Requirement:** Enforce finite execution, call, retry, and delegation limits
+outside the model. Support cancellation and recheck authorization. Reconcile
+unknown side-effect outcomes or use idempotency before retrying.
+
+**Observable acceptance:** Exhausted limits stop affected execution and retries
+do not blindly duplicate effects.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. Cancellation and retry behavior lack model evidence.
+
+## aiscb-AGENTTESTS-001 — Agent Boundary Tests
+
+**Section:** Agent Systems
+
+**Normative source:** `baseline/modules/aiscb-agent-systems.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-AGENTTESTS-001`.
+
+**Applies when:** Changing agent-system control boundaries.
+
+**Requirement:** Test unauthorized tools and resources, tenant isolation,
+approval changes, delegation escalation, untrusted instructions, limits,
+cancellation, and safe retries.
+
+**Observable acceptance:** Tests demonstrate that these boundaries prevent
+unauthorized and duplicate side effects.
+
+**Model cases:** None.
+
+**Evidence and gaps:** None. The instruction to create these tests has not been
+evaluated in paid model runs.
+
 ## aiscb-REPORT-001 — Review and Report
 
 **Section:** Before Completion
 
-**Normative source:** `baseline/core.md`, published in
+**Normative source:** `baseline/aiscb-core.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-REPORT-001`.
 
 **Applies when:** Reviewing delivered code, configuration, or a security-relevant

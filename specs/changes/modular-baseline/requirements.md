@@ -8,7 +8,7 @@ Provide a compact normative core that carries release identity, module routing,
 scope behavior, the universal security floor, decision behavior, and completion
 review needed even when no module is selected.
 
-Acceptance: `baseline/core.md` is independently readable, declares
+Acceptance: `baseline/aiscb-core.md` is independently readable, declares
 `aiscb-0.1.16`, names the module-selection mechanism, and its measured token
 count is lower than the complete eager artifact.
 

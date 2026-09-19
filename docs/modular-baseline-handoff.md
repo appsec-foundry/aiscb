@@ -5,29 +5,33 @@ This document captures the state and design reasoning on branch
 continue the work without reconstructing the approach from the diff.
 
 The branch is an implementation candidate, not a published release. Read and
-follow `secure-coding-baseline.md` and the repository `AGENTS.md` before making
+follow the core, catalog and loader instructions in repository `AGENTS.md` before making
 changes. The approved active change specification is
-`specs/changes/modular-baseline/`.
+`specs/changes/modular-baseline/`, extended by the approved
+`specs/changes/agent-systems/` and `specs/changes/mcp-retrieval/`.
 
 ## Current model
 
-There are two delivery profiles built from one normative source set:
+There is one modular baseline and an optional generated complete output:
 
 ```text
-baseline/core.md                 always-on normative core
+baseline/aiscb-core.md                 always-on normative core
 baseline/catalog.json            verified module inventory and triggers
 baseline/modules/*.md            thematic normative modules
              |
-             | scripts/build_baseline.py --write
+             | make build-full-baseline
              v
-secure-coding-baseline.md        tracked eager artifact: core + every module
+dist/dev/aiscb-VERSION/secure-coding-baseline.md   untracked complete artifact
 ```
 
-The root `secure-coding-baseline.md` is deliberately still committed. Existing
-installers and clients have no reliable generic module loader, so they continue
-to receive one complete file. It is not a second hand-maintained baseline and
+Complete output is no longer committed. Repository instructions read the core
+and catalog and use `scripts/repository_policy.py` for verified source loading.
+Local projects install the bounded loader; clients without it receive complete output.
+It is not a second hand-maintained baseline and
 must not be edited directly. `scripts/build_baseline.py --check`, included by
-`make check`, rejects any difference between it and the modular sources.
+`make check`, rejects stale metadata and stale existing development output;
+the check then builds missing development output for tests. Release staging and
+signature verification use the separate commands in `docs/releasing.md`.
 
 The modular profile always loads the core and exposes the catalog's semantic
 triggers at startup. Before affected design or code, `aiscb-MODULES-001`
@@ -44,6 +48,7 @@ the completion of any task:
 - release identity and module routing;
 - existing, greenfield, mixed-request, override, and design-decision behavior;
 - attribution;
+- scoped secure design based on assets, identities, data flows, and trust boundaries;
 - the universal floor for authorization, untrusted input, secrets, preserving
   controls, agentic input, and secure defaults;
 - generic security-test behavior;
@@ -60,16 +65,20 @@ Current `o200k_base` measurements are:
 
 | Artifact | Bytes | Tokens |
 | --- | ---: | ---: |
-| Always-on core | 7,432 | 1,500 |
-| `aiscb:web-auth` | 4,647 | 944 |
+| Always-on core | 7,897 | 1,593 |
+| `aiscb:web-auth` | 5,074 | 1,017 |
 | `aiscb:secrets-bootstrap` | 1,885 | 349 |
 | `aiscb:deployment-runtime` | 1,562 | 294 |
-| `aiscb:llm-features` | 1,212 | 236 |
+| `aiscb:llm-features` | 1,123 | 223 |
+| `aiscb:agent-systems` | 2,050 | 398 |
 | `aiscb:supply-chain` | 1,155 | 221 |
-| `aiscb:data-boundaries` | 631 | 139 |
-| Complete eager artifact | 18,530 | 3,683 |
+| `aiscb:data-boundaries` | 1,726 | 346 |
+| `aiscb:retrieval-memory` | 1,547 | 301 |
+| `aiscb:mcp-integrations` | 2,206 | 408 |
+| Complete eager artifact | 26,234 | 5,150 |
 
-The core is exactly at its provisional 1,500-token budget. Further reduction
+The core exceeds its provisional 1,500-token target by 93 tokens; complete
+output exceeds its 4,100-token target by 1,050. Further reduction
 should be evaluated against lost always-on behavior, not treated as an
 automatic goal. In particular, do not shorten the Security-note contract merely
 to improve the headline number.
@@ -85,7 +94,7 @@ The source trees may remain separated for ownership, but a built organization
 release presents one logical and physical module plane:
 
 ```text
-core.md
+aiscb-core.md
 overlay.md
 catalog.json                    merged discovery catalog
 modules/
@@ -96,10 +105,11 @@ modules/
   ...
 ```
 
-Logical IDs stay namespaced (`aiscb:web-auth`, `acme:authentication`) so
-provenance and collision handling remain explicit. The organization-bundle
-example generates the same combined skill surface for Claude Code, Codex, and
-Copilot and tests that official and organization modules share it. Blueprints
+Logical IDs stay namespaced (`aiscb:web-auth`, `acme:authentication`). The
+builder now rejects namespace and output-path collisions and applies the
+main validator to official modules. The project installer wires the shared
+catalog and a bounded Python loader directly into each tool's instructions;
+generated skill adapters remain available for managed integrations. Blueprints
 are dependencies of organization modules, not independently selected policy.
 
 Organization modules may add requirements or narrow named aiscb rules. They
@@ -114,16 +124,30 @@ work.
 - The organization-bundle example consumes the modular source tree, verifies
   core and module hashes, merges the catalogs, creates a flat release, and
   generates tool adapters and skills.
-- The standard repository installer still distributes the eager artifact. It
-  does not yet offer a generic modular installation mode.
-- There is no dedicated `make build-baseline` convenience target. The current
-  write command is `python3 scripts/build_baseline.py --write`; `make check`
-  validates without rewriting.
+- `scripts/install.py --modular --into PROJECT` installs a verified local
+  snapshot and wires Claude Code, Codex, or Copilot instructions. Organization
+  packages use the same command with `--organization` and a trusted manifest
+  digest. Status, update-by-reinstallation, and guarded uninstall are available.
+- `scripts/policy_loader.py` accepts only catalog IDs, verifies the pinned
+  package, resolves dependencies, and emits complete bodies and blueprints.
+- `aiscb:agent-systems` depends on `aiscb:llm-features`; it covers minimum
+  agency, action authority, bounded execution, and agent-boundary tests.
+- `aiscb:retrieval-memory` depends on `aiscb:llm-features`;
+  `aiscb:mcp-integrations` depends on `aiscb:data-boundaries`, not agent-systems.
+  File/SSRF mechanisms stay in data-boundaries and webhook replay in web-auth.
+- `--complete` installs all content through the same local adapter; updates
+  refresh every already-managed tool and reject drift before activation.
+- `make build-full-baseline` regenerates the complete artifact and source hashes.
+- The gateway example emits complete policy because it has no remote loader.
 
-The last two items are deliberate open product decisions, not hidden behavior.
-A generic modular installer has to define supported client discovery and
-loading mechanisms; merely copying `core.md` and module files would create a
-false assurance that modules are active.
+The integration contract is documented in `docs/local-policy-installation.md`.
+The 2026 OWASP LLM and Agentic comparison, including remaining content gaps,
+is in `docs/owasp-llm-agentic-review.md`. It adds no hidden normative rules.
+Modular mode remains an explicit branch trial until actual client routing is
+evaluated. Neither file installation nor loader tests prove model compliance.
+The signed remote bundle still distributes complete output, with no runtime
+fetching of modular helpers. Extending that signed distribution is separate
+maintainer release work.
 
 ## Verification state
 
@@ -133,35 +157,34 @@ These checks pass on the branch:
 python3 scripts/build_baseline.py --check
 python3 tests/selfcheck.py
 python3 scripts/test_build_baseline.py
+python3 scripts/test_install_policy.py
 python3 examples/organization-bundle/test_bundle.py
 ```
 
-`make check` reaches the install/release tests after all preceding checks pass.
-Five release tests then fail for one expected reason: `bundle.json` describes
-the changed 0.1.16 bundled files, while `bundle.json.sig`, `setup.sh`, and the
-README Quick start still authenticate the published 0.1.15 bundle. The private
-release key must never enter the repository, CI, or an assistant's context, so
-the branch intentionally stops here.
+The migration separates development checks from the release gate. No root
+manifest or signature claims that this working tree is published. Historical
+bootstrap fixtures keep the published 0.1.15 path covered. New bundles are
+staged under dist/aiscb-VERSION/bundle-N and must pass `make check-release`
+after maintainer signing. Actual-client and publication checks remain pending.
 
-No paid model suite was run. This refactor touches all rule domains, making the
-honest affected set the full suite (currently 162 agent turns plus judge calls).
-Case metadata was updated and deterministic checks pass, but that is not model
-evidence.
+No paid model suite was run. New design and agent rules are explicitly recorded
+as lacking model evidence in the requirements catalog. Loader and installer
+tests cover dependency order, corrupt content, unknown IDs, cycles, namespace
+collisions, preservation, uninstall, and organization integration; these are
+not real-client routing or security-behavior evidence.
 
 ## Safe continuation order
 
 1. Review the core/module boundary and the module triggers, with particular
    attention to false negatives caused by semantic selection.
-2. Decide whether 1,500 always-on tokens is the intended budget and whether the
-   standard installer should remain eager-only or gain an explicit modular
-   mode for named supported clients.
-3. If sources change, run `python3 scripts/build_baseline.py --write`, recompute
+2. Evaluate actual client routing and context budgets before making modular
+   loading the default or expanding the signed remote distribution.
+3. If sources change, run `make build-full-baseline`, recompute
    the `o200k_base` measurements, update README, and run deterministic checks.
-4. When the content is approved, a maintainer follows `docs/releasing.md` with
-   the private key: sign the bundle, commit and verify it, create a new immutable
-   bundle tag, then update `setup.sh` hashes and the complete README Quick start
-   in the documented two-commit sequence.
-5. Run `make check` after signing/bootstrap updates. Run the model suite only
+4. When the version is explicitly approved, follow `docs/releasing.md`: stage,
+   sign and verify exact assets, publish an immutable release, then transition
+   the bootstrap and complete README Quick start. Do not commit dist files.
+5. Run `make check` and the separate signed release gate. Run the model suite only
    with an explicit decision to spend that budget and record the evidence.
 6. Mark the remaining change task complete and archive the change specification
    only after the release checks pass.
