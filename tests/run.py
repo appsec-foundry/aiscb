@@ -251,9 +251,9 @@ def preflight_problem(probe: dict) -> str:
 # Cases
 # --------------------------------------------------------------------------
 
-def load_cases(names: list[str] | None) -> list[dict]:
+def load_cases(names: list[str] | None, cases_dir: Path | None = None) -> list[dict]:
     cases = []
-    for d in sorted(CASES_DIR.iterdir()):
+    for d in sorted((cases_dir or CASES_DIR).iterdir()):
         if not d.is_dir() or d.name.startswith(".") or (names and d.name not in names):
             continue
         turns = [(d / "prompt.md").read_text(encoding="utf-8").strip()]
@@ -923,6 +923,9 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--cases", help="comma-separated case names (default: all)")
+    p.add_argument("--cases-dir", type=Path,
+                   help="directory holding the cases; default tests/cases, "
+                        "tests/demo holds the presentation prompts")
     p.add_argument("--requirements",
                    help="comma-separated rule groups, e.g. aiscb-REPORT-001; "
                         "runs the cases that declare them")
@@ -955,7 +958,10 @@ def main() -> int:
             sys.exit(f"unknown tool: {t}")
         if not shutil.which(t):
             sys.exit(f"{t} CLI not found on PATH")
-    cases = load_cases([c.strip() for c in args.cases.split(",")] if args.cases else None)
+    if args.cases_dir and not args.cases_dir.is_dir():
+        sys.exit(f"cases directory not found: {args.cases_dir}")
+    cases = load_cases([c.strip() for c in args.cases.split(",")] if args.cases else None,
+                       args.cases_dir)
     if args.requirements:
         cases = filter_by_requirements(cases, args.requirements)
     if not cases:
