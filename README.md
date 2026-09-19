@@ -140,15 +140,16 @@ The crypto example shows Claude Code with `aiscb-0.1.14` in the baseline session
 
 ## Structure and context budget
 
-The assistant always reads the [core](baseline/aiscb-core.md): how to scope
-changes, protect secrets, handle security decisions, and review its work.
+The assistant always reads the [core](baseline/aiscb-core.md): secure design
+and coding rules, how to scope work and handle security decisions, and what
+to test, review, and report.
 It loads modules as the task requires—for example, `web-auth-crypto` for a login.
 The [catalog](baseline/catalog.json) lists when each module applies.
 An organization can add rules through an overlay, but cannot relax the baseline.
 
 | Component | Covers | Bytes | Tokens (`o200k_base`) |
 | --- | --- | ---: | ---: |
-| aiscb core (always loaded) | Keep work within scope, load relevant modules, protect secrets, and review changes | 7,780 | 1,558 |
+| aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review—including when a Security note is required | 7,780 | 1,558 |
 | `aiscb:web-auth-crypto` | Protect web content, authentication, webhooks, and cryptography | 5,189 | 1,040 |
 | `aiscb:secrets-initialization` | Set up credentials and keys without shipping working defaults | 1,900 | 351 |
 | `aiscb:deployment-environments` | Restrict CI and container privileges; separate development from production | 1,659 | 311 |
