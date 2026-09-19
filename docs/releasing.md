@@ -129,11 +129,11 @@ closed and point to the Quick start. Users must run the updated verified Quick
 start once to migrate. Do not promise an automatic update from 0.1.15.
 A transitional Git-tree release would be a separate maintainer decision.
 
-The signed bundle remains the complete compatibility distribution. It does not
-include local modular helpers. `--modular` and `--complete` project adapters
-require a reviewed checkout; a downloaded three-file bundle must refuse these
-options, never fetch helper code. Signing complete assets does not publish a
-remote modular installer.
+Starting with 0.1.17, the signed installer embeds the modular sources and helpers
+and defaults to modular project and user installation. It never fetches helper
+code. The complete Markdown remains a compatibility asset for explicit complete
+mode. Historical three-file bundles without embedded helpers cannot install
+modular policy; users need the newly signed installer or a reviewed checkout.
 
 ## Organization rollout and client acceptance
 

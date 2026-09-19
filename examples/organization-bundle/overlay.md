@@ -2,7 +2,7 @@
 
 # Acme Secure Coding Overlay
 
-`baseline-id: acme-sec-1.0.0`. Extends aiscb (`aiscb-0.1.16`). On `aiscb?`,
+`baseline-id: acme-sec-1.0.0`. Extends aiscb (`aiscb-0.1.17`). On `aiscb?`,
 report both IDs and their source files. Identify injected content as
 gateway-supplied; do not claim to have read a local file for it.
 

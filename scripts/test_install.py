@@ -1130,7 +1130,7 @@ with tempfile.TemporaryDirectory() as tmp:
                   "manage" in line for line in migration_output)
           and any(str(source) in line for line in migration_output)
           and any(prompt.startswith(
-              "Switch to a managed copy of aiscb-0.1.16, so updates reach it?")
+              "Switch to a managed copy of aiscb-0.1.17, so updates reach it?")
               for prompt in prompts),
           f"output={migration_output!r}, prompts={prompts!r}")
 
