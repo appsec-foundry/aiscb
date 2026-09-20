@@ -71,5 +71,6 @@ in each actual CLI/IDE used: core, organization overlay and discovery initially;
 matching aiscb and organization modules only when needed. Also test refused
 loader execution and damaged package files before rollout.
 
-The upgrade command is available in the development checkout. It is not part
-of the already published `0.1.17` installer.
+The upgrade command is available in the development checkout and in the
+`0.1.18` installer. Installations from an earlier installer get it by running
+the current Quick start once.
