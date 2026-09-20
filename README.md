@@ -52,7 +52,9 @@ plugin.
 
 ## Update
 
-If enabled, the optional session notice links here when a newer release is available. Update a user-level installation from a terminal, outside the agent session:
+If enabled, the optional session notice reports newer releases. In Claude Code, a compatible enabled Marketplace installation of `appsec-advisor` provides `/appsec-advisor:update-baseline`. It uses a verified AISCB release installer and preserves the existing scope, tools, and loading mode. The installed plugin must advertise support for this integration; an older, disabled, missing, or ambiguous plugin retains this documentation link. Development `--plugin-dir` sessions retain the link.
+
+Without that integration, update a user-level installation from a terminal, outside the agent session:
 
 ```bash
 python3 ~/.aiscb/install.py --update

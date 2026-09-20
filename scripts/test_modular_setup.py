@@ -70,6 +70,60 @@ class ModularSetupTests(unittest.TestCase):
         self.assertEqual(self.cli("--status").returncode, 0)
         self.assertEqual(self.cli("--uninstall").returncode, 0)
 
+    def test_refresh_preserves_scope_tools_mode_and_unrelated_prose(self):
+        for user in (False, True):
+            for complete in (False, True):
+                with self.subTest(user=user, complete=complete):
+                    scope = ["--user"] if user else ["--into", str(self.project)]
+                    result = self.cli("claude", *scope)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    if complete:
+                        result = self.cli("claude", *scope, "--complete")
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                    storage, points = policy_setup.layout(install, self.home, self.project, user)
+                    carrier = Path(points["claude"]) if user else storage / points["claude"]
+                    carrier.write_text("# Team instructions\n" + carrier.read_text())
+                    before = carrier.read_bytes()
+                    result = self.cli("--refresh-installed", *scope, "--dry-run")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(before, carrier.read_bytes())
+                    result = self.cli("--refresh-installed", *scope)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(before, carrier.read_bytes())
+                    record = install_policy.installation_record(storage, points)
+                    self.assertEqual(set(record["entries"]), {points["claude"]})
+                    self.assertEqual(record["modular"], not complete)
+                    self.assertEqual(self.cli("--uninstall", *scope).returncode, 0)
+                    carrier.unlink()
+
+    def test_refresh_refuses_missing_modified_or_expanded_installation(self):
+        self.assertNotEqual(self.cli("--refresh-installed").returncode, 0)
+        self.assertEqual(self.cli("claude", "--into", str(self.project)).returncode, 0)
+        for args in (("codex",), ("--migrate",), ("--complete",), ("--offline",),
+                     ("--update",), ("--user", "--into", str(self.project))):
+            self.assertNotEqual(self.cli("--refresh-installed", *args).returncode, 0)
+        carrier = self.project / "CLAUDE.md"
+        carrier.write_text(carrier.read_text().replace("Apply", "Changed", 1) + "\n")
+        carrier.write_text(carrier.read_text().replace("AI Secure Coding Baseline", "Modified policy", 1))
+        before = carrier.read_bytes()
+        self.assertNotEqual(self.cli("--refresh-installed").returncode, 0)
+        self.assertEqual(before, carrier.read_bytes())
+
+    def test_refresh_refuses_a_downgrade_before_any_write(self):
+        from types import SimpleNamespace
+
+        self.assertEqual(self.cli("claude", "--into", str(self.project)).returncode, 0)
+        carrier = self.project / "CLAUDE.md"
+        before = carrier.read_bytes()
+        older = install.parse_baseline(
+            install.bundled_baseline().content.replace(build_baseline.BASELINE_ID.encode(), b"aiscb-0.0.1"),
+            "test older release")
+        args = SimpleNamespace(refresh_installed=True, user=False, into=self.project)
+        with patch.object(install, "bundled_baseline", return_value=older):
+            with self.assertRaisesRegex(ValueError, "downgrade"):
+                policy_setup.run(install, args, home=self.home)
+        self.assertEqual(before, carrier.read_bytes())
+
     def test_user_all_clients_and_installed_updater(self):
         result = self.cli("--user")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -105,6 +159,29 @@ class ModularSetupTests(unittest.TestCase):
         install.record_installation(registry, found, trusted=True)
         install.save_registry(install.registry_path(self.home), registry)
         return source
+
+    def test_refresh_legacy_project_keeps_complete_loading(self):
+        source = self.legacy(False)
+        before = source.read_bytes()
+        result = self.cli("--refresh-installed", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(source.read_bytes(), before)
+        result = self.cli("--refresh-installed")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(source.read_bytes(), install.bundled_baseline().content)
+        self.assertFalse((self.project / ".aiscb/installation.json").exists())
+
+    def test_refresh_legacy_user_keeps_preferences_and_rejects_edits(self):
+        source = self.legacy(True)
+        result = self.cli("--refresh-installed", "--user")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(source.read_bytes(), install.bundled_baseline().content)
+        self.assertIn("Keep my preferences.", (self.home / ".claude/CLAUDE.md").read_text())
+        source.write_bytes(source.read_bytes() + b"\nModified rules.\n")
+        before = source.read_bytes()
+        result = self.cli("--refresh-installed", "--user")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(source.read_bytes(), before)
 
     def test_migrate_complete_project_all_clients(self):
         source = self.legacy(False)

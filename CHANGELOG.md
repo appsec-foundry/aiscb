@@ -5,6 +5,8 @@ shows its publication date. Later installer updates are listed separately.
 
 ## Unreleased
 
+- Let compatible appsec-advisor installations refresh recorded AISCB installations through the signed installer, and point Claude Code update notices at the enabled plugin's update skill.
+
 - Add a no-option organization upgrade command that prepares a separate draft,
   preserves custom rules, and reports unresolved legacy loading instructions.
   Organization packages can now contain only an always-on overlay, with no

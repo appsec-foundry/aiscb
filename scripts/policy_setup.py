@@ -192,6 +192,33 @@ def user_updater(legacy, home):
 def run(legacy, args, *, home=None, input_fn=input, output=print):
     home = (home or Path.home()).resolve()
     root = (args.into or Path.cwd()).resolve()
+    if getattr(args, "refresh_installed", False):
+        if args.user and args.into:
+            raise ValueError("--user and --into cannot be combined")
+        storage, points = layout(legacy, home, root, args.user)
+        if not (storage / ".aiscb/installation.json").exists():
+            return refresh_complete(legacy, args, home, root, output)
+        policy.status(storage, points)
+        record = policy.installation_record(storage, points)
+        package, contents, _ = loader.load_package(
+            storage / ".aiscb/releases" / record["digest"], record["digest"])
+        if package["overlay"] is not None:
+            raise ValueError("organization installations must use their organization updater")
+        current = legacy.parse_baseline(contents[package["core"]].encode(), "installed")
+        available = legacy.bundled_baseline()
+        if not current.is_official or not available.is_official or available.version < current.version:
+            raise ValueError("refresh requires the same official baseline without a downgrade")
+        args.tools = [tool for tool, rel in points.items()
+                      if rel in record["entries"] and tool in legacy.TOOLS]
+        if not args.tools:
+            raise ValueError("no supported installed tools")
+        args.complete = not record["modular"]
+        if getattr(args, "dry_run", False):
+            if args.user:
+                user_updater(legacy, home)
+            output(f"Would refresh {current.baseline_id} to {available.baseline_id} "
+                   f"for {', '.join(args.tools)} in {storage}; mode preserved.")
+            return 0
     if args.interactive:
         output("aiscb setup: core and discovery first; modules load only when needed.")
         scope = input_fn("Install for [u]ser or [p]roject? [u] ").strip().lower() or "u"
@@ -273,4 +300,37 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
             policy.atomic(path, content)
         command = shlex.join(["python3", str(destination / "install.py"), "--update"])
         output(f"Signed update entry point: {command}")
+    return 0
+
+
+def refresh_complete(legacy, args, home, root, output):
+    """Refresh only a recorded legacy scope, retaining its existing loading hooks."""
+    registry_path = legacy.registry_path(home)
+    registry, writable, _ = legacy.load_registry(registry_path)
+    if not writable:
+        raise ValueError("installation registry is not writable")
+    if args.user:
+        items = [item for item in legacy.scan_user(home, registry.get("user"))
+                 if item.kind == "user"]
+    else:
+        entry = registry.get("projects", {}).get(str(root))
+        item = legacy.scan_project(root, entry)
+        items = [item] if item is not None else []
+    if len(items) != 1:
+        raise ValueError("no unique recorded installation; use the terminal updater")
+    item = items[0]
+    available = legacy.bundled_baseline()
+    if (not item.tools or legacy._lacks_install_record(item)
+            or not item.baseline.is_official or not available.is_official
+            or available.version < item.baseline.version):
+        raise ValueError("modified, unrecorded, foreign, or newer installation; refresh refused")
+    if args.dry_run:
+        output(f"Would refresh {item.baseline.baseline_id} to {available.baseline_id} "
+               f"for {', '.join(item.tools)} in {item.root}; complete mode preserved.")
+        return 0
+    changed, incomplete = legacy._apply_update(item, available, registry, output)
+    if changed:
+        legacy.save_registry(registry_path, registry)
+    if incomplete:
+        raise ValueError("some managed artifacts could not be refreshed; inspect this installation")
     return 0

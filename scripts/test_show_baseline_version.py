@@ -350,6 +350,56 @@ def check_script_at(installed: Path, failures: list[str]) -> None:
             failures.append(f"installed script {argv}: unusable output: {exc}")
 
 
+def check_update_provider(failures):
+    """A cached old/disabled/foreign plugin must never advertise the skill."""
+    for folder in ("marketplace-one/revision-a", "another-catalog/revision-b"):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            project = home / "workspace"
+            project.mkdir()
+            config = home / ".claude"
+            root = config / "plugins/cache" / folder
+            files = {
+                home / ".aiscb/installation.json": {},
+                config / "settings.json": {"enabledPlugins": {"appsec-advisor@example": True}},
+                config / "plugins/installed_plugins.json": {"version": 2, "plugins": {
+                    "appsec-advisor@example": [{"scope": "user", "installPath": str(root)}]}},
+                root / ".claude-plugin/plugin.json": {"name": "appsec-advisor"},
+                root / "data/aiscb-update-provider.json": {
+                    "schema": 1, "skill": "/appsec-advisor:update-baseline",
+                    "installer_protocol": "aiscb-refresh-installed-v1"},
+            }
+            for path, value in files.items():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(value))
+            skill = root / "skills/update-baseline/SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text("Update skill")
+            with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(config)}):
+                if hook.update_guide(home, project, claude=True) != "/appsec-advisor:update-baseline":
+                    failures.append("compatible enabled provider was not offered")
+                if hook.update_guide(home, project) != hook.UPDATE_GUIDE:
+                    failures.append("Claude skill leaked into another client")
+                for path, invalid in (
+                    (root / "data/aiscb-update-provider.json", {}),
+                    (root / "data/aiscb-update-provider.json", {**files[root / "data/aiscb-update-provider.json"],
+                                                             "skill": "$(touch /tmp/never)"}),
+                    (root / ".claude-plugin/plugin.json", {"name": "another-plugin"}),
+                    (config / "settings.json", {"enabledPlugins": {"appsec-advisor@example": False}}),
+                    (config / "plugins/installed_plugins.json", {"version": 2, "plugins": []}),
+                ):
+                    original = path.read_bytes()
+                    path.write_text(json.dumps(invalid))
+                    if hook.update_guide(home, project, claude=True) != hook.UPDATE_GUIDE:
+                        failures.append(f"invalid provider accepted: {path.name}")
+                    path.write_bytes(original)
+                local = project / ".claude/settings.local.json"
+                local.parent.mkdir()
+                local.write_text(json.dumps({"enabledPlugins": {"appsec-advisor@example": False}}))
+                if hook.update_guide(home, project, claude=True) != hook.UPDATE_GUIDE:
+                    failures.append("project disable ignored")
+
+
 def main() -> int:
     failures: list[str] = []
     check_success(failures)
@@ -359,6 +409,7 @@ def main() -> int:
     check_background_refresh(failures)
     check_arguments(failures)
     check_installed_script(failures)
+    check_update_provider(failures)
 
     for line in failures:
         print(f"FAIL: {line}")

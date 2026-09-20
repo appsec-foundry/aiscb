@@ -32,6 +32,79 @@ BASELINE_ID_RE = re.compile(
 RELEASE_RE = re.compile(rf"(?P<name>[a-z][a-z0-9-]*)-(?P<version>{SEMVER_TEXT})")
 
 
+def read_provider_json(path: Path) -> dict:
+    """Read bounded display metadata; never execute plugin or workspace content."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("provider metadata is not a regular file")
+    with path.open("rb") as handle:
+        raw = handle.read(MAX_REGISTRY_BYTES + 1)
+    if len(raw) > MAX_REGISTRY_BYTES:
+        raise ValueError("provider metadata too large")
+    value = json.loads(raw)
+    if not isinstance(value, dict):
+        raise ValueError("invalid provider metadata")
+    return value
+
+
+def update_guide(home: Path, cwd: Path, *, claude: bool = False) -> str:
+    """Prefer a compatible enabled Claude plugin; ambiguous state keeps the URL.
+
+    This is display-only discovery, never authorization to update. Development
+    --plugin-dir sessions without an installation record retain the URL.
+    """
+    if not claude:
+        return UPDATE_GUIDE
+    try:
+        config = Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude")
+        enabled = {}
+        for path in (config / "settings.json", cwd / ".claude/settings.json",
+                     cwd / ".claude/settings.local.json"):
+            if path.exists():
+                values = read_provider_json(path).get("enabledPlugins", {})
+                if not isinstance(values, dict):
+                    return UPDATE_GUIDE
+                enabled.update(values)
+        plugins = read_provider_json(config / "plugins/installed_plugins.json")
+        if plugins.get("version") != 2 or not isinstance(plugins.get("plugins"), dict):
+            return UPDATE_GUIDE
+        choices = []
+        for name, entries in plugins["plugins"].items():
+            if not name.startswith("appsec-advisor@") or enabled.get(name) is not True:
+                continue
+            if not isinstance(entries, list) or len(entries) > 64:
+                return UPDATE_GUIDE
+            for item in entries:
+                if not isinstance(item, dict):
+                    return UPDATE_GUIDE
+                scope = item.get("scope")
+                if scope == "user":
+                    priority = 0
+                elif scope in {"project", "local"} and item.get("projectPath") == str(cwd):
+                    priority = 2 if scope == "local" else 1
+                else:
+                    continue
+                choices.append((priority, item.get("installPath")))
+        if not choices:
+            return UPDATE_GUIDE
+        selected = [path for rank, path in choices if rank == max(c[0] for c in choices)]
+        if len(selected) != 1 or not isinstance(selected[0], str):
+            return UPDATE_GUIDE
+        root = Path(selected[0]).resolve(strict=True)
+        if not root.is_relative_to((config / "plugins/cache").resolve(strict=True)):
+            return UPDATE_GUIDE
+        capability = read_provider_json(root / "data/aiscb-update-provider.json")
+        if type(capability.get("schema")) is not int or capability != {"schema": 1, "skill": "/appsec-advisor:update-baseline",
+                          "installer_protocol": "aiscb-refresh-installed-v1"}:
+            return UPDATE_GUIDE
+        if read_provider_json(root / ".claude-plugin/plugin.json").get("name") != "appsec-advisor":
+            return UPDATE_GUIDE
+        if not (root / "skills/update-baseline/SKILL.md").is_file():
+            return UPDATE_GUIDE
+        return capability["skill"]
+    except (OSError, ValueError, TypeError, RuntimeError):
+        return UPDATE_GUIDE
+
+
 def baseline_path() -> Path:
     """Find the baseline beside the managed helper or one directory above it."""
     helper_dir = Path(__file__).resolve().parent
@@ -143,7 +216,7 @@ def refresh_in_background(checked: object, installer: Path) -> None:
     )
 
 
-def update_note(installed: str, helper_dir: Path, home: Path) -> str:
+def update_note(installed: str, helper_dir: Path, home: Path, *, claude: bool = False) -> str:
     """Describe the cached release check without claiming a check that never ran.
 
     A newer-release note is a pointer, never a command: it lands in an agent's
@@ -180,7 +253,7 @@ def update_note(installed: str, helper_dir: Path, home: Path) -> str:
     if published[1] > current[1]:
         return (
             f"update {latest[len(published[0]) + 1:]} available{date}{stale}: "
-            f"{UPDATE_GUIDE}"
+            f"{update_guide(home, Path.cwd(), claude=claude)}"
         )
     if checked_on:
         return f"no newer release known at last check{date}{stale}"
@@ -220,7 +293,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.part == 0 and "systemMessage" in result:
             try:
                 note = update_note(
-                    baseline_id(baseline_path()), Path(__file__).resolve().parent, Path.home()
+                    baseline_id(baseline_path()), Path(__file__).resolve().parent, Path.home(),
+                    claude=bool(os.environ.get("CLAUDE_PROJECT_DIR"))
                 )
             except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
                 note = "update status not checked"
@@ -237,7 +311,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     message = f"AI Secure Coding Baseline active: {installed}"
     try:
-        note = update_note(installed, Path(__file__).resolve().parent, Path.home())
+        note = update_note(installed, Path(__file__).resolve().parent, Path.home(),
+                           claude=bool(os.environ.get("CLAUDE_PROJECT_DIR")))
     except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
         note = "update status not checked"
     if note:

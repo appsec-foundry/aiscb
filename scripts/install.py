@@ -25,6 +25,7 @@ from typing import Callable
 
 BASELINE = "secure-coding-baseline.md"
 EMBEDDED_POLICY = None  # release resource slot
+UPDATE_PROTOCOL = "aiscb-refresh-installed-v1"
 VERSION_HOOK_DIR = ".aiscb"
 VERSION_HOOK_NAME = "show-baseline-version.py"
 INSTALLER_NAME = "install.py"
@@ -52,6 +53,7 @@ if (REPO / "baseline/catalog.json").is_file():
 # Only an unchanged copy of one of these is replaced, so edited or foreign code
 # in that place survives. Append the new digest whenever the helper changes.
 KNOWN_HOOK_DIGESTS = (
+    "5cef21f747a2fa64faf184f8aeaf2127701bc5344ee878d2cfe63bc66ddc61f3",
     "b43737769f40c85ff056e6e237b7b3035a1617eddf9a4269b92c8bd8ba78b182",
     "3e0961143718b21cc16317ef63a5ce6d4a34dcf91bda7ad6577f160e4927f89d",
     "9ab4a0107dec2cac076c75a0eedb0c768a18846b60a33851550544a656b249ba",
@@ -4333,6 +4335,10 @@ def main(argv: list[str] | None = None) -> int:
         help="with --user, opt in to AISCB_DISABLE=1 for new Claude/Codex sessions; "
              "migrate managed links only",
     )
+    parser.add_argument("--refresh-installed", action="store_true",
+                        help="refresh an existing recorded installation from this verified bundle")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="with --refresh-installed, verify and report without writing")
     policy_format = parser.add_mutually_exclusive_group()
     policy_format.add_argument("--modular", action="store_true",
                         help="core and discovery first, verified modules on demand (default)")
@@ -4345,6 +4351,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--migrate", action="store_true",
                         help="replace verified managed complete instructions; preserve other text")
     args = parser.parse_args(argv)
+    if args.dry_run and not args.refresh_installed:
+        parser.error("--dry-run requires --refresh-installed")
+    if args.refresh_installed and any((args.tools, args.status, args.uninstall,
+            args.interactive, args.update, args.refresh_update_cache, args.session_switch,
+            args.modular, args.complete, args.organization, args.organization_sha256,
+            args.migrate, args.offline)):
+        parser.error("--refresh-installed takes only --user or --into and --dry-run")
     if sum((args.status, args.uninstall, args.interactive, args.update,
             args.refresh_update_cache, args.session_switch)) > 1:
         parser.error("choose one setup or management action")
