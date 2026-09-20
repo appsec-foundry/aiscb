@@ -12,7 +12,7 @@ aiscb gives AI coding assistants a shared secure-coding baseline: an always-on
 core and task-specific modules, extended by an optional organization overlay.
 Install it once instead of repeating security expectations in every prompt.
 
-Current baseline: `aiscb-0.1.17`.
+Current baseline: `aiscb-0.1.18`.
 
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
@@ -295,8 +295,8 @@ surface you use, instruction limits, and loading checks.
 
 ### Verify it loaded
 
-Start a fresh session after installing 0.1.17. Ask `aiscb?`; the
-answer should include `aiscb-0.1.17`,
+Start a fresh session after installing 0.1.18. Ask `aiscb?`; the
+answer should include `aiscb-0.1.18`,
 its source, installation mode, available modules, loaded modules, and any overlays.
 In a fresh modular session, no module bodies should be loaded. Catalog entries
 are availability information, not loaded modules. Status must not read files.
@@ -334,7 +334,7 @@ remaining gaps. It is not a compliance claim or model-test evidence.
 ## Development
 
 Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under
-`baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.17/` is
+`baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.18/` is
 generated from those sources with `make build-full-baseline`. See
 [Structure and context budget](#structure-and-context-budget) for current
 token measurements.

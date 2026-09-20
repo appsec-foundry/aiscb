@@ -3,7 +3,7 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
-## Unreleased
+## [0.1.18](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.18) (2026-09-20)
 
 - Let compatible appsec-advisor installations refresh recorded AISCB installations through the signed installer, and point Claude Code update notices at the enabled plugin's update skill.
 

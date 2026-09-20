@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ROOT = ROOT / "baseline"
 CATALOG = SOURCE_ROOT / "catalog.json"
 
-BASELINE_ID = "aiscb-0.1.17"
-VERSION = "0.1.17"
+BASELINE_ID = "aiscb-0.1.18"
+VERSION = "0.1.18"
 EAGER = ROOT / "dist" / "dev" / BASELINE_ID / "secure-coding-baseline.md"
 MODULE_ID = re.compile(r"aiscb:[a-z][a-z0-9-]*")
 RULE_ID = re.compile(r"aiscb-[A-Z][A-Z0-9]*-\d{3}")
