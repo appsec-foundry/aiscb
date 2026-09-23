@@ -162,6 +162,50 @@ conditions do not hold. Remove a user-level baseline installation from the tool
 under test before comparing arms. Other user-level instructions still affect
 both arms. A successful preflight shows visibility, not compliance.
 
+## Optional CWEval comparison
+
+`make test-cweval` runs a small selection of CWEval Python tasks through the
+Claude or Codex CLI in both arms, then uses CWEval's functional and security
+tests. It is separate from the repository's behavioral cases. Prepare a clean
+checkout of [CWEval](https://github.com/Co1lin/CWEval) at a full commit ID and
+a locally available image identified by its SHA-256 digest. The target does not
+download either dependency. Check the checkout, image provenance, and current
+vulnerability status before using them. Docker and the selected assistant CLI
+must be available locally.
+
+```bash
+make test-cweval ARGS="--cweval-root /path/to/CWEval --revision FULL_40_CHARACTER_COMMIT --image co1lin/cweval@sha256:FULL_64_CHARACTER_DIGEST --tool claude --model MODEL --dry-run"
+make test-cweval ARGS="--cweval-root /path/to/CWEval --revision FULL_40_CHARACTER_COMMIT --image co1lin/cweval@sha256:FULL_64_CHARACTER_DIGEST --tool claude --model MODEL --repeats 3"
+```
+
+The default cases are CWE-20, CWE-22, and CWE-79 in `benchmark/core/py`.
+Select others with `--cases cwe_020_0,cwe_022_0`; this adapter supports Python
+tasks only. It sends the task text before `BEGIN SOLUTION` and never sends the
+reference solution or test file to the assistant. Generation accepts one fenced
+Python code block. Claude has model tools disabled; Codex disables shell,
+external tools, and web search and runs in read-only sandbox mode using the
+[documented Codex CLI settings](https://learn.chatgpt.com/docs/config-file/config-basic).
+Both arms use the same CLI, model, task, and repeat count. The
+preflight uses those same CLI settings. A missing response or failed run stops
+evaluation instead of silently changing the denominator.
+
+Evaluation runs the pinned image offline with a read-only root, dropped
+capabilities, no new privileges, a non-root user, and CPU, memory, process,
+file descriptor, and time limits. CWEval source and benchmark files are mounted
+read-only; only the arm's generated files are writable. The runner invokes
+CWEval's pipeline inside that container with `--docker False`, because the
+outer container already isolates execution. No Docker socket or assistant
+credentials are mounted. CWEval's default container helper is not used.
+
+Results remain under `tests/results/cweval/run-*`. `report.md` gives `func@1`
+and `func-sec@1` counts per case and arm; `report.json`, `runs.json`, and
+`preflight.json` retain the revision, settings, and incomplete-run evidence.
+These scores measure CWEval's Python code-generation tasks, not the baseline's
+broader agent workflow. Run a small selection first; model calls and container
+evaluation consume time and resources.
+
+## Main suite options
+
 Pass runner options through `ARGS`:
 
 ```bash

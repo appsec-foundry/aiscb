@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Boundary checks for the optional CWEval adapter; no model or Docker calls."""
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import cweval_runner as runner
+
+
+class CWEvalRunnerTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.tasks = self.root / "benchmark/core/py"
+        self.tasks.mkdir(parents=True)
+        (self.tasks / "cwe_020_0_task.py").write_text(
+            "def validate(value):\n    '''Validate value.'''\n"
+            "# BEGIN SOLUTION\nSECRET_REFERENCE_ANSWER\n")
+        (self.tasks / "cwe_020_0_test.py").write_text("SECRET_TEST_ASSERTION\n")
+
+    def test_prompt_ends_at_solution_and_never_reads_tests(self):
+        prompt = runner.task_prompt(self.root, "cwe_020_0")
+        self.assertIn("def validate", prompt)
+        self.assertNotIn("SECRET_REFERENCE_ANSWER", prompt)
+        self.assertNotIn("SECRET_TEST_ASSERTION", prompt)
+        with self.assertRaises(ValueError):
+            runner.task_prompt(self.root, "../../secret")
+
+    def test_linked_task_is_rejected(self):
+        (self.tasks / "cwe_022_0_task.py").symlink_to("cwe_020_0_task.py")
+        (self.tasks / "cwe_022_0_test.py").write_text("pass\n")
+        with self.assertRaises(ValueError):
+            runner.task_prompt(self.root, "cwe_022_0")
+
+    def test_generation_requires_single_complete_code_block(self):
+        self.assertEqual(runner.extract_code("```python\ndef safe():\n    return True\n```"),
+                         "def safe():\n    return True\n")
+        self.assertEqual(runner.extract_code("Explanation\n```python\npass\n```\nNote"),
+                         "pass\n")
+        for reply in ("no code", "```python\npass\n```\n```python\npass\n```"):
+            with self.subTest(reply=reply), self.assertRaises(ValueError):
+                runner.extract_code(reply)
+
+    def test_generation_keeps_arms_separate_and_uses_only_task_prompt(self):
+        prompts = []
+        baseline_visible = []
+        def fake_reply(_tool, _workdir, prompt, _model, _timeout):
+            prompts.append(prompt)
+            baseline_visible.append((_workdir / ".claude/rules" /
+                                     runner.baseline_run.BASELINE.name).is_file())
+            return "```python\ndef validate(value):\n    return bool(value)\n```"
+        with patch.object(runner, "assistant_reply", side_effect=fake_reply):
+            result = self.root / "result"
+            result.mkdir()
+            runs = runner.generate({"cwe_020_0": runner.task_prompt(
+                self.root, "cwe_020_0")}, "claude", "model", 1, 10, result)
+        self.assertEqual([run["status"] for run in runs], ["complete", "complete"])
+        self.assertEqual(len(prompts), 2)
+        self.assertEqual(prompts[0], prompts[1])
+        self.assertEqual(baseline_visible, [False, True])
+        self.assertNotIn("SECRET_REFERENCE_ANSWER", "".join(prompts))
+        self.assertNotIn("SECRET_TEST_ASSERTION", "".join(prompts))
+        for arm in ("control", "baseline"):
+            self.assertTrue((result / arm / "generated_0/core/py/cwe_020_0_raw.py").is_file())
+
+    def test_incomplete_response_does_not_create_evaluation_input(self):
+        result = self.root / "result"
+        result.mkdir()
+        with patch.object(runner, "assistant_reply", return_value="No code"), \
+             patch.dict(runner.baseline_run.ADAPTERS["claude"],
+                        {"install": lambda workdir: None}):
+            runs = runner.generate({"cwe_020_0": "def validate(value):"},
+                                   "claude", "model", 1, 10, result)
+        self.assertTrue(all(run["status"] == "incomplete" for run in runs))
+        self.assertFalse((result / "baseline/generated_0").exists())
+
+    def test_preflight_detects_control_contamination(self):
+        result = self.root / "result"
+        result.mkdir()
+        baseline_id = runner.baseline_run.baseline_identifier()
+        with patch.object(runner, "assistant_reply",
+                          return_value=f"`baseline-id: {baseline_id}`"):
+            probes = runner.preflight("claude", "model", 10, result)
+        self.assertFalse(probes[0]["ok"])
+        self.assertTrue(probes[1]["ok"])
+
+    def test_generation_commands_disable_model_tools(self):
+        (self.root / "_agent_reply.txt").write_text("```python\npass\n```\n")
+        with patch.object(runner.baseline_run, "run_capture",
+                          return_value=(0, "reply", "")) as capture:
+            runner.assistant_reply("claude", self.root, "task", "model", 10)
+            claude = capture.call_args.args[0]
+            self.assertEqual(claude[claude.index("--tools") + 1], "")
+            self.assertIn("--strict-mcp-config", claude)
+            self.assertEqual(claude[claude.index("--setting-sources") + 1],
+                             "project")
+            runner.assistant_reply("codex", self.root, "task", "model", 10)
+            codex = capture.call_args.args[0]
+            self.assertIn("shell_tool", codex)
+            self.assertIn("unified_exec", codex)
+            self.assertIn('web_search="disabled"', codex)
+            self.assertIn("read-only", codex)
+
+    def test_scoring_rejects_missing_samples_and_counts_joint_success(self):
+        arm = self.root / "arm"
+        arm.mkdir()
+        path = arm / "res_all.json"
+        key = "evals/aiscb/generated_X/core/py/cwe_020_0_test.py"
+        path.write_text(json.dumps({key: {"functional": [True, True, False],
+                                          "secure": [True, False, True]}}))
+        score = runner.read_scores(arm, ["cwe_020_0"], 3)["cwe_020_0"]
+        self.assertEqual((score["functional"], score["func_secure"]), (2, 1))
+        with self.assertRaises(ValueError):
+            runner.read_scores(arm, ["cwe_020_0"], 2)
+
+    def test_container_has_explicit_execution_limits(self):
+        image = "co1lin/cweval@sha256:" + "a" * 64
+        cmd = runner.docker_command(self.root, self.root, image, "own-container")
+        self.assertIn("--network=none", cmd)
+        self.assertIn("--read-only", cmd)
+        self.assertIn("--cap-drop=ALL", cmd)
+        self.assertIn("--memory=2g", cmd)
+        self.assertIn("--pull=never", cmd)
+        self.assertEqual(cmd[-2:], ["--docker", "False"])
+        with self.assertRaises(ValueError):
+            runner.docker_command(self.root, self.root, "co1lin/cweval:latest", "own-container")
+
+
+if __name__ == "__main__":
+    unittest.main()

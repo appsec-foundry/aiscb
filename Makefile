@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := check
 .PHONY: check check-release build-release build-full-baseline coverage setup update status sign-bundle install uninstall install-claude \
         install-codex install-copilot dry-run test-smoke test-quick test-rule test-confirmation \
-        test test-all test-fast test-organization clean-results help
+        test test-all test-fast test-organization test-cweval clean-results help
 
 # Both check and coverage run this suite, so it is listed once.
 CHECK_TESTS = tests/selfcheck.py \
@@ -16,6 +16,7 @@ CHECK_TESTS = tests/selfcheck.py \
               tests/test_run.py \
               tests/test_design_confirmation.py \
               tests/test_organization.py \
+              tests/test_cweval_runner.py \
               examples/claude-code-gate/test_gate.py \
               examples/organization-bundle/test_bundle.py \
               examples/organization-bundle/gateway/test_managed.py \
@@ -104,6 +105,10 @@ existing-retrieved-instructions,existing-targeted-verification $(ARGS)
 ## test-organization  overlay and pack selection; four short runs, no judge
 test-organization: check
 	python3 tests/organization.py $(ARGS)
+
+## test-cweval  optional Claude/Codex CWEval comparison; requires pinned checkout and image
+test-cweval: check
+	python3 tests/cweval_runner.py $(ARGS)
 
 ## test-rule   the cases covering one rule group, for a change to that rule:
 ##             make test-rule RULE=aiscb-REPORT-001
