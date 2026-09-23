@@ -112,7 +112,7 @@ test-organization: check
 test-routing: check
 	python3 tests/routing.py $(ARGS)
 
-## test-cweval  optional Claude/Codex CWEval comparison; requires pinned checkout and image
+## test-cweval  run CWEval comparison and print overall score; uses tests/cweval.local.json or ARGS
 test-cweval: check
 	python3 tests/cweval_runner.py $(ARGS)
 

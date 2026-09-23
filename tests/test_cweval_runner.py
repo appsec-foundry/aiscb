@@ -2,8 +2,10 @@
 """Boundary checks for the optional CWEval adapter; no model or Docker calls."""
 
 import json
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -116,6 +118,65 @@ class CWEvalRunnerTests(unittest.TestCase):
         self.assertEqual((score["functional"], score["func_secure"]), (2, 1))
         with self.assertRaises(ValueError):
             runner.read_scores(arm, ["cwe_020_0"], 2)
+
+    def test_report_compares_joint_success_across_all_cases(self):
+        scores = {
+            "control": {
+                "cwe_020_0": {"functional": 2, "func_secure": 1, "samples": 3},
+                "cwe_022_0": {"functional": 1, "func_secure": 1, "samples": 3},
+            },
+            "baseline": {
+                "cwe_020_0": {"functional": 3, "func_secure": 2, "samples": 3},
+                "cwe_022_0": {"functional": 2, "func_secure": 2, "samples": 3},
+            },
+        }
+        overall = runner.write_report(self.root, scores, [], "model", "a" * 40,
+                                      "co1lin/cweval@sha256:" + "b" * 64)
+        self.assertEqual(overall["control"]["func_secure_percent"], 33.3)
+        self.assertEqual(overall["baseline"]["func_secure_percent"], 66.7)
+        self.assertEqual(overall["delta_percentage_points"], 33.3)
+        self.assertEqual(overall["baseline"]["functional_percent"], 83.3)
+        self.assertEqual(json.loads((self.root / "report.json").read_text())["overall"],
+                         overall)
+        report = (self.root / "report.md").read_text()
+        self.assertIn("| control | 3/6 (50.0%) | 2/6 (33.3%) |", report)
+        self.assertIn("| baseline | 5/6 (83.3%) | 4/6 (66.7%) |", report)
+        self.assertIn("+33.3 percentage points", report)
+
+    def test_local_config_runs_without_required_cli_args_and_allows_override(self):
+        config = self.root / "cweval.local.json"
+        config.write_text(json.dumps({
+            "cweval_root": str(self.root), "revision": "a" * 40,
+            "image": "co1lin/cweval@sha256:" + "b" * 64,
+            "tool": "codex", "model": "model", "cases": "cwe_020_0",
+            "repeats": 1,
+        }))
+        defaults = runner.local_config_args(config)
+        output = io.StringIO()
+        with patch.object(runner, "local_config_args", return_value=defaults), \
+             patch.object(runner, "checked_checkout", return_value=self.root), \
+             patch.object(runner, "task_prompt", return_value="def validate(value):"), \
+             redirect_stdout(output):
+            self.assertEqual(runner.main(["--dry-run", "--repeats", "2"]), 0)
+        self.assertIn("1 cases × 2 repeats × 2 arms = 4 assistant runs",
+                      output.getvalue())
+
+    def test_local_config_rejects_unknown_options_and_links(self):
+        config = self.root / "cweval.local.json"
+        config.write_text('{"unexpected": "value"}')
+        with self.assertRaisesRegex(ValueError, "supported options"):
+            runner.local_config_args(config)
+        link = self.root / "linked.json"
+        link.symlink_to(config)
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            runner.local_config_args(link)
+
+    def test_overall_comparison_refuses_mismatched_sample_counts(self):
+        with self.assertRaisesRegex(ValueError, "different sample counts"):
+            runner.overall_scores({
+                "control": {"case": {"functional": 1, "func_secure": 1, "samples": 1}},
+                "baseline": {"case": {"functional": 1, "func_secure": 1, "samples": 2}},
+            })
 
     def test_container_has_explicit_execution_limits(self):
         image = "co1lin/cweval@sha256:" + "a" * 64

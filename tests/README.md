@@ -214,6 +214,12 @@ make test-cweval ARGS="--cweval-root /path/to/CWEval --revision FULL_40_CHARACTE
 make test-cweval ARGS="--cweval-root /path/to/CWEval --revision FULL_40_CHARACTER_COMMIT --image co1lin/cweval@sha256:FULL_64_CHARACTER_DIGEST --tool claude --model MODEL --repeats 3"
 ```
 
+For repeated local runs, save `cweval_root`, `revision`, `image`, and `model`
+in the ignored `tests/cweval.local.json`; `tool`, `cases`, and `repeats` are
+optional. Then `make test-cweval` needs no arguments. CLI arguments override
+the local values, so `make test-cweval ARGS="--dry-run"` checks the configured
+selection without model calls.
+
 The default cases are CWE-20, CWE-22, and CWE-79 in `benchmark/core/py`.
 Select others with `--cases cwe_020_0,cwe_022_0`; this adapter supports Python
 tasks only. It sends the task text before `BEGIN SOLUTION` and never sends the
@@ -233,9 +239,11 @@ CWEval's pipeline inside that container with `--docker False`, because the
 outer container already isolates execution. No Docker socket or assistant
 credentials are mounted. CWEval's default container helper is not used.
 
-Results remain under `tests/results/cweval/run-*`. `report.md` gives `func@1`
-and `func-sec@1` counts per case and arm; `report.json`, `runs.json`, and
-`preflight.json` retain the revision, settings, and incomplete-run evidence.
+Results remain under `tests/results/cweval/run-*`. After a successful run,
+`make test-cweval` prints each arm's overall functional-and-secure success rate
+and the baseline-minus-control difference in percentage points. `report.md`
+and `report.json` include the same comparison, the functional rate, and counts
+per case and arm; `runs.json` and `preflight.json` retain incomplete-run evidence.
 These scores measure CWEval's Python code-generation tasks, not the baseline's
 broader agent workflow. Run a small selection first; model calls and container
 evaluation consume time and resources.

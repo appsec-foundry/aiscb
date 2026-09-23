@@ -31,7 +31,38 @@ CODE_BLOCK = re.compile(r"(?m)^```(?:python|py)?[ \t]*\n(?P<code>.*?)^```[ \t]*$
 MAX_CODE_BYTES = 200_000
 MAX_TASK_BYTES = 50_000
 RESULTS = baseline_run.RESULTS_DIR / "cweval"
+LOCAL_CONFIG = Path(__file__).with_name("cweval.local.json")
 CONTAINER_ROOT = "/home/ubuntu/CWEval"
+CONFIG_OPTIONS = {
+    "cweval_root": str, "revision": str, "image": str,
+    "tool": str, "model": str, "cases": str,
+    "repeats": int, "timeout": int, "eval_timeout": int,
+}
+
+
+def local_config_args(path: Path = LOCAL_CONFIG) -> list[str]:
+    if path.is_symlink():
+        raise ValueError("CWEval local config must be a regular file")
+    if not path.exists():
+        return []
+    if not path.is_file():
+        raise ValueError("CWEval local config must be a regular file")
+    with path.open("rb") as stream:
+        raw = stream.read(4097)
+    if len(raw) > 4096:
+        raise ValueError("CWEval local config exceeds 4096 bytes")
+    try:
+        config = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("CWEval local config is not valid JSON") from exc
+    if not isinstance(config, dict) or set(config) - set(CONFIG_OPTIONS):
+        raise ValueError("CWEval local config must contain only supported options")
+    result = []
+    for key, value in config.items():
+        if type(value) is not CONFIG_OPTIONS[key]:
+            raise ValueError(f"CWEval local config has an invalid {key}")
+        result.extend(("--" + key.replace("_", "-"), str(value)))
+    return result
 
 
 def checked_checkout(root: Path, revision: str) -> Path:
@@ -242,16 +273,50 @@ def read_scores(arm_dir: Path, names: list[str], repeats: int) -> dict:
     return scores
 
 
+def overall_scores(scores: dict) -> dict:
+    totals = {}
+    for arm in ("control", "baseline"):
+        samples = sum(case["samples"] for case in scores[arm].values())
+        if samples < 1:
+            raise ValueError("CWEval comparison has no samples")
+        functional = sum(case["functional"] for case in scores[arm].values())
+        func_secure = sum(case["func_secure"] for case in scores[arm].values())
+        totals[arm] = {
+            "samples": samples,
+            "functional": functional,
+            "func_secure": func_secure,
+            "functional_percent": round(100 * functional / samples, 1),
+            "func_secure_percent": round(100 * func_secure / samples, 1),
+        }
+    if totals["control"]["samples"] != totals["baseline"]["samples"]:
+        raise ValueError("CWEval comparison arms have different sample counts")
+    totals["delta_percentage_points"] = round(
+        100 * (totals["baseline"]["func_secure"] / totals["baseline"]["samples"]
+               - totals["control"]["func_secure"] / totals["control"]["samples"]), 1)
+    return totals
+
+
 def write_report(result_dir: Path, scores: dict, runs: list[dict],
-                 model: str, revision: str, image: str) -> None:
+                 model: str, revision: str, image: str) -> dict:
+    overall = overall_scores(scores)
     document = {"model": model, "cweval_revision": revision, "image": image,
                 "baseline_id": baseline_run.baseline_identifier(),
-                "runs": runs, "scores": scores}
+                "runs": runs, "scores": scores, "overall": overall}
     (result_dir / "report.json").write_text(json.dumps(document, indent=2) + "\n")
     lines = ["# CWEval baseline comparison", "",
              f"Model: `{model}` · CWEval: `{revision}` · Baseline: "
              f"`{document['baseline_id']}`", "",
-             "| Case | Arm | func@1 | func-sec@1 |", "| --- | --- | ---: | ---: |"]
+             "| Arm | Functional | Functional + secure |",
+             "| --- | ---: | ---: |"]
+    for arm in ("control", "baseline"):
+        total = overall[arm]
+        lines.append(f"| {arm} | {total['functional']}/{total['samples']} "
+                     f"({total['functional_percent']:.1f}%) | "
+                     f"{total['func_secure']}/{total['samples']} "
+                     f"({total['func_secure_percent']:.1f}%) |")
+    lines.extend(["", "Functional + secure difference (baseline − control): "
+                  f"{overall['delta_percentage_points']:+.1f} percentage points.", "",
+                  "| Case | Arm | func@1 | func-sec@1 |", "| --- | --- | ---: | ---: |"])
     for case in scores["control"]:
         for arm in ("control", "baseline"):
             score = scores[arm][case]
@@ -260,6 +325,7 @@ def write_report(result_dir: Path, scores: dict, runs: list[dict],
                          f"{score['func_secure']}/{n} |")
     lines.append("")
     (result_dir / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    return overall
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -274,7 +340,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--eval-timeout", type=int, default=1800)
     parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args(argv)
+    supplied = list(sys.argv[1:] if argv is None else argv)
+    try:
+        defaults = [] if any(flag in supplied for flag in ("-h", "--help")) \
+            else local_config_args()
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
+    args = parser.parse_args(defaults + supplied)
     if args.repeats < 1 or args.repeats > 50 or args.timeout < 1 or args.eval_timeout < 1:
         parser.error("repeats must be 1..50 and timeouts must be positive")
     try:
@@ -314,7 +386,12 @@ def main(argv: list[str] | None = None) -> int:
         evaluate(root, result_dir, args.image, args.eval_timeout)
         scores = {arm: read_scores(result_dir / arm, names, args.repeats)
                   for arm in ("control", "baseline")}
-        write_report(result_dir, scores, runs, args.model, args.revision, args.image)
+        overall = write_report(result_dir, scores, runs, args.model,
+                               args.revision, args.image)
+        print("Functional + secure: "
+              f"control {overall['control']['func_secure_percent']:.1f}%, "
+              f"baseline {overall['baseline']['func_secure_percent']:.1f}%, "
+              f"difference {overall['delta_percentage_points']:+.1f} percentage points")
         print(f"Report: {result_dir / 'report.md'}")
         return 0
     except (OSError, ValueError, RuntimeError, baseline_run.QuotaExhausted) as exc:
