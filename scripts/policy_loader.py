@@ -130,8 +130,7 @@ def render(root, expected, selected):
     result, blueprints = [], set()
     for name in closure(modules, selected):
         entry = modules[name]
-        result.append(f"Verified {name}; release {package['release']}; "
-                      f"sha256 {package['files'][entry['artifact']]['sha256']}\n\n"
+        result.append(f"Verified {name}; release {package['release']}\n\n"
                       + contents[entry["artifact"]])
         for blueprint in entry["blueprints"]:
             if blueprint not in blueprints:

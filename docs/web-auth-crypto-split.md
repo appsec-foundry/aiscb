@@ -10,7 +10,7 @@ Security clauses are preserved. The former mixed mechanisms and tests groups are
 
 ## Context measurements
 
-Measured with `o200k_base`: installed core, full catalog and loader instructions, plus required module bodies and verification output once. Paths and the installation digest in initial instructions are normalized identically. Other task-relevant modules are included equally in both variants. These are policy payload counts, not total model usage or peak session context.
+Historical split measurement, before compact loader receipts, with `o200k_base`: installed core, full catalog and loader instructions, plus required module bodies and verification output once. Paths and the installation digest in initial instructions are normalized identically. Other task-relevant modules are included equally in both variants. These are policy payload counts, not total model usage or peak session context.
 
 | Task | Combined | Split | Difference |
 | --- | ---: | ---: | ---: |
@@ -23,6 +23,36 @@ Measured with `o200k_base`: installed core, full catalog and loader instructions
 Web assumes a Referrer-Policy change on a public response. Authentication assumes an internal shared-session adapter and includes data-handling and secrets. Cryptography assumes an in-memory helper with external keys and includes secrets. Mixed assumes browser login and includes data-handling and secrets. Unrelated work loads no modules. These sets are explicit measurement assumptions, not observed module selection.
 
 Narrow Web and cryptography work benefits most. Browser login loads all three and costs more. Complete rule text grows from 5,352 to 5,455 tokens; the always-on core stays at 1,656. Discovery remains additional context.
+
+### Compact loader receipts
+
+The current repository and installed loaders retain the verified module ID and
+release but omit the per-module hash from their success output. Full integrity
+verification still runs before output; the trusted digest in the installed
+loader command is unchanged. With the same split-module sets and normalization:
+
+| Task | Full-hash receipts | Compact receipts | Tokens saved |
+| --- | ---: | ---: | ---: |
+| unrelated | 2,346 | 2,346 | 0 |
+| web | 2,783 | 2,744 | 39 |
+| authentication | 4,085 | 3,921 | 164 |
+| cryptography | 3,055 | 2,972 | 83 |
+| mixed | 4,522 | 4,319 | 203 |
+
+Core, module and generated complete rule-text sizes were recomputed and remain
+unchanged. This output-only change also applies to complete installations;
+it does not change the historical model-run evidence below.
+
+### Duplicate-content review
+
+Dependency traversal emits each module once per invocation; a later invocation
+still emits full bodies so that loading works after context loss. Installer
+checks cover inherited complete policies and additional automatic complete
+rules. The repository's `AGENTS.md` references the core without embedding it;
+`CLAUDE.md` imports AGENTS and the core once each, and the Copilot entry points
+to the same read-and-load workflow. These source checks do not establish how
+often every client sends instructions in a real session. No further deduplication
+or persistent loaded-state cache was added.
 
 ## Verification
 

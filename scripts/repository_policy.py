@@ -5,7 +5,7 @@ import argparse
 import sys
 
 import build_baseline as build
-from policy_loader import closure, digest
+from policy_loader import closure
 
 
 def render(selected, *, catalog_only=False):
@@ -19,7 +19,7 @@ def render(selected, *, catalog_only=False):
     bodies = {entry["file"]: raw for entry, raw in artifacts}
     # Resolve everything before emitting anything; arbitrary paths/URLs refuse.
     return "\n\n".join(
-        f"Verified {name}; {catalog['baseline_id']}; sha256 {digest(bodies[modules[name]['file']])}\n\n"
+        f"Verified {name}; {catalog['baseline_id']}\n\n"
         + bodies[modules[name]["file"]].decode("utf-8")
         for name in closure(modules, selected))
 

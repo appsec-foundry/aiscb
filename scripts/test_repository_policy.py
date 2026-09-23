@@ -37,6 +37,11 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertLess(result.stdout.index("[aiscb-LLM-001]"), result.stdout.index("[aiscb-AGENCY-001]"))
         self.assertFalse((self.root / "dist").exists())
+        catalog = json.loads((self.root / "baseline/catalog.json").read_text())
+        for name in ("aiscb:llm-applications", "aiscb:llm-agents"):
+            entry = next(m for m in catalog["modules"] if m["id"] == name)
+            self.assertIn(f"Verified {name}; {catalog['baseline_id']}\n\n", result.stdout)
+            self.assertIn((self.root / "baseline" / entry["file"]).read_text(), result.stdout)
         for ids in (["aiscb:llm-agents", "https://untrusted.invalid/rules"], ["../outside"]):
             result = subprocess.run([sys.executable, str(self.root / "scripts/repository_policy.py"), *ids],
                                     capture_output=True, text=True)

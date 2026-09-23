@@ -87,6 +87,12 @@ class PolicyTests(unittest.TestCase):
         self.assertLess(text.index("[aiscb-LLM-001]"), text.index("[aiscb-AGENCY-001]"))
         self.assertNotIn("[aiscb-WEB-001]", text)
         self.assertEqual(text.count("[aiscb-LLM-001]"), 1)
+        package, contents, modules = loader.load_package(release, digest)
+        for name in loader.closure(modules, ["aiscb:llm-agents"]):
+            self.assertIn(f"Verified {name}; release {package['release']}\n\n", text)
+            self.assertIn(contents[modules[name]["artifact"]], text)
+        # A later load must still deliver full bodies after context loss.
+        self.assertEqual(loader.render(release, digest, ["aiscb:llm-agents"]), text)
         for tool in installer.ENTRY_POINTS:
             installer.install([tool], self.root, modular=True)
             initial = (self.root / installer.ENTRY_POINTS[tool]).read_text()
