@@ -31,6 +31,7 @@ VERSION_HOOK_NAME = "show-baseline-version.py"
 INSTALLER_NAME = "install.py"
 SESSION_LOADER_NAME = "session-loader.md"
 SESSION_PARTS = 4
+SESSION_PART_CHARS = 7100
 PREVIOUS_DATA_DIR_NAME = "ai-secure-coding-baseline"
 INSTALLER_SOURCE = Path(__file__).resolve()
 # A checkout and the remote bundle keep this file in scripts/, with the baseline
@@ -64,6 +65,7 @@ KNOWN_HOOK_DIGESTS = (
     "b2fa3d5d1d9d891117ca9b035db243129d24b6eb0c2c54c3568eef623f83bdea",
     "2b4c6d1f85b76294169d1b958bc2b0a98da6952b6b9768c99823cb2d7582cec5",
     "238dcc65b98b93f404310caacf16e163f1ea0387debcd77b47446e4160f3ed5a",
+    "45fcef85aedc66f2d5e06157b11fb9294ae5e7506581c5448d9a02ffa33ebe46",
 )
 COPILOT_VERSION_HOOK_NAME = "aiscb-baseline-version.json"
 PREVIOUS_COPILOT_VERSION_HOOK_NAME = "aisec-baseline-version.json"
@@ -1237,7 +1239,7 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
             baseline = read_baseline(source)
         else:
             baseline = bundled_baseline()
-        if len(baseline.content.decode("utf-8")) > SESSION_PARTS * 7000:
+        if len(baseline.content.decode("utf-8")) > SESSION_PARTS * SESSION_PART_CHARS:
             raise ValueError("baseline exceeds session context capacity")
         if loader.is_symlink() or (loader.exists() and read_limited(loader, MAX_INSTRUCTION_BYTES) != loader_content):
             raise ValueError("loader contains different content")

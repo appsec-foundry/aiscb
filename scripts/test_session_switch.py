@@ -51,6 +51,7 @@ class SessionSwitchTests(unittest.TestCase):
 
     def test_default_loads_every_byte_in_bounded_parts(self):
         self.assertEqual(install.SESSION_PARTS, helper.SESSION_PARTS)
+        self.assertEqual(install.SESSION_PART_CHARS, helper.SESSION_PART_CHARS)
         script = self.setup_switch()
         for value in (None, "0"):
             texts = [self.call(script, value, i)["hookSpecificOutput"]["additionalContext"]
@@ -58,6 +59,20 @@ class SessionSwitchTests(unittest.TestCase):
             self.assertTrue(all(len(text) < 10000 for text in texts))
             content = "".join(text.split("\n\n", 1)[1] for text in texts)
             self.assertEqual(content, install.SOURCE.read_text())
+
+    def test_session_context_refuses_one_character_past_capacity(self):
+        script = self.setup_switch()
+        source = self.project / install.BASELINE
+        original = source.read_text()
+        capacity = helper.SESSION_PARTS * helper.SESSION_PART_CHARS
+        self.assertLessEqual(len(original), capacity)
+        source.write_text(original + "x" * (capacity - len(original)))
+        parts = [self.call(script, "0", part)["hookSpecificOutput"]["additionalContext"]
+                 for part in range(helper.SESSION_PARTS)]
+        self.assertEqual("".join(part.split("\n\n", 1)[1] for part in parts),
+                         source.read_text())
+        source.write_text(source.read_text() + "x")
+        self.assertIs(self.call(script, "0")["continue"], False)
 
     def test_disabled_excludes_rules_and_does_not_claim_active(self):
         script = self.setup_switch()

@@ -19,7 +19,7 @@ MAX_BASELINE_BYTES = 256 * 1024
 MAX_REGISTRY_BYTES = 128 * 1024
 CHECK_INTERVAL = 24 * 60 * 60
 SESSION_PARTS = 4
-SESSION_PART_CHARS = 7000
+SESSION_PART_CHARS = 7100
 SEMVER_TEXT = (
     r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
     r"(?:-(?:[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
