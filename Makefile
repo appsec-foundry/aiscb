@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := check
 .PHONY: check check-release build-release build-full-baseline coverage setup update status sign-bundle install uninstall install-claude \
         install-codex install-copilot dry-run test-smoke test-quick test-rule test-confirmation \
-        test test-all test-fast test-organization test-cweval clean-results help
+        test test-all test-fast test-organization test-cweval test-context clean-results help
 
 # Both check and coverage run this suite, so it is listed once.
 CHECK_TESTS = tests/selfcheck.py \
@@ -18,6 +18,8 @@ CHECK_TESTS = tests/selfcheck.py \
               tests/test_organization.py \
               tests/test_routing.py \
               tests/test_cweval_runner.py \
+              tests/test_context_comparison.py \
+              tests/test_split_modules.py \
               examples/claude-code-gate/test_gate.py \
               examples/organization-bundle/test_bundle.py \
               examples/organization-bundle/gateway/test_managed.py \
@@ -142,3 +144,7 @@ clean-results:
 ## help        this list
 help:
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## //'
+
+## test-context compare control, complete and modular policy on six local tasks
+test-context: check
+	python3 tests/context_comparison.py $(ARGS)

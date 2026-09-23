@@ -30,7 +30,7 @@ or code where a fixed check is insufficient.
 | `make test-confirmation` | 9 | 9 | 2 |
 | `make test-smoke` | 2 | 6 | 2 |
 | `make test-quick` | 24 | 72 | 2 |
-| `make test` | 162 | 324 | 2 |
+| `make test` | 174 | 324 | 2 |
 
 These are the default matrices. An agent turn can make several model requests,
 so the counts are not token or dollar limits. `test-fast` and `test-organization`
@@ -58,6 +58,25 @@ effect. Do not mix selectively repeated failures into that comparison.
 
 `test-smoke` checks that the whole runner works. `test-all` runs the full suite
 with both Claude and Codex. Neither is needed for routine edits.
+
+## Complete versus modular context
+
+`make test-context` compares three arms on six local tasks, with actual loader
+calls, independent acceptance checks and CLI token usage. Its default matrix is
+54 task runs, 63 turns, three preflights and up to 54 judge calls. See the
+[experiment guide](../docs/context-comparison.md) for isolation, prerequisites,
+metrics and interpretation. Use `make test-context ARGS=--dry-run` first.
+
+## Web, authentication and cryptography split
+
+`python3 tests/split_routing.py` prints a four-task plan without model calls.
+Use `python3 tests/split_routing.py --run --output tests/results/split-YYYYMMDD`
+only to check this split: four existing-project planning tasks, one preflight,
+no judge, no application-code execution and no retries. The model uses the actual
+modular installer and verified loader through the restricted fixture tools.
+Each task has a 120-second timeout. Raw traces and loads before the first plan
+write are retained. These checks observe routing, not implementation security,
+full session costs, or reliability across models and repeated runs.
 
 ## Overlay and lazy loading
 
@@ -132,9 +151,9 @@ the three-digit email-login planning prompt. It offers Claude's native
 tool call and question. A separate run removes that tool to check text fallback.
 The other runs simulate silence, timeout, an unsubmitted preselection, and
 explicit acceptance. The host never authorizes another tool.
-A sixth case checks a secure automated, persistent-secret design: attribution
-belongs in the explanation, no separate aiscb footer is appended, and the
-Security note stays reserved for qualifying residual risks.
+A sixth case checks a secure automated, persistent-secret design: routine
+implementation needs neither baseline attribution nor security confirmation,
+and the Security note stays reserved for qualifying residual risks.
 Three browser HTTP Basic cases use the risk explicitly named in
 `aiscb-AUTH-001`: text fallback, an unanswered dialog, and an accepted choice.
 They separate risk recognition from the choice of confirmation mechanism.

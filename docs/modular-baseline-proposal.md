@@ -1,3 +1,8 @@
+> Historical design proposal. The current catalog splits `web-auth-crypto` into
+> `web`, `authentication` (requires `cryptography` and `data-handling`),
+> and `cryptography` (requires `secrets-initialization`).
+> Use [the current catalog](../baseline/catalog.json) for installation and routing.
+
 # Design: a small always-on core with policy modules
 
 This design splits aiscb into a small core that every coding session receives

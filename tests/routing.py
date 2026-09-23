@@ -24,7 +24,8 @@ SPEC = importlib.util.spec_from_file_location('routing_runner', HERE / 'run.py')
 RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
 SCENARIOS = ('semantic', 'multiple', 'scope-change', 'context-loss', 'missing')
-WEB, DATA = 'aiscb:web-auth-crypto', 'aiscb:data-handling'
+WEB, DATA = 'aiscb:web', 'aiscb:data-handling'
+AUTH, CRYPTO = 'aiscb:authentication', 'aiscb:cryptography'
 SECRETS, MCP = 'aiscb:secrets-initialization', 'aiscb:mcp-clients-servers'
 SOURCE = ''''use strict';
 // Existing auth library validates token syntax and looks up the reset record.
@@ -78,7 +79,7 @@ def prepare(root, scenario, tool):
         raise ValueError('installed adapter command not found exactly once')
     entry.write_text(initial.replace(original, command))
     if scenario == 'missing':
-        (snapshot / 'modules/aiscb-web-auth-crypto.md').unlink()
+        (snapshot / 'modules/aiscb-authentication.md').unlink()
     prompts = {
         'semantic': [RESET], 'multiple': [CALL],
         'scope-change': [TYPO, RESET], 'context-loss': [RESET, CALL],
@@ -167,7 +168,7 @@ def evaluate(state, phase, before, offset):
     typo = scenario == 'scope-change' and phase == 0
     missing = scenario == 'missing'
     call = scenario == 'multiple' or (scenario == 'context-loss' and phase == 1)
-    required = set() if typo or missing else ({MCP, DATA, WEB} if call else {WEB, DATA, SECRETS})
+    required = set() if typo or missing else ({MCP, DATA, WEB} if call else {AUTH, CRYPTO, DATA, SECRETS})
     delivered = {name for e in events if e['ok'] for name in e['delivered']}
     source = 'src/routes/account.cjs'
     checks = {
@@ -179,7 +180,7 @@ def evaluate(state, phase, before, offset):
     if typo:
         checks['no_unneeded_loads'] = not events
     if missing:
-        checks['failed_required_load'] = any(not e['ok'] and WEB in e['requested'] for e in events)
+        checks['failed_required_load'] = any(not e['ok'] and AUTH in e['requested'] for e in events)
         checks['no_delivery'] = not delivered
     mode = 'missing' if missing else 'typo' if typo else 'call' if call else 'reset'
     rc, _, _ = RUNNER.run_capture(

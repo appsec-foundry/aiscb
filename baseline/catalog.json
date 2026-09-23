@@ -21,34 +21,67 @@
       "aiscb-TESTS-001",
       "aiscb-REPORT-001"
     ],
-    "size": 8138,
-    "sha256": "549633d151dfb838acfae794543374278d32194f685663111aa65b1c24bcf525"
+    "size": 8357,
+    "sha256": "98d686b9ed16caf28fe37e1f9a0bc6a6b5e27febe159636a4f5e8bbcc62812c5"
   },
   "modules": [
     {
-      "id": "aiscb:web-auth-crypto",
+      "id": "aiscb:web",
       "publisher": "aiscb",
       "version": "0.1.18",
-      "file": "modules/aiscb-web-auth-crypto.md",
-      "trigger": "HTTP endpoints, browser content, login, registration, recovery, verification, sessions, cookies, tokens, passwords, OAuth or OIDC, CORS, CSRF, webhooks, or cryptography including encryption, hashing, signatures, random generation and secret comparison",
+      "file": "modules/aiscb-web.md",
+      "trigger": "HTTP endpoints, browser content, transport security, cookies, CORS, CSRF, or webhooks",
       "paths": [],
       "requires": [],
       "rules": [
-        "aiscb-WEBHOOK-001",
         "aiscb-WEB-001",
-        "aiscb-AUTH-001",
-        "aiscb-MECHANISMS-001",
         "aiscb-WEBTESTS-001"
       ],
-      "size": 5189,
-      "sha256": "bd22ad24b3341823c24bc234f83d1c1e9f1c1214f63d4d2b2aca0aac81669e2f"
+      "size": 1766,
+      "sha256": "41b75a1e20e721cd4e4f711decb68245b341ba220084f1670b31d85749f94068"
+    },
+    {
+      "id": "aiscb:authentication",
+      "publisher": "aiscb",
+      "version": "0.1.18",
+      "file": "modules/aiscb-authentication.md",
+      "trigger": "Login, registration, account recovery and verification, sessions, session cookies, authentication tokens, passwords, OAuth or OIDC",
+      "paths": [],
+      "requires": [
+        "aiscb:cryptography",
+        "aiscb:data-handling"
+      ],
+      "rules": [
+        "aiscb-AUTH-001",
+        "aiscb-AUTHMECHANISMS-001",
+        "aiscb-AUTHTESTS-001"
+      ],
+      "size": 2688,
+      "sha256": "2060eaf6addaf3b59dc070810e6e95ff0bb66ce490cffea8ac0c6c0a5bd64d0d"
+    },
+    {
+      "id": "aiscb:cryptography",
+      "publisher": "aiscb",
+      "version": "0.1.18",
+      "file": "modules/aiscb-cryptography.md",
+      "trigger": "Encryption, hashing, signatures, random generation, secret comparison, password hashing, signed tokens, or webhooks",
+      "paths": [],
+      "requires": [
+        "aiscb:secrets-initialization"
+      ],
+      "rules": [
+        "aiscb-MECHANISMS-001",
+        "aiscb-WEBHOOK-001"
+      ],
+      "size": 1111,
+      "sha256": "604c2b107595f80f4e87e9637378bb2b1f8af9529700c2a58137ba9663cb5ac2"
     },
     {
       "id": "aiscb:data-handling",
       "publisher": "aiscb",
       "version": "0.1.18",
       "file": "modules/aiscb-data-handling.md",
-      "trigger": "Request parsing, database access, files, archives, templates, process execution, deserialization, search, pagination, uploads, error responses, logging, or external destinations",
+      "trigger": "Request parsing, database access, files, archives, templates, process execution, deserialization, search, pagination, uploads, error responses, logging, or external destinations; not merely reading or editing source or documentation, but changes to their parsing or processing, handling untrusted files, process execution and external destinations remain in scope",
       "paths": [],
       "requires": [],
       "rules": [
@@ -57,8 +90,8 @@
         "aiscb-FILES-001",
         "aiscb-EGRESS-001"
       ],
-      "size": 1720,
-      "sha256": "06f0e4bbacfd1d4539e27ac1593323b3bd85b7b85c94d5a69125f38e65369bf6"
+      "size": 1943,
+      "sha256": "839c183e9158922135761b44f93fd8600faaee8dfec5cd7bb3d665d08dfa9c52"
     },
     {
       "id": "aiscb:secrets-initialization",
@@ -171,8 +204,8 @@
         "aiscb-MCPLOCAL-001",
         "aiscb-MCPTESTS-001"
       ],
-      "size": 2225,
-      "sha256": "c44d130f5bb32154ac2b3a041470fc47c0efd47059980c0f62d7e4266af1ab6e"
+      "size": 2236,
+      "sha256": "f20ef789df1fd7cb252749d93a5f671a929d79dd2e743ddedd88b59ca432f96f"
     }
   ]
 }

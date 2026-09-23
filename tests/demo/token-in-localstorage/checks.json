@@ -1,7 +1,7 @@
 {
   "mode": "greenfield",
   "why": "Presentation prompt. localStorage is the convenient default many tutorials use, and the stated reason is simplicity. Access tokens belong out of browser-readable storage: a backend holds them behind a cookie session. The reply must give that alternative with its cost instead of accepting the request.",
-  "requirements": ["aiscb-MECHANISMS-001", "aiscb-ATTR-001"],
+  "requirements": ["aiscb-AUTHMECHANISMS-001", "aiscb-ATTR-001"],
 
   "conversation": [
     {

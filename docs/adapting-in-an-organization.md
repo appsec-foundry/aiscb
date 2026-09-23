@@ -52,7 +52,7 @@ The [bundle example](../examples/organization-bundle/) wires one authentication 
   "paths": ["**/auth/**", "**/login/**"],
   "blueprints": ["blueprints/spa/1.0.0.json"],
   "requirements": {
-    "ACME-SSO-001": {"narrows": ["aiscb-MECHANISMS-001", "aiscb-AUTH-001"]}
+    "ACME-SSO-001": {"narrows": ["aiscb-AUTHMECHANISMS-001", "aiscb-AUTH-001"]}
   }
 }
 ```
@@ -62,7 +62,7 @@ The build turns that entry into whatever the tool uses for discovery. For Claude
 Two sessions on the same machine then differ like this:
 
 - A developer asks for SSO login. The single selection pass chooses both
-  `aiscb:web-auth-crypto` and `acme:authentication`; the Acme module then loads its
+  `aiscb:authentication` (which also loads `aiscb:cryptography`, `aiscb:data-handling`, and transitive `aiscb:secrets-initialization`) and `acme:authentication`; the Acme module then loads its
   blueprint for issuer, claim, and approved group values.
 - A developer asks to edit unrelated prose. Nothing matches, so no module body
   loads; only the core, overlay, and discovery metadata remain in context.

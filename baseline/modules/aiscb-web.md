@@ -1,0 +1,8 @@
+# Web Module
+
+`module-id: aiscb:web`. Load for: HTTP endpoints, browser content, transport security, cookies, CORS, CSRF, or webhooks.
+
+## Web
+
+- **[aiscb-WEB-001] Browser and Transport Security:** Carry traffic that leaves the machine over TLS. Bind to loopback by default; wider binding requires TLS terminated by the application or an upstream terminator declared through required configuration, and startup fails without it. If wider exposure is out of scope, name the TLS step it needs. For browser content, use `__Host-` session cookies with `Secure`, `HttpOnly`, and appropriate `SameSite`; a nonce- or hash-based CSP with no `unsafe-inline` for scripts and with `object-src 'none'`, `base-uri 'none'`, and `frame-ancestors`; HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy` (`same-origin` unless cross-origin use is intended), a `Permissions-Policy` disabling unused powerful features, and `Cache-Control: no-store` on authenticated responses. Protect state-changing requests using ambient credentials against CSRF. Introduce or tighten these incrementally in existing applications so intended clients and embedding keep working; new browser content must work under the policy from the start. If a required header genuinely cannot be applied, set the others and report the blocker and exposure. Restrict CORS to an exact origin allow-list and only needed methods and headers; echo only a matched origin, never reflect it unvalidated, and never combine a wildcard with credentials.
+- **[aiscb-WEBTESTS-001] Browser Tests:** Test applicable browser policy, headers, and required configuration; and rejection of forged cross-site requests for every state-changing action using ambient credentials.

@@ -3,6 +3,9 @@
 `module-id: aiscb:data-handling`. Load for request parsing, database access,
 files, archives, templates, process execution, deserialization, search,
 pagination, uploads, error responses, logging, or external destinations.
+Reading or editing source or documentation alone does not trigger this module;
+changes to their parsing or processing do. Handling untrusted files, executing
+processes, and contacting external destinations remain in scope.
 
 ## Data Handling
 

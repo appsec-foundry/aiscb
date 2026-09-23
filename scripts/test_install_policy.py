@@ -34,7 +34,8 @@ class PolicyTests(unittest.TestCase):
 
     def test_renamed_modules_reach_every_adapter_and_reject_old_ids(self):
         renamed = {
-            "web-auth": "web-auth-crypto",
+            "web-auth": "web",
+            "web-auth-crypto": "web",
             "data-boundaries": "data-handling",
             "secrets-bootstrap": "secrets-initialization",
             "deployment-runtime": "deployment-environments",
@@ -44,10 +45,10 @@ class PolicyTests(unittest.TestCase):
         }
         catalog = json.loads((ROOT / "baseline/catalog.json").read_text())
         expected = {"aiscb:" + name for name in renamed.values()}
-        expected.update(("aiscb:llm-applications", "aiscb:supply-chain"))
+        expected.update(("aiscb:llm-applications", "aiscb:supply-chain", "aiscb:authentication", "aiscb:cryptography"))
         self.assertEqual({m["id"] for m in catalog["modules"]}, expected)
         for entry in catalog["modules"]:
-            if entry["id"] in {"aiscb:web-auth-crypto", "aiscb:deployment-environments",
+            if entry["id"] in {"aiscb:web", "aiscb:deployment-environments",
                                "aiscb:llm-agents", "aiscb:llm-retrieval-memory"}:
                 introduction = (ROOT / "baseline" / entry["file"]).read_text().split("\n## ", 1)[0]
                 self.assertIn(entry["trigger"], " ".join(introduction.split()))
@@ -356,7 +357,7 @@ class PolicyTests(unittest.TestCase):
         shutil.copytree(org.HERE, source)
         for rel in ("catalog.json", "packs/authentication.md"):
             path = source / rel
-            path.write_text(path.read_text().replace("acme:authentication", "aiscb:web-auth-crypto"))
+            path.write_text(path.read_text().replace("acme:authentication", "aiscb:web"))
         with self.assertRaisesRegex(org.BuildError, "collid"):
             org.build(source, ROOT / "baseline", self.root / "bad", self.root / "install")
         upstream = self.root / "upstream"
@@ -364,7 +365,7 @@ class PolicyTests(unittest.TestCase):
         path = upstream / "catalog.json"
         initial = json.loads(path.read_text())
         for field, value in (("version", "99.0.0"), ("publisher", "other"),
-                             ("requires", ["aiscb:missing"]), ("requires", ["aiscb:web-auth-crypto"])):
+                             ("requires", ["aiscb:missing"]), ("requires", ["aiscb:web"])):
             catalog = json.loads(json.dumps(initial))
             catalog["modules"][0][field] = value
             path.write_text(json.dumps(catalog))

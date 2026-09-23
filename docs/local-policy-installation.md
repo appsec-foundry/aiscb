@@ -142,15 +142,15 @@ at each target location. Repository-wide portable adapters remain rollout work.
 | Work | Required selection beyond core |
 | --- | --- |
 | Configure a local stdio MCP server | `mcp-clients-servers` and its `data-handling` dependency; `supply-chain` when executing/installing its package |
-| Build protected HTTP MCP | `mcp-clients-servers`, `data-handling`, `web-auth-crypto`; other matching modules still apply |
+| Build protected HTTP MCP | `mcp-clients-servers`, `data-handling`, `web`; authentication/OAuth also selects `authentication` and its `cryptography` dependency; other matching modules still apply |
 | Build RAG without agent actions | `llm-retrieval-memory` and its `llm-applications` dependency; no automatic agent module |
 | Build an agent with persistent memory and MCP actions | All three domain modules plus their dependencies and other semantic matches |
 | Use an existing MCP tool during unrelated editing | No MCP implementation trigger from tool use alone |
 | Change the system prompt of an application's LLM summarizer | `llm-applications`; other task-specific matches still apply |
 | Fix ordinary code or a documentation typo using the assistant's tools | No `llm-applications` trigger from the assistant's prompts, tool use, or code generation alone |
-| Change a login flow in an application without LLM features | `web-auth-crypto` and other task-specific matches; no `llm-applications` trigger from assistant activity alone |
+| Change a login flow in an application without LLM features | `authentication` with `cryptography`, `data-handling` and transitive `secrets-initialization`, plus `web` for HTTP/browser flows and other task-specific matches; no `llm-applications` trigger from assistant activity alone |
 | Change archive extraction in an application without LLM features | `data-handling` and other task-specific matches; no `llm-applications` trigger from assistant activity alone |
-| Add file encryption or signature verification without a web endpoint | `web-auth-crypto`; the cryptography trigger does not require web work |
+| Add file encryption or signature verification without a web endpoint | `cryptography`; the cryptography trigger does not require web work |
 | Select internal documents for a chatbot's answers | `llm-retrieval-memory` and `llm-applications`, even if the request never says RAG |
 | Store, replace or delete an application's persistent agent memories | `llm-retrieval-memory` and `llm-applications`; `llm-agents` when model-directed actions also change |
 | Optimize an ordinary SQL query or add a database index | No `llm-retrieval-memory` trigger without an LLM retrieval or memory feature; `data-handling` still applies |

@@ -362,7 +362,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
             pinned = prepare.prepare(snapshot, out / "bundle", digest)
             policy = managed.Policy(snapshot, pinned)
             backend = Backend(
-                response(["acme:authentication", "aiscb:web-auth-crypto"])
+                response(["acme:authentication", "aiscb:authentication"])
             )
             events = await call(managed.Gateway(backend, policy))
             self.assertEqual(events[0]["status"], 200)

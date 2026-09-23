@@ -121,7 +121,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 check(f"{tool} adds no path hint for {module['id']} without paths",
                       "additional paths:" not in discovery_line
                       and "additional paths:" not in description)
-        for skill_name, module_id in (("aiscb-web-auth-crypto", "aiscb:web-auth-crypto"),
+        for skill_name, module_id in (("aiscb-authentication", "aiscb:authentication"),
                                       ("acme-authentication", "acme:authentication")):
             skill = out / f"adapters/{tool}/skills/{skill_name}/SKILL.md"
             text = skill.read_text(encoding="utf-8") if skill.is_file() else ""
@@ -133,7 +133,7 @@ with tempfile.TemporaryDirectory() as tmp:
               f"{release_dir}/blueprints/spa/1.0.0.json" in acme)
     flat_modules = sorted(path.name for path in (out / "modules").glob("*.md"))
     check("aiscb and Acme modules share one flat release directory",
-          "aiscb-web-auth-crypto.md" in flat_modules
+          "aiscb-authentication.md" in flat_modules
           and "acme-authentication.md" in flat_modules)
     check("blueprint ships unchanged",
           (out / "blueprints/spa/1.0.0.json").read_bytes()

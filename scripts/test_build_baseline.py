@@ -112,7 +112,7 @@ def repeated_rule(root: Path) -> None:
     target.write_text(target.read_text().replace("aiscb-ERRORS-001",
                                                   "aiscb-AUTH-001", 1))
     value = catalog()
-    value["modules"][1]["rules"][0] = "aiscb-AUTH-001"
+    next(m for m in value["modules"] if m["id"] == "aiscb:data-handling")["rules"][0] = "aiscb-AUTH-001"
     write_catalog(value)
 
 
@@ -129,7 +129,7 @@ def unlisted_module(root: Path) -> None:
 check(rejected(unlisted_module, "unlisted"), "unlisted module files are rejected")
 
 with fixture() as root:
-    module = root / "baseline" / "modules" / "aiscb-web-auth-crypto.md"
+    module = root / "baseline" / "modules" / "aiscb-web.md"
     module.write_text(module.read_text() + "\nChanged.\n")
     failures = BUILD.stale_outputs()
     check(any("metadata is stale" in item for item in failures)

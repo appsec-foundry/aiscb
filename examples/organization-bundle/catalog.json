@@ -9,7 +9,7 @@
       "paths": ["**/auth/**", "**/login/**"],
       "blueprints": ["blueprints/spa/1.0.0.json"],
       "requirements": {
-        "ACME-SSO-001": {"narrows": ["aiscb-MECHANISMS-001", "aiscb-AUTH-001"]},
+        "ACME-SSO-001": {"narrows": ["aiscb-AUTHMECHANISMS-001", "aiscb-AUTH-001"]},
         "ACME-IAM-AUDIT-001": {"narrows": ["aiscb-ERRORS-001"]}
       }
     },

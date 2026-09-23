@@ -65,20 +65,22 @@ Current `o200k_base` measurements are:
 
 | Artifact | Bytes | Tokens |
 | --- | ---: | ---: |
-| Always-on core | 8,138 | 1,617 |
-| `aiscb:web-auth-crypto` | 5,189 | 1,040 |
+| Always-on core | 8,357 | 1,656 |
+| `aiscb:web` | 1,766 | 381 |
+| `aiscb:authentication` | 2,688 | 529 |
+| `aiscb:cryptography` | 1,111 | 234 |
 | `aiscb:secrets-initialization` | 1,900 | 351 |
 | `aiscb:deployment-environments` | 1,659 | 311 |
 | `aiscb:llm-applications` | 1,252 | 247 |
 | `aiscb:llm-agents` | 2,033 | 401 |
 | `aiscb:supply-chain` | 1,173 | 223 |
-| `aiscb:data-handling` | 1,720 | 344 |
+| `aiscb:data-handling` | 1,943 | 383 |
 | `aiscb:llm-retrieval-memory` | 1,666 | 325 |
-| `aiscb:mcp-clients-servers` | 2,225 | 415 |
-| Complete eager artifact | 26,964 | 5,274 |
+| `aiscb:mcp-clients-servers` | 2,236 | 414 |
+| Complete eager artifact | 27,795 | 5,455 |
 
-The core exceeds its provisional 1,500-token target by 117 tokens; complete
-output exceeds its 4,100-token target by 1,174. Further reduction
+The core exceeds its provisional 1,500-token target by 156 tokens; complete
+output exceeds its 4,100-token target by 1,355. Further reduction
 should be evaluated against lost always-on behavior, not treated as an
 automatic goal. In particular, do not shorten the Security-note contract merely
 to improve the headline number.
@@ -98,14 +100,16 @@ aiscb-core.md
 overlay.md
 catalog.json                    merged discovery catalog
 modules/
-  aiscb-web-auth-crypto.md
+  aiscb-web.md
+  aiscb-authentication.md
+  aiscb-cryptography.md
   aiscb-secrets-initialization.md
   acme-authentication.md
   acme-deployment.md
   ...
 ```
 
-Logical IDs stay namespaced (`aiscb:web-auth-crypto`, `acme:authentication`). The
+Logical IDs stay namespaced (`aiscb:authentication`, `acme:authentication`). The
 builder now rejects namespace and output-path collisions and applies the
 main validator to official modules. The project installer wires the shared
 catalog and a bounded Python loader directly into each tool's instructions;
@@ -132,9 +136,11 @@ work.
   package, resolves dependencies, and emits complete bodies and blueprints.
 - `aiscb:llm-agents` depends on `aiscb:llm-applications`; it covers minimum
   agency, action authority, bounded execution, and agent-boundary tests.
+- `aiscb:authentication` depends on `aiscb:cryptography` and `aiscb:data-handling`;
+  `aiscb:cryptography` depends on `aiscb:secrets-initialization`.
 - `aiscb:llm-retrieval-memory` depends on `aiscb:llm-applications`;
   `aiscb:mcp-clients-servers` depends on `aiscb:data-handling`, not llm-agents.
-  File/SSRF mechanisms stay in data-handling and webhook replay in web-auth-crypto.
+  File/SSRF mechanisms stay in data-handling and webhook replay in cryptography.
 - `--complete` installs all content through the same local adapter; updates
   refresh every already-managed tool and reject drift before activation.
 - `make build-full-baseline` regenerates the complete artifact and source hashes.

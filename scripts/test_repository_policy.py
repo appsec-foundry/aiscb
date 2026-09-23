@@ -45,7 +45,7 @@ class RepositoryTests(unittest.TestCase):
 
     def test_stale_source_refuses_without_output(self):
         self.source_copy()
-        target = self.root / "baseline/modules/aiscb-web-auth-crypto.md"
+        target = self.root / "baseline/modules/aiscb-web.md"
         target.write_text(target.read_text() + "\nChanged\n")
         result = subprocess.run([sys.executable, str(self.root / "scripts/repository_policy.py"), "--catalog"],
                                 capture_output=True, text=True)
@@ -53,7 +53,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
 
     def test_source_loader_rejects_obsolete_module_ids(self):
-        for old in ("web-auth", "data-boundaries", "secrets-bootstrap",
+        for old in ("web-auth", "web-auth-crypto", "data-boundaries", "secrets-bootstrap",
                     "deployment-runtime", "agent-systems", "retrieval-memory",
                     "mcp-integrations"):
             result = subprocess.run(

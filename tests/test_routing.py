@@ -63,7 +63,7 @@ class RoutingTests(unittest.TestCase):
         if scenario == 'multiple' or (scenario == 'context-loss' and phase == 1):
             # DATA must arrive through the actual MCP dependency, not a stub.
             return [ROUTING.MCP, ROUTING.WEB]
-        return [ROUTING.WEB, ROUTING.DATA, ROUTING.SECRETS]
+        return [ROUTING.AUTH, ROUTING.DATA, ROUTING.SECRETS]
 
     def test_all_scenarios_accept_correct_loading_and_behavior(self):
         for scenario in ROUTING.SCENARIOS:
@@ -104,7 +104,7 @@ class RoutingTests(unittest.TestCase):
     def test_cli_loader_handles_spaces_and_rejects_unknown_ids(self):
         state = self.prepare()
         command = [ROUTING.sys.executable, str(HERE / 'routing.py'), '--load',
-                   str(state['config_path']), ROUTING.WEB]
+                   str(state['config_path']), ROUTING.AUTH]
         code, out, _ = ROUTING.RUNNER.run_capture(command, state['workdir'], 10)
         self.assertEqual(code, 0)
         self.assertIn('[aiscb-AUTH-001]', out)
@@ -178,7 +178,7 @@ class RoutingTests(unittest.TestCase):
         state = self.prepare('missing')
         before = ROUTING.hashes(state['workdir'])
         self.assertFalse(ROUTING.evaluate(state, 0, before, 0)['passed'])
-        self.load(state, [ROUTING.WEB])
+        self.load(state, [ROUTING.AUTH])
         self.assertFalse(ROUTING.evaluate(state, 0, before, 0)['passed'])
         self.implement(state)
         self.assertTrue(ROUTING.evaluate(state, 0, before, 0)['passed'])
@@ -194,7 +194,7 @@ class RoutingTests(unittest.TestCase):
                 (state['root'] / 'loads.jsonl').write_text(content)
                 self.assertFalse(ROUTING.evaluate(state, 0, before, 0)['passed'])
         state = self.prepare()
-        path = Path(state['config']['snapshot']) / 'modules/aiscb-web-auth-crypto.md'
+        path = Path(state['config']['snapshot']) / 'modules/aiscb-web.md'
         path.write_text(path.read_text() + '\ntampered\n')
         self.assertEqual(self.load(state, [ROUTING.WEB]), (1, ''))
 
