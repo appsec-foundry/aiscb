@@ -8,6 +8,7 @@ For assistant behavior, choose the smallest run that answers your question:
 ```bash
 make test-fast                         # four small baseline cases, no judge
 make test-organization                 # overlay and lazy loading, no judge
+make test-routing                      # modular selection and reloads, no judge
 make test-rule RULE=aiscb-REPORT-001    # compare both arms for one rule group
 make test-quick                        # four cases, both arms, three repeats
 make test                              # all baseline cases
@@ -25,6 +26,7 @@ or code where a fixed check is insufficient.
 | `make check` | 0 | 0 | 0 |
 | `make test-fast` | 6 | 0 | 1 |
 | `make test-organization` | 4 | 0 | 1 |
+| `make test-routing` | 7 | 0 | 2 |
 | `make test-confirmation` | 9 | 9 | 2 |
 | `make test-smoke` | 2 | 6 | 2 |
 | `make test-quick` | 24 | 72 | 2 |
@@ -76,7 +78,9 @@ This tests the routing contract described in
 [Adapting the baseline in an organization](../docs/adapting-in-an-organization.md).
 It uses a named local loader, not native skill discovery or an HTTPS gateway.
 It does not test context compaction, changing scope, multiple matching packs,
-or live release changes. Those need separate integration cases.
+or live release changes. `test-routing` below covers scope changes, multiple
+modules and a fresh session after context loss; native compaction and live
+release changes still need separate integration cases.
 
 ```bash
 make test-organization ARGS="--cases matching,missing"
@@ -87,6 +91,38 @@ Results and fixtures remain in the temporary directory printed at completion.
 A failed or incomplete case makes this target return a nonzero exit status.
 The baseline requirement catalog describes the main suite; these organization
 integration cases are separate and make no claim of a baseline effect.
+
+## Modular routing
+
+`make test-routing` runs five cases with the actual modular installer and loader:
+
+- `semantic`: password recovery in `src/routes/account.cjs`, outside an auth directory.
+- `multiple`: an HTTP MCP handler requires multiple modules, including the MCP module's data-handling dependency.
+- `scope-change`: fix a README typo, then implement password recovery in the same session.
+- `context-loss`: implement password recovery, then start a fresh session on the same project to implement an MCP handler. Required modules must be loaded again.
+- `missing`: remove a required module from the installed snapshot. Leave the protected code unchanged and complete the independent README fix.
+
+The default run has seven agent turns and two preflight calls, with no judge.
+It requires Linux, Bubblewrap and `/usr/bin/node`; generated code runs with no
+network, a read-only fixture filesystem and no host credentials. Each turn has
+a 180-second timeout. Preflight rejects an inherited baseline;
+the tasks then receive only the installed core and catalog initially. A recording
+wrapper delegates to the real policy loader and records delivered modules and
+source hashes. Checks require loading before the affected edit and exercise
+successful, malformed, unauthorized, cross-user and cross-tenant behavior.
+
+```bash
+python3 tests/routing.py --dry-run
+make test-routing ARGS="--cases semantic,multiple"
+make test-routing ARGS="--tool codex"
+```
+
+Run Codex cases sequentially without competing sessions: its existing runner
+resumes the latest session. Load records are diagnostic evidence, not protection
+against an agent deliberately falsifying the test. A fresh session models loss
+of conversation context; it does not test native client compaction. No comparison
+with complete mode or BRACE is made. Local scoring tests run in `make check`;
+they do not establish that a model selects the right modules.
 
 ## Design confirmation dialogs
 

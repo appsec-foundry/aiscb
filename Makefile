@@ -16,6 +16,7 @@ CHECK_TESTS = tests/selfcheck.py \
               tests/test_run.py \
               tests/test_design_confirmation.py \
               tests/test_organization.py \
+              tests/test_routing.py \
               tests/test_cweval_runner.py \
               examples/claude-code-gate/test_gate.py \
               examples/organization-bundle/test_bundle.py \
@@ -105,6 +106,11 @@ existing-retrieved-instructions,existing-targeted-verification $(ARGS)
 ## test-organization  overlay and pack selection; four short runs, no judge
 test-organization: check
 	python3 tests/organization.py $(ARGS)
+
+.PHONY: test-routing
+## test-routing  modular selection, scope changes and context loss; opt-in model runs
+test-routing: check
+	python3 tests/routing.py $(ARGS)
 
 ## test-cweval  optional Claude/Codex CWEval comparison; requires pinned checkout and image
 test-cweval: check
