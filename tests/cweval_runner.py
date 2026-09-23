@@ -7,12 +7,15 @@ on the host. Evaluation runs in a bounded, offline container.
 """
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import uuid
 from pathlib import Path
@@ -30,9 +33,12 @@ CODE_BLOCK = re.compile(r"(?m)^```(?:python|py)?[ \t]*\n(?P<code>.*?)^```[ \t]*$
                         re.DOTALL)
 MAX_CODE_BYTES = 200_000
 MAX_TASK_BYTES = 50_000
+MAX_SCORE_BYTES = 1_000_000
 RESULTS = baseline_run.RESULTS_DIR / "cweval"
 LOCAL_CONFIG = Path(__file__).with_name("cweval.local.json")
 CONTAINER_ROOT = "/home/ubuntu/CWEval"
+CONTAINER_UID = 1000
+CONTAINER_GID = 1000
 CONFIG_OPTIONS = {
     "cweval_root": str, "revision": str, "image": str,
     "tool": str, "model": str, "cases": str,
@@ -153,6 +159,33 @@ def assistant_reply(tool: str, workdir: Path, prompt: str,
     return out
 
 
+@contextmanager
+def isolated_codex_home(tool: str):
+    """Keep a user-level AGENTS.md out of both comparison arms.
+
+    Codex reads authentication from CODEX_HOME/auth.json even when its user
+    configuration is ignored. Link only that file, never the user's rules or
+    other configuration, and leave the existing installation untouched.
+    """
+    if tool != "codex":
+        yield
+        return
+    previous = os.environ.get("CODEX_HOME")
+    source = Path(previous) if previous else Path.home() / ".codex"
+    with tempfile.TemporaryDirectory(prefix="aiscb-cweval-codex-") as temp:
+        auth = source / "auth.json"
+        if auth.is_file():
+            (Path(temp) / "auth.json").symlink_to(auth.resolve())
+        os.environ["CODEX_HOME"] = temp
+        try:
+            yield
+        finally:
+            if previous is None:
+                os.environ.pop("CODEX_HOME", None)
+            else:
+                os.environ["CODEX_HOME"] = previous
+
+
 def preflight(tool: str, model: str, timeout: int, result_dir: Path) -> list[dict]:
     expected = baseline_run.baseline_identifier()
     family = baseline_run.id_family(expected)
@@ -208,37 +241,93 @@ def docker_command(root: Path, arm_dir: Path, image: str, name: str) -> list[str
     if not IMAGE.fullmatch(image):
         raise ValueError("--image must be an immutable name@sha256:<64 hex> reference")
     return [
-        "docker", "run", "--rm", "--pull=never", "--name", name,
+        "docker", "run", "--rm", "-i", "--pull=never", "--name", name,
         "--network=none", "--read-only", "--cap-drop=ALL",
         "--security-opt=no-new-privileges", "--pids-limit=128",
         "--memory=2g", "--cpus=2", "--ulimit=nofile=1024:1024",
-        "--user", f"{os.getuid()}:{os.getgid()}",
+        "--user", f"{CONTAINER_UID}:{CONTAINER_GID}",
         "--tmpfs", "/tmp:rw,nosuid,noexec,size=512m",
+        "--tmpfs", f"{CONTAINER_ROOT}/evals/aiscb:rw,nosuid,noexec,"
+                   f"size=512m,uid={CONTAINER_UID},gid={CONTAINER_GID},mode=0700",
         "--env", "HOME=/tmp", "--env", "TMPDIR=/tmp",
         "--env", "PYTHONDONTWRITEBYTECODE=1",
         "--env", f"PYTHONPATH={CONTAINER_ROOT}",
-        "--env", "PATH=/home/ubuntu/miniforge3/envs/cweval/bin:/usr/local/bin:/usr/bin:/bin",
+        "--env", "PATH=/home/ubuntu/miniforge3/envs/cweval/bin:"
+                 "/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin",
         "--mount", f"type=bind,src={root / 'cweval'},dst={CONTAINER_ROOT}/cweval,readonly",
         "--mount", f"type=bind,src={root / 'benchmark'},dst={CONTAINER_ROOT}/benchmark,readonly",
-        "--mount", f"type=bind,src={arm_dir},dst={CONTAINER_ROOT}/evals/aiscb",
         "--workdir", CONTAINER_ROOT, image,
-        "/home/ubuntu/miniforge3/envs/cweval/bin/python", "cweval/evaluate.py",
-        "pipeline", "--eval_path", "evals/aiscb", "--num_proc", "1",
-        "--docker", "False",
+        "/bin/sh", "-c",
+        "tar -xf - -C evals/aiscb && "
+        "/home/ubuntu/miniforge3/envs/cweval/bin/python cweval/evaluate.py "
+        "pipeline --eval_path evals/aiscb --num_proc 1 --docker False "
+        ">/tmp/aiscb-eval.log 2>&1 || { tail -c 2000 /tmp/aiscb-eval.log >&2; exit 1; }; "
+        f"test $(wc -c < evals/aiscb/res_all.json) -le {MAX_SCORE_BYTES} && "
+        "cat evals/aiscb/res_all.json",
     ]
 
 
-def evaluate(root: Path, result_dir: Path, image: str, timeout: int) -> None:
+def evaluation_archive(stream, arm_dir: Path, names: list[str], repeats: int) -> None:
+    """Send only generated Python files to the container through stdin."""
+    with tarfile.open(fileobj=stream, mode="w") as archive:
+        for index in range(repeats):
+            for name in names:
+                relative = Path(f"generated_{index}/core/py/{name}_raw.py")
+                source = arm_dir / relative
+                if source.is_symlink() or not source.is_file():
+                    raise ValueError(f"missing or linked generated file: {relative}")
+                size = source.stat().st_size
+                if size < 1 or size > MAX_CODE_BYTES:
+                    raise ValueError(f"invalid generated file size: {relative}")
+                info = tarfile.TarInfo(relative.as_posix())
+                info.size = size
+                info.mode = 0o600
+                info.uid = CONTAINER_UID
+                info.gid = CONTAINER_GID
+                with source.open("rb") as content:
+                    archive.addfile(info, content)
+    stream.seek(0)
+
+
+def run_docker_with_archive(cmd: list[str], stream, cwd: Path,
+                            timeout: int) -> tuple[int, str, str]:
+    proc = subprocess.Popen(cmd, cwd=cwd, stdin=stream,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, start_new_session=True)
+    try:
+        out, err = proc.communicate(timeout=timeout)
+        return proc.returncode, out, err
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
+        try:
+            out, err = proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            out, err = "", ""
+        return -1, out, err
+
+
+def evaluate(root: Path, result_dir: Path, image: str, timeout: int,
+             names: list[str], repeats: int) -> None:
     if shutil.which("docker") is None:
         raise RuntimeError("Docker is required to evaluate generated code")
     for arm in ("control", "baseline"):
         name = f"aiscb-cweval-{uuid.uuid4().hex[:12]}"
         cmd = docker_command(root, result_dir / arm, image, name)
         try:
-            rc, _, _ = baseline_run.run_capture(cmd, result_dir, timeout)
+            with tempfile.TemporaryFile(dir=result_dir) as archive:
+                evaluation_archive(archive, result_dir / arm, names, repeats)
+                rc, out, err = run_docker_with_archive(cmd, archive,
+                                                       result_dir, timeout)
             if rc != 0:
                 raise RuntimeError(f"CWEval evaluation for {arm} "
-                                   + ("timed out" if rc == -1 else f"exited {rc}"))
+                                   + ("timed out" if rc == -1 else
+                                      f"exited {rc}: {err.strip()[-500:]}"))
+            if len(out.encode("utf-8")) > MAX_SCORE_BYTES:
+                raise ValueError(f"CWEval result for {arm} exceeds size limit")
+            (result_dir / arm / "res_all.json").write_text(out, encoding="utf-8")
         finally:
             # Only this invocation's uniquely named container can be removed.
             subprocess.run(["docker", "rm", "-f", name], capture_output=True,
@@ -373,17 +462,19 @@ def main(argv: list[str] | None = None) -> int:
     RESULTS.mkdir(parents=True, exist_ok=True)
     result_dir = Path(tempfile.mkdtemp(prefix="run-", dir=RESULTS))
     try:
-        probes = preflight(args.tool, args.model, args.timeout, result_dir)
-        (result_dir / "preflight.json").write_text(json.dumps(probes, indent=2) + "\n")
-        for probe in probes:
-            if not probe["ok"]:
-                raise RuntimeError(baseline_run.preflight_problem(probe))
-        runs = generate(cases, args.tool, args.model, args.repeats,
-                        args.timeout, result_dir)
-        (result_dir / "runs.json").write_text(json.dumps(runs, indent=2) + "\n")
-        if any(run["status"] != "complete" for run in runs):
-            raise RuntimeError("generation incomplete; evaluation skipped")
-        evaluate(root, result_dir, args.image, args.eval_timeout)
+        with isolated_codex_home(args.tool):
+            probes = preflight(args.tool, args.model, args.timeout, result_dir)
+            (result_dir / "preflight.json").write_text(json.dumps(probes, indent=2) + "\n")
+            for probe in probes:
+                if not probe["ok"]:
+                    raise RuntimeError(baseline_run.preflight_problem(probe))
+            runs = generate(cases, args.tool, args.model, args.repeats,
+                            args.timeout, result_dir)
+            (result_dir / "runs.json").write_text(json.dumps(runs, indent=2) + "\n")
+            if any(run["status"] != "complete" for run in runs):
+                raise RuntimeError("generation incomplete; evaluation skipped")
+            evaluate(root, result_dir, args.image, args.eval_timeout,
+                     names, args.repeats)
         scores = {arm: read_scores(result_dir / arm, names, args.repeats)
                   for arm in ("control", "baseline")}
         overall = write_report(result_dir, scores, runs, args.model,

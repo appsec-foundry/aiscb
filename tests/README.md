@@ -249,11 +249,17 @@ external tools, and web search and runs in read-only sandbox mode using the
 Both arms use the same CLI, model, task, and repeat count. The
 preflight uses those same CLI settings. A missing response or failed run stops
 evaluation instead of silently changing the denominator.
+For Codex, the runner uses a private temporary `CODEX_HOME` for both arms and
+links only the existing `auth.json` into it. This keeps user-level `AGENTS.md`
+out of the control arm without changing the user's installation. Run the target
+as the account that owns the Codex login and the Docker context, not as root.
 
 Evaluation runs the pinned image offline with a read-only root, dropped
 capabilities, no new privileges, a non-root user, and CPU, memory, process,
 file descriptor, and time limits. CWEval source and benchmark files are mounted
-read-only; only the arm's generated files are writable. The runner invokes
+read-only. Generated files enter through container stdin; evaluation writes to
+a private temporary filesystem inside the container and returns only the
+bounded score file. The runner invokes
 CWEval's pipeline inside that container with `--docker False`, because the
 outer container already isolates execution. No Docker socket or assistant
 credentials are mounted. CWEval's default container helper is not used.

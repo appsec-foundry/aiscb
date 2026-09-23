@@ -3,6 +3,8 @@
 
 import json
 import io
+import os
+import tarfile
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -107,6 +109,24 @@ class CWEvalRunnerTests(unittest.TestCase):
             self.assertIn('web_search="disabled"', codex)
             self.assertIn("read-only", codex)
 
+    def test_codex_profile_isolated_without_copying_rules_or_credentials(self):
+        source = self.root / "codex-home"
+        source.mkdir()
+        auth = source / "auth.json"
+        auth.write_text("test credential placeholder")
+        (source / "AGENTS.md").write_text("baseline-id: aiscb-0.1.18")
+        (source / "config.toml").write_text("test setting")
+        with patch.dict(os.environ, {"CODEX_HOME": str(source)}):
+            with runner.isolated_codex_home("codex"):
+                isolated = Path(os.environ["CODEX_HOME"])
+                self.assertNotEqual(isolated, source)
+                self.assertTrue((isolated / "auth.json").is_symlink())
+                self.assertEqual((isolated / "auth.json").resolve(), auth)
+                self.assertFalse((isolated / "AGENTS.md").exists())
+                self.assertFalse((isolated / "config.toml").exists())
+            self.assertEqual(os.environ["CODEX_HOME"], str(source))
+            self.assertFalse(isolated.exists())
+
     def test_scoring_rejects_missing_samples_and_counts_joint_success(self):
         arm = self.root / "arm"
         arm.mkdir()
@@ -185,10 +205,37 @@ class CWEvalRunnerTests(unittest.TestCase):
         self.assertIn("--read-only", cmd)
         self.assertIn("--cap-drop=ALL", cmd)
         self.assertIn("--memory=2g", cmd)
+        self.assertIn("--cpus=2", cmd)
         self.assertIn("--pull=never", cmd)
-        self.assertEqual(cmd[-2:], ["--docker", "False"])
+        self.assertEqual(cmd[cmd.index("--user") + 1], "1000:1000")
+        self.assertIn("-i", cmd)
+        self.assertTrue(any("evals/aiscb:rw,nosuid,noexec" in value
+                            for value in cmd))
+        self.assertFalse(any("src=" + str(self.root) + ",dst=" in value
+                             for value in cmd))
+        self.assertIn("/usr/local/go/bin", " ".join(cmd))
         with self.assertRaises(ValueError):
             runner.docker_command(self.root, self.root, "co1lin/cweval:latest", "own-container")
+
+    def test_archive_contains_only_expected_regular_generated_files(self):
+        arm = self.root / "arm"
+        generated = arm / "generated_0/core/py"
+        generated.mkdir(parents=True)
+        code = generated / "cwe_020_0_raw.py"
+        code.write_text("def validate(value):\n    return True\n")
+        (arm / "unrelated.txt").write_text("do not send")
+        with tempfile.TemporaryFile() as stream:
+            runner.evaluation_archive(stream, arm, ["cwe_020_0"], 1)
+            with tarfile.open(fileobj=stream, mode="r") as archive:
+                self.assertEqual(archive.getnames(),
+                                 ["generated_0/core/py/cwe_020_0_raw.py"])
+                self.assertEqual(archive.extractfile(archive.getmembers()[0]).read(),
+                                 code.read_bytes())
+        code.unlink()
+        code.symlink_to(arm / "unrelated.txt")
+        with tempfile.TemporaryFile() as stream:
+            with self.assertRaisesRegex(ValueError, "linked generated file"):
+                runner.evaluation_archive(stream, arm, ["cwe_020_0"], 1)
 
 
 if __name__ == "__main__":
