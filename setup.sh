@@ -4,7 +4,7 @@ set -eu
 command -v curl >/dev/null 2>&1
 command -v python3 >/dev/null 2>&1
 command -v sha256sum >/dev/null 2>&1
-source_root="https://github.com/appsec-foundry/aiscb/releases/download/aiscb-bundle-0.1.18-1"
+source_root="https://github.com/appsec-foundry/aiscb/releases/download/aiscb-bundle-0.1.19-1"
 setup_tmp=$(mktemp -d "${TMPDIR:-/tmp}/aiscb-setup.XXXXXX")
 cleanup() { if [ -d "$setup_tmp" ]; then rm -r -- "$setup_tmp"; fi; }
 trap cleanup 0 1 2 3 15
@@ -27,7 +27,7 @@ download() {
         exit 2
     fi
 }
-download secure-coding-baseline.md "e6ce1720e9fa8652c08b7cfaeb14f2545bf977dd4b32221476a4416e3874fec9" 262144
-download scripts/install.py "90dfdf6cd66339b73536ee75f4764df91212b6db47d1b3931f23977869548315" 524288
-download scripts/show_baseline_version.py "5cef21f747a2fa64faf184f8aeaf2127701bc5344ee878d2cfe63bc66ddc61f3" 262144
+download secure-coding-baseline.md "be68be5b2c9653441e6a65812bb993a5858dfffe295c5917fce9b8e158a286fa" 262144
+download scripts/install.py "e48cc66c7d274ff9307025e18955644a4ac45727a3bed42a49882d5e4b117142" 524288
+download scripts/show_baseline_version.py "45fcef85aedc66f2d5e06157b11fb9294ae5e7506581c5448d9a02ffa33ebe46" 262144
 python3 "$setup_tmp/scripts/install.py" --interactive --offline "$@"
