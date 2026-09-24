@@ -247,18 +247,9 @@ optional. Then `make test-cweval` needs no arguments. CLI arguments override
 the local values, so `make test-cweval ARGS="--dry-run"` checks the configured
 selection without model calls.
 
-For a comparable Python core score, use `make test-cweval-full`. It requires
-every Python core task in the pinned checkout to have a valid task and test
-pair, and uses three repeats per arm even if the local config selects fewer.
-A checkout with 25 cases starts 150 assistant runs. Preview
-the exact selection without model calls using
-`make test-cweval-full ARGS="--dry-run"`. The printed percentage is
-`func-sec@1`: the share of generated solutions that pass both functional and
-security tests. Compare runs only when their CWEval revision, case list,
-repeat count, prompt and evaluation procedure match. The report records the
-tool, model, revision, image, selection, cases, repeats, and both arm scores.
-This target covers CWEval's Python core, not its other languages; it is not a
-score for the entire multilingual benchmark.
+For all Python core tasks with three repeats per arm (150 CLI runs), use
+`make test-cweval ARGS="--all-python --repeats 3"`. This is a Python subset
+experiment, not the published multilingual total score.
 
 An assistant response with no valid single Python code block counts as a failed
 sample; it is not retried. A failed assistant command or missing response still
@@ -266,7 +257,7 @@ stops the run. To score an older run stopped only by a format error without new
 model calls, use:
 
 ```bash
-make test-cweval-full ARGS="--recover-run tests/results/cweval/run-NAME"
+make test-cweval ARGS="--recover-run tests/results/cweval/run-NAME"
 ```
 
 Recovery copies validated outputs into a new result directory and leaves the
@@ -308,6 +299,84 @@ per case and arm; `runs.json` and `preflight.json` retain incomplete-run evidenc
 These scores measure CWEval's Python code-generation tasks, not the baseline's
 broader agent workflow. Run a small selection first; model calls and container
 evaluation consume time and resources.
+
+### Full multilingual paper protocol
+
+`make test-cweval-full` uses direct Chat Completions API requests, the upstream
+DirectPrompt, all **119 tasks**, **100 samples per task and arm**, and
+**temperature 0.8**. This follows the fixed-temperature protocol of
+[CWEval Tables I/II](https://arxiv.org/html/2501.08200v1#S5.SS2).
+The sets are core Python (25), JavaScript (23), C++ (21), C (20), Go (19),
+and memory-safety C (11). It reports task-weighted `func@1/10/50` and
+`func-sec@1/10/50`, using the pass@k estimator, for each set and the total.
+
+Configure the separate, ignored `tests/cweval.full.local.json`:
+
+```json
+{
+  "cweval_root": "/path/to/CWEval",
+  "revision": "FULL_40_CHARACTER_COMMIT",
+  "image": "co1lin/cweval@sha256:FULL_64_CHARACTER_DIGEST",
+  "model": "PROVIDER_MODEL_ID",
+  "api_url": "https://api.openai.com/v1/chat/completions",
+  "api_key_env": "OPENAI_API_KEY",
+  "max_completion_tokens": 2048
+}
+```
+
+Supply the real credential through the named environment variable; never put it
+in the configuration file. The endpoint must support the requested temperature,
+token limit, and system message. HTTPS is required; redirects, automatic retries,
+and silent parameter fallbacks are disabled. The CLI subset configuration and
+CLI login are not used by this target. CLI arguments override full-mode settings.
+
+```bash
+make test-cweval-full ARGS="--dry-run"
+make test-cweval-full ARGS="--reference-only"
+# Paid run: 23,800 completions, plus offline compilation and evaluation.
+make test-cweval-full
+```
+
+Dry-run checks the checkout, task distribution, prompts, and baseline without
+credentials, Docker, or model calls. Reference-only compiles and tests the
+reference implementations in the pinned offline image. Every paid run first
+performs this reference check; an incompatible image stops before generation.
+Prepare the image and all language dependencies beforehand: the runner never
+pulls images or downloads dependencies. Evaluation uses bounded containers
+(2 CPUs, 2 GiB RAM, 128 processes, 1 GiB working filesystem, 512 MiB temporary
+filesystem, default 1,800-second timeout per sample). Compiled programs execute
+only in the container's private working filesystem. No host credentials or
+Docker socket are mounted.
+
+An image sufficient for the Python subset may lack the Go modules pinned in
+the checkout's `go.mod`/`go.sum`. Those must already be available in the image's
+`/home/ubuntu/go/pkg/mod` cache. Inspect `reference.log` after a failed preflight;
+prepare and pin a complete image before starting the paid run. Do not enable
+network access for generated code to install its dependencies.
+
+The control arm receives the original user prompt; the baseline arm receives
+that prompt plus the complete baseline as a system message. Neither receives
+reference solutions or tests. Full API responses are preserved for the upstream
+parser; refusals are not resampled. API failures stop the run. Incomplete
+scoring coverage also stops reporting, so collection failures cannot silently
+shrink the denominator. There is currently no automatic resume or recovery
+for full runs; incomplete evidence remains available for inspection.
+
+Evidence is saved under `tests/results/cweval/full-*`: exact prompts and baseline,
+revision/image pins, task/test/prompt hashes, requested sampling settings,
+provider-reported model metadata, raw responses, sample logs and scores, and
+`report.md`/`report.json`. The report includes both arms and their total-score
+difference in percentage points. The baseline has been developed using CWEval
+findings; these results must not be described as held-out validation.
+
+For comparison with a published total, match its task revision, model version,
+prompt, token budget, sampling and evaluator settings. The default 2,048-token
+cap is explicit and adjustable; verify it against the chosen publication.
+Container resource limits may also affect results; the manifest records them
+and the runner source hashes. This target implements the fixed-temperature tables, **not** the
+figure selecting the best result across temperatures 0.2/0.4/0.6/0.8, nor its
+separate greedy score. The baseline arm is a changed-prompt experiment; only the
+control arm uses the unmodified upstream prompt.
 
 ## Main suite options
 

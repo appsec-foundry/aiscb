@@ -25,6 +25,7 @@ SOURCE_TESTS = {
     "tests/context_fixture.py": ("tests/test_context_comparison.py",),
     "tests/context_tools.py": ("tests/test_context_comparison.py",),
     "tests/cweval_runner.py": ("tests/test_cweval_runner.py",),
+    "tests/cweval_full.py": ("tests/test_cweval_full.py",),
     "tests/design_confirmation.py": ("tests/test_design_confirmation.py",),
     "tests/organization.py": ("tests/test_organization.py",),
     "tests/routing.py": ("tests/test_routing.py",),

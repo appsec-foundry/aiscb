@@ -27,6 +27,7 @@ docs/security/
 # Baseline test runs (regenerated, sometimes large)
 tests/results/
 tests/cweval.local.json
+tests/cweval.full.local.json
 __pycache__/
 
 # Bootstrap copy the quick start downloads into the working directory

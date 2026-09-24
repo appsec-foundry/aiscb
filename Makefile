@@ -19,6 +19,7 @@ CHECK_TESTS = tests/selfcheck.py \
               tests/test_organization.py \
               tests/test_routing.py \
               tests/test_cweval_runner.py \
+              tests/test_cweval_full.py \
               tests/test_context_comparison.py \
               tests/test_split_modules.py \
               examples/claude-code-gate/test_gate.py \
@@ -123,9 +124,9 @@ test-routing: check
 test-cweval: check
 	python3 tests/cweval_runner.py $(ARGS)
 
-## test-cweval-full  all CWEval Python core cases, three repeats per arm; ARGS=--dry-run previews
+## test-cweval-full  multilingual paper profile: 119 tasks, 100 samples, T=0.8; ARGS=--dry-run previews
 test-cweval-full: check
-	python3 tests/cweval_runner.py $(ARGS) --all-python --repeats 3
+	python3 tests/cweval_full.py $(ARGS)
 
 ## test-rule   the cases covering one rule group, for a change to that rule:
 ##             make test-rule RULE=aiscb-REPORT-001
