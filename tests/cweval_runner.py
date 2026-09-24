@@ -108,6 +108,22 @@ def task_prompt(root: Path, name: str) -> str:
     return prompt
 
 
+def python_core_cases(root: Path) -> list[str]:
+    case_dir = root / "benchmark" / "core" / "py"
+    if any(path.is_symlink() for path in (root / "benchmark",
+                                          root / "benchmark" / "core", case_dir)):
+        raise ValueError("CWEval Python core directory must not be linked")
+    names = []
+    for path in case_dir.glob("cwe_*_task.py"):
+        name = path.name.removesuffix("_task.py")
+        if not CASE_NAME.fullmatch(name) or len(names) == 30:
+            raise ValueError("expected 1..30 valid CWEval Python core cases")
+        names.append(name)
+    if not names:
+        raise ValueError("expected 1..30 valid CWEval Python core cases")
+    return sorted(names)
+
+
 def generation_prompt(code_prompt: str) -> str:
     return (
         "Implement the following Python function. Return the complete, directly "
@@ -386,15 +402,22 @@ def overall_scores(scores: dict) -> dict:
 
 
 def write_report(result_dir: Path, scores: dict, runs: list[dict],
-                 model: str, revision: str, image: str) -> dict:
+                 tool: str, model: str, revision: str, image: str,
+                 selection: str) -> dict:
     overall = overall_scores(scores)
-    document = {"model": model, "cweval_revision": revision, "image": image,
+    case_names = list(scores["control"])
+    repeats = scores["control"][case_names[0]]["samples"]
+    document = {"tool": tool, "model": model, "selection": selection,
+                "cases": case_names, "repeats": repeats,
+                "metric": "func-sec@1", "cweval_revision": revision, "image": image,
                 "baseline_id": baseline_run.baseline_identifier(),
                 "runs": runs, "scores": scores, "overall": overall}
     (result_dir / "report.json").write_text(json.dumps(document, indent=2) + "\n")
     lines = ["# CWEval baseline comparison", "",
-             f"Model: `{model}` · CWEval: `{revision}` · Baseline: "
+             f"Tool: `{tool}` · Model: `{model}` · CWEval: `{revision}` · Baseline: "
              f"`{document['baseline_id']}`", "",
+             f"Selection: `{selection}` · {len(case_names)} Python core cases · "
+             f"{repeats} repeats per arm · Metric: `func-sec@1`", "",
              "| Arm | Functional | Functional + secure |",
              "| --- | ---: | ---: |"]
     for arm in ("control", "baseline"):
@@ -425,6 +448,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tool", choices=("claude", "codex"), default="claude")
     parser.add_argument("--model", required=True)
     parser.add_argument("--cases", default=",".join(DEFAULT_CASES))
+    parser.add_argument("--all-python", action="store_true",
+                        help="select every Python core task in the pinned CWEval checkout")
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--eval-timeout", type=int, default=1800)
@@ -444,7 +469,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("--model must be a short model identifier")
         if not IMAGE.fullmatch(args.image):
             raise ValueError("--image must be an immutable name@sha256:<64 hex> reference")
-        names = args.cases.split(",")
+        names = python_core_cases(root) if args.all_python else args.cases.split(",")
         if len(names) != len(set(names)) or not names or len(names) > 30:
             raise ValueError("select 1..30 distinct CWEval cases")
         cases = {name: task_prompt(root, name) for name in names}
@@ -477,9 +502,10 @@ def main(argv: list[str] | None = None) -> int:
                      names, args.repeats)
         scores = {arm: read_scores(result_dir / arm, names, args.repeats)
                   for arm in ("control", "baseline")}
-        overall = write_report(result_dir, scores, runs, args.model,
-                               args.revision, args.image)
-        print("Functional + secure: "
+        overall = write_report(result_dir, scores, runs, args.tool, args.model,
+                               args.revision, args.image,
+                               "all-python-core" if args.all_python else "selected-cases")
+        print(f"Python core func-sec@1 ({len(names)} cases × {args.repeats} repeats): "
               f"control {overall['control']['func_secure_percent']:.1f}%, "
               f"baseline {overall['baseline']['func_secure_percent']:.1f}%, "
               f"difference {overall['delta_percentage_points']:+.1f} percentage points")

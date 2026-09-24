@@ -239,6 +239,19 @@ optional. Then `make test-cweval` needs no arguments. CLI arguments override
 the local values, so `make test-cweval ARGS="--dry-run"` checks the configured
 selection without model calls.
 
+For a comparable Python core score, use `make test-cweval-full`. It requires
+every Python core task in the pinned checkout to have a valid task and test
+pair, and uses three repeats per arm even if the local config selects fewer.
+A checkout with 25 cases starts 150 assistant runs. Preview
+the exact selection without model calls using
+`make test-cweval-full ARGS="--dry-run"`. The printed percentage is
+`func-sec@1`: the share of generated solutions that pass both functional and
+security tests. Compare runs only when their CWEval revision, case list,
+repeat count, prompt and evaluation procedure match. The report records the
+tool, model, revision, image, selection, cases, repeats, and both arm scores.
+This target covers CWEval's Python core, not its other languages; it is not a
+score for the entire multilingual benchmark.
+
 The default cases are CWE-20, CWE-22, and CWE-79 in `benchmark/core/py`.
 Select others with `--cases cwe_020_0,cwe_022_0`; this adapter supports Python
 tasks only. It sends the task text before `BEGIN SOLUTION` and never sends the

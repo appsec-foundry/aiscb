@@ -150,14 +150,21 @@ class CWEvalRunnerTests(unittest.TestCase):
                 "cwe_022_0": {"functional": 2, "func_secure": 2, "samples": 3},
             },
         }
-        overall = runner.write_report(self.root, scores, [], "model", "a" * 40,
-                                      "co1lin/cweval@sha256:" + "b" * 64)
+        overall = runner.write_report(self.root, scores, [], "codex", "model",
+                                      "a" * 40,
+                                      "co1lin/cweval@sha256:" + "b" * 64,
+                                      "all-python-core")
         self.assertEqual(overall["control"]["func_secure_percent"], 33.3)
         self.assertEqual(overall["baseline"]["func_secure_percent"], 66.7)
         self.assertEqual(overall["delta_percentage_points"], 33.3)
         self.assertEqual(overall["baseline"]["functional_percent"], 83.3)
-        self.assertEqual(json.loads((self.root / "report.json").read_text())["overall"],
-                         overall)
+        document = json.loads((self.root / "report.json").read_text())
+        self.assertEqual(document["overall"], overall)
+        self.assertEqual(document["tool"], "codex")
+        self.assertEqual(document["selection"], "all-python-core")
+        self.assertEqual(document["metric"], "func-sec@1")
+        self.assertEqual(document["repeats"], 3)
+        self.assertEqual(document["cases"], ["cwe_020_0", "cwe_022_0"])
         report = (self.root / "report.md").read_text()
         self.assertIn("| control | 3/6 (50.0%) | 2/6 (33.3%) |", report)
         self.assertIn("| baseline | 5/6 (83.3%) | 4/6 (66.7%) |", report)
@@ -180,6 +187,44 @@ class CWEvalRunnerTests(unittest.TestCase):
             self.assertEqual(runner.main(["--dry-run", "--repeats", "2"]), 0)
         self.assertIn("1 cases × 2 repeats × 2 arms = 4 assistant runs",
                       output.getvalue())
+
+    def test_full_python_selection_ignores_local_case_and_repeat_settings(self):
+        (self.tasks / "cwe_022_0_task.py").write_text(
+            "def safe(path):\n    pass\n# BEGIN SOLUTION\nreturn path\n")
+        (self.tasks / "cwe_022_0_test.py").write_text("pass\n")
+        defaults = ["--cweval-root", str(self.root), "--revision", "a" * 40,
+                    "--image", "co1lin/cweval@sha256:" + "b" * 64,
+                    "--model", "model", "--cases", "cwe_020_0",
+                    "--repeats", "1"]
+        output = io.StringIO()
+        with patch.object(runner, "local_config_args", return_value=defaults), \
+             patch.object(runner, "checked_checkout", return_value=self.root), \
+             redirect_stdout(output):
+            self.assertEqual(runner.main(["--dry-run", "--all-python",
+                                          "--repeats", "3"]), 0)
+        self.assertIn("2 cases × 3 repeats × 2 arms = 12 assistant runs",
+                      output.getvalue())
+        self.assertIn("cwe_020_0, cwe_022_0", output.getvalue())
+
+    def test_full_python_selection_rejects_missing_test_and_linked_directory(self):
+        (self.tasks / "cwe_022_0_task.py").write_text(
+            "def safe(path):\n    pass\n# BEGIN SOLUTION\nreturn path\n")
+        names = runner.python_core_cases(self.root)
+        self.assertEqual(names, ["cwe_020_0", "cwe_022_0"])
+        with self.assertRaisesRegex(ValueError, "missing or linked"):
+            runner.task_prompt(self.root, names[1])
+        other_root = self.root / "linked-root"
+        (other_root / "benchmark/core").mkdir(parents=True)
+        (other_root / "benchmark/core/py").symlink_to(self.tasks,
+                                                       target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "must not be linked"):
+            runner.python_core_cases(other_root)
+
+    def test_full_python_selection_caps_case_count(self):
+        for index in range(30):
+            (self.tasks / f"cwe_{100 + index}_0_task.py").write_text("pass\n")
+        with self.assertRaisesRegex(ValueError, "1..30"):
+            runner.python_core_cases(self.root)
 
     def test_local_config_rejects_unknown_options_and_links(self):
         config = self.root / "cweval.local.json"

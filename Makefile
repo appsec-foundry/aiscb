@@ -4,7 +4,7 @@
 .DEFAULT_GOAL := check
 .PHONY: check check-release build-release build-full-baseline coverage setup update status sign-bundle install uninstall install-claude \
         install-codex install-copilot dry-run test-smoke test-quick test-rule test-confirmation \
-        test test-all test-fast test-organization test-cweval test-context clean-results help
+        test test-all test-fast test-organization test-cweval test-cweval-full test-context clean-results help
 
 # Both check and coverage run this suite, so it is listed once.
 CHECK_TESTS = tests/selfcheck.py \
@@ -117,6 +117,10 @@ test-routing: check
 ## test-cweval  run CWEval comparison and print overall score; uses tests/cweval.local.json or ARGS
 test-cweval: check
 	python3 tests/cweval_runner.py $(ARGS)
+
+## test-cweval-full  all CWEval Python core cases, three repeats per arm; ARGS=--dry-run previews
+test-cweval-full: check
+	python3 tests/cweval_runner.py $(ARGS) --all-python --repeats 3
 
 ## test-rule   the cases covering one rule group, for a change to that rule:
 ##             make test-rule RULE=aiscb-REPORT-001
