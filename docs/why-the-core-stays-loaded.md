@@ -1,31 +1,28 @@
 # Why the core stays loaded
 
-A common objection to the baseline is that nothing should sit in the context permanently, and that the core could load only when a task needs it, the way modules already do. This note records why the core stays static and what each dynamic variant would cost.
+Some users would rather not have anything sit in the context permanently and ask whether the core could load only when a task needs it, as modules already do. This note explains why it stays static.
 
-## What the core costs today
+## What the core costs
 
-The core is about 1,600 tokens (see [Structure and context budget](../README.md#structure-and-context-budget)). It enters the context once, at session start, through the assistant's instruction file. It is not re-injected per prompt or per tool call, so a session with three hundred tool calls pays the same as one with three. What grows in a long session is tool output, not the core.
+The core is about 1,600 tokens (see [Structure and context budget](../README.md#structure-and-context-budget)). It is read once at session start from the assistant's instruction file and is not repeated per prompt or tool call. A session with three hundred tool calls pays the same as one with three; what grows in a long session is tool output.
 
-Modules are already situational: only the catalog and the loader instructions are always present, and module bodies stay on disk until the assistant selects them.
+Modules are already loaded on demand. Only the catalog and the loader instructions are always present.
 
-## Dynamic variants and why they do not help
+## Loading the core situationally
 
-Each variant below was considered as a replacement for the static core. They share one weakness: the core exists for tasks that do not look security-related, and every trigger that decides "this task needs the rules" has to recognize such tasks in advance.
+All variants we considered have the same problem. The core matters most in tasks that do not look security-related, and whatever decides when to load it has to recognize those tasks in advance.
 
-- **Keyword or path hook.** A prompt-submit hook injects the core when the prompt, or a file the assistant touches, looks security-related. But the situations the core is for rarely carry such signals: making a failing test pass (Preserve Security), pulling an issue or web page into the session (Agentic Work), opening a log file or an `.env` (Secrets), adding a dependency (supply chain). A hook cannot recognize those, and these are the rules that matter most.
-- **Per-tool-call hook.** A pre-tool-use hook adds the core whenever the assistant edits or runs something. By then the design is decided; the rules that shape the design (Secure Design, Access Control, Design decisions) come too late. It also pays the injection cost on every call instead of once, which makes long sessions more expensive, not cheaper.
-- **Routing stub.** A short always-on stub tells the assistant to fetch the core before touching code, like the module loader. This moves the decision to the model, which is exactly where the baseline does not want it: a model under pressure to finish is the one least likely to fetch rules it has not yet seen. The stub stays in the context anyway, and to trigger reliably it has to describe when to load, so the saving shrinks to a few hundred tokens.
-- **Session-start check.** A start hook loads the core only in repositories that look like code. If it errs toward loading, it loads almost always and saves nothing. If it filters, it drops the core for scripts, infrastructure, and documentation work that has side effects.
+- A keyword or path hook adds the core when the prompt or a touched file looks security-related. The situations the core is for rarely look that way: making a failing test pass, pulling an issue or web page into the session, opening a log file or `.env`, adding a dependency. Preserve Security, Agentic Work, and Secrets would be missing exactly there.
+- A hook before each tool call adds the core when the assistant edits or runs something. By then the design is settled, so Secure Design and Access Control arrive too late. It also pays the cost on every call, which makes long sessions more expensive.
+- A short stub could tell the assistant to fetch the core before touching code, like the module loader. That leaves the decision to the model, and a model under pressure to finish is the least likely to fetch rules it has not seen. The stub itself stays in the context and has to describe when to load, so it saves a few hundred tokens at most.
+- A session-start hook could load the core only in repositories that look like code. If it errs toward loading, it saves nothing. If it filters, scripts, infrastructure, and documentation work lose the core.
 
-Two further points apply to every hook-based variant:
+Hooks also fail open. If one does not start, times out, or is not installed in a client, the session runs without rules and nothing reports it. And once the core is in the context it stays there, so dynamic loading only postpones the cost for any session that needs it.
 
-- **Hooks fail open.** If a hook does not start, times out, or is not installed in a client, the session runs without rules and nothing reports it. A static instruction file has no such failure mode.
-- **Nothing leaves the context.** Once the core is injected, it stays for the rest of the session. Dynamic loading can only postpone the cost, never reduce it for a session that needs the rules.
+## Evidence
 
-## What was measured
-
-The routing tests (`make test-routing`) currently pass for all cases, including scope changes and context loss, so there is no evidence that the model forgets to load modules and no reliability gap that a hook would close. There is also no measurement showing that the core degrades tasks without security relevance. If that concern comes up, the test is straightforward: run cases without security relevance with and without the core and compare. A result there would be the first reason to revisit this note.
+The recorded routing results (`make test-routing`) show no case in which the model failed to load a required module, so there is no reliability gap a hook would close. Nobody has measured whether the core makes tasks without security relevance worse. That would be the test to run before revisiting this note: the same tasks with and without the core.
 
 ## If you do not want the core in every session
 
-Install the baseline per project instead of per user, so it applies only where you decided it should. Complete user installations configured for dynamic loading also have a [session switch](session-switch.md).
+Install the baseline per project instead of per user. Complete user installations configured for dynamic loading also have a [session switch](session-switch.md).

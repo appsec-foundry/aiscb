@@ -19,16 +19,17 @@ Complete mode avoids that runtime command but still needs client loading tests.
 ## Install
 
 ```bash
-python3 scripts/install.py claude codex copilot --into /path/to/project
-python3 scripts/install.py claude codex copilot --user
+python3 scripts/install.py claude codex copilot kiro --into /path/to/project
+python3 scripts/install.py claude codex copilot kiro --user
 ```
 
-Supported entry points are `AGENTS.md` for Codex, `CLAUDE.md` for Claude Code,
-and `.github/copilot-instructions.md` for Copilot. Specify one or several of
-`codex claude copilot`. The installer embeds core, optional overlay, discovery,
-and a named loader command directly into a managed block. Existing unrelated
-instructions are preserved; existing baseline integrations and changed managed
-blocks cause a refusal rather than a second baseline or an overwrite.
+Supported entry points are `AGENTS.md` for Codex and Kiro, `CLAUDE.md` for
+Claude Code, and `.github/copilot-instructions.md` for Copilot. Specify one or
+several of `codex claude copilot kiro`; Codex and Kiro share one managed block.
+The installer embeds core, optional overlay, discovery, and a named loader
+command directly into a managed block. Existing unrelated instructions are
+preserved; existing baseline integrations and changed managed blocks cause a
+refusal rather than a second baseline or an overwrite.
 
 Project setup also checks known user and ancestor instruction locations for
 inherited complete policy and refuses the conflict before writing. Close sessions
@@ -42,8 +43,9 @@ refused; it cannot silently continue loading all modules after migration.
 Custom managed policies, additional configured instruction directories and IDE profile
 settings still need inspection; status verifies files, not the whole client context.
 
-User entries are `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md` and
-`~/.copilot/instructions/secure-coding.instructions.md` with `applyTo: "**"`.
+User entries are `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
+`~/.copilot/instructions/secure-coding.instructions.md` with `applyTo: "**"`,
+and `~/.kiro/steering/AGENTS.md`.
 The existing tool configuration-home overrides are respected; Copilot also gets
 the default VS Code personal instruction file when its CLI home differs.
 User snapshots and their record live under `~/.aiscb/`. Use `--status --user` or
@@ -58,14 +60,17 @@ it or follows the rules: test actual clients before organizational rollout.
 
 Official instruction references:
 [Codex](https://developers.openai.com/codex/guides/agents-md/),
-[Claude Code](https://code.claude.com/docs/en/memory), and
-[Copilot](https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions).
+[Claude Code](https://code.claude.com/docs/en/memory),
+[Copilot](https://docs.github.com/en/copilot/how-tos/configure-custom-instructions/add-repository-instructions), and
+[Kiro](https://kiro.dev/docs/steering/).
 The direct loader avoids relying on differing skill-discovery behavior.
 
 For Claude, keep the explicit CLAUDE.md entry even though recent releases can
 conditionally read AGENTS.md. For Copilot, select the exact CLI/IDE/cloud-agent
 surface and confirm it can run the loader; Chat, code review and inline
-completion are not interchangeable. Complete mode also requires the entire
+completion are not interchangeable. For Kiro, approve shell execution of the
+loader; a complete copy under `.kiro/steering/` is refused because Kiro would
+load it in addition to `AGENTS.md`. Complete mode also requires the entire
 block to fit the surface's instruction limits. See the
 [client compatibility evidence](agent-integration-verification.md#current-branch-evidence-2026-09-19).
 

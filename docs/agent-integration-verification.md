@@ -22,6 +22,8 @@ Build the adapters from one verified release. Put the baseline and short organiz
 | Copilot Chat in Visual Studio, project | `.github/copilot-instructions.md`; `.github/instructions/*.instructions.md` can add path-specific rules | Do not assume that Visual Studio Chat reads `AGENTS.md`: the [GitHub support matrix](https://docs.github.com/en/copilot/reference/custom-instructions-support) does not list it for this surface. |
 | Copilot Chat in Visual Studio 2026, user or organization | Personal `%USERPROFILE%\copilot-instructions.md`; organization custom instructions for organization repositories in Visual Studio 18.8 or later | This is a Windows IDE entry point, separate from VS Code’s `~/.copilot/instructions`. Check the selected Visual Studio version and the organization-instructions option. |
 | Copilot Chat on GitHub.com | Repository or organization custom instructions, according to the selected feature | Personal and organization instructions have different support by feature; check the [current matrix](https://docs.github.com/en/copilot/reference/custom-instructions-support). |
+| Kiro, project | Combined text in root `AGENTS.md`, the same block the Codex adapter writes | [Kiro steering](https://kiro.dev/docs/steering/) always includes `AGENTS.md` and does not apply inclusion modes to it. A `.kiro/steering/` file with the same policy loads in addition to `AGENTS.md`; the installer refuses a complete copy there. The modular loader needs shell execution approved in Kiro. |
+| Kiro, user | Combined text in `~/.kiro/steering/AGENTS.md` | Kiro reads user steering from `~/.kiro/steering/`, not from `~/.codex/AGENTS.md`. Global steering applies to the IDE and CLI, not to Kiro on the web. |
 
 For Claude, use a real import only where Claude Code supports it. For Codex and Copilot, generate the actual combined instruction text at their entry points; do not assume `@`, a Markdown link, or a path string loads another file. If an entry point already exists, merge the new block without deleting unrelated instructions and maintain one identifiable managed block. Refuse ambiguous ownership, symlink targets outside the intended root, invalid encoding, and content drift; back up any file the installer is authorized to replace. Make install, update, and uninstall operate only on owned blocks or files.
 
@@ -62,6 +64,7 @@ Perform these checks in a fresh session opened from the intended repository and 
 | Codex IDE extension | Open the Codex sidebar in the intended VS Code window, start a new local chat, and perform the same source question. Verify the selected workspace and the shared `config.toml` layers; do not count a Copilot Chat response as Codex evidence. |
 | Copilot Chat/agent in VS Code | Open Chat **Diagnostics** and inspect loaded instruction files and errors. Inspect the response’s **References** list or the actual model-request instructions for the expected file; a plain-chat and a matching-file test are both required for `*.instructions.md`. Do not count inline code completions: VS Code custom instructions do not apply to them. |
 | Copilot Chat in Visual Studio | Start a new chat for the intended solution and inspect the **References** list for the repository, personal, or organization instruction source. Confirm organization instructions are enabled when that route is used. Test the intended Chat or review feature separately. |
+| Kiro CLI | From the project root, run `kiro-cli chat --no-interactive --trust-tools= "aiscb?"`. With no tools trusted, the answer can only come from the loaded context. |
 | Copilot CLI or GitHub.com | Start a fresh interaction on that surface and inspect its available instruction references or diagnostics. Test the exact feature being rolled out: Chat, cloud agent, and code review do not share one support matrix row. |
 
 Use a harmless probe that asks for organization baseline IDs and their already-loaded source files **from the current instruction context, without opening files**. Keep the expected ID out of the question. Compare the answer with the approved release, then inspect the source view above. A correct answer alone can be guessed or learned from repository search; a visible source alone does not prove the model follows the rule. For a behavior test, run one representative, reversible task in an isolated fixture and inspect the resulting diff.
@@ -120,6 +123,25 @@ Before release, supplement the recorded startup checks with actual model tasks:
 MCP-only and RAG tasks, multi-module selection, missing
 loader, corrupted source, new session after update, and preserved user policy.
 Record exact client versions, execution permissions and instruction-size limits.
+
+### Kiro project installation (2026-09-24)
+
+Tested with Kiro CLI 2.24.0 on Linux and no global Kiro steering. A project
+installation (`install.py kiro --into`, which writes the same `AGENTS.md` block
+as `codex`) answered `aiscb?` with `aiscb-0.1.18`, modular mode, all eleven
+modules available, none loaded, and no overlays; no tools were trusted for this
+question. Asked for a Flask login endpoint, Kiro ran the loader for
+`authentication`, `data-handling`, and `cryptography` before writing code.
+
+A user installation (`install.py kiro --user`) into an isolated home wrote
+`~/.kiro/steering/AGENTS.md`. Kiro CLI started with that home in a project
+without its own `AGENTS.md` answered `aiscb?` correctly and ran the loader for
+the same login task.
+
+This shows that Kiro CLI loads the baseline and runs the loader. It does not
+show that Kiro selects the right modules: in three of seven login runs it did
+not load `aiscb:web`. The Kiro IDE was not tested, nor a Windows IDE opening a
+WSL project.
 
 ### Remaining real-client acceptance cases
 

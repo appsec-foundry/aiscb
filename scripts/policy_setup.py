@@ -16,6 +16,8 @@ def layout(legacy, home, root, user):
         "codex": str(legacy.tool_config_root("codex", home) / "AGENTS.md"),
         "copilot": str(legacy.tool_config_root("copilot", home) /
                        "instructions" / legacy.VSCODE_INSTRUCTIONS_NAME),
+        # Kiro always includes an AGENTS.md from its global steering directory.
+        "kiro": str(home / ".kiro/steering/AGENTS.md"),
     }
     shared = home / ".copilot/instructions" / legacy.VSCODE_INSTRUCTIONS_NAME
     if str(shared) != points["copilot"]:
@@ -64,6 +66,8 @@ def inherited_conflicts(legacy, home, root, tools):
         paths.update(instruction_files(legacy.tool_config_root("copilot", home) / "instructions"))
     if "claude" in tools or "copilot" in tools:
         paths.update(instruction_files(legacy.tool_config_root("claude", home) / "rules"))
+    if "kiro" in tools:
+        paths.update(instruction_files(home / ".kiro/steering"))
     # Ancestor instructions can bring an eager copy back even after user migration.
     for parent in root.parents:
         if "codex" in tools or "copilot" in tools:
@@ -85,8 +89,8 @@ def migration(legacy, home, root, user, tools, points, enabled):
     targets = legacy.user_targets(home) if user else legacy.project_targets(root)
     candidates = {Path(points[t]) if user else root / points[t] for t in tools}
     for tool in tools:
-        if tool == "copilot-vscode":
-            continue
+        if tool not in targets:
+            continue  # No legacy complete integration: copilot-vscode, kiro.
         candidates.update(path for _, path in targets[tool])
     if user and "copilot" in tools:
         candidates.add(legacy.previous_copilot_user_target(home))
@@ -209,7 +213,7 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
         if not current.is_official or not available.is_official or available.version < current.version:
             raise ValueError("refresh requires the same official baseline without a downgrade")
         args.tools = [tool for tool, rel in points.items()
-                      if rel in record["entries"] and tool in legacy.TOOLS]
+                      if rel in record["entries"] and tool in legacy.MODULAR_TOOLS]
         if not args.tools:
             raise ValueError("no supported installed tools")
         args.complete = not record["modular"]
@@ -227,11 +231,11 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
         args.user = scope == "u"
         if not args.user:
             root = Path(input_fn(f"Project directory [{root}]: ").strip() or root).expanduser().resolve()
-        selected = input_fn("Tools (claude codex copilot) [all]: ").strip()
-        args.tools = selected.split() if selected else list(legacy.TOOLS)
-    tools = list(dict.fromkeys(args.tools or legacy.TOOLS))
-    if any(t not in legacy.TOOLS for t in tools):
-        raise ValueError("unknown tool; choose claude, codex or copilot")
+        selected = input_fn("Tools (claude codex copilot kiro) [all]: ").strip()
+        args.tools = selected.split() if selected else list(legacy.MODULAR_TOOLS)
+    tools = list(dict.fromkeys(args.tools or legacy.MODULAR_TOOLS))
+    if any(t not in legacy.MODULAR_TOOLS for t in tools):
+        raise ValueError("unknown tool; choose claude, codex, copilot or kiro")
     if args.user and args.into:
         raise ValueError("--user and --into cannot be combined")
     storage, points = layout(legacy, home, root, args.user)
@@ -270,6 +274,8 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
     if "copilot" in tools:
         directory = (legacy.tool_config_root("copilot", home) if args.user else root / ".github")
         extra.extend(instruction_files(directory / "instructions"))
+    if "kiro" in tools:
+        extra.extend(instruction_files((home if args.user else root) / ".kiro/steering"))
     entry_paths = {Path(points[t]) if args.user else root / points[t] for t in tools}
     for path in extra:
         if path in entry_paths:

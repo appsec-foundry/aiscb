@@ -70,6 +70,52 @@ class ModularSetupTests(unittest.TestCase):
         self.assertEqual(self.cli("--status").returncode, 0)
         self.assertEqual(self.cli("--uninstall").returncode, 0)
 
+    def test_kiro_project_shares_one_agents_block_with_codex(self):
+        result = self.cli("kiro", "--into", str(self.project))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Kiro:", result.stdout)
+        self.command(self.project / "AGENTS.md")
+        self.assertFalse((self.project / "CLAUDE.md").exists())
+        result = self.cli("codex", "kiro", "--into", str(self.project))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.project / "AGENTS.md").read_text().count(install_policy.START), 1)
+        record = json.loads((self.project / ".aiscb/installation.json").read_text())
+        self.assertEqual(list(record["entries"]), ["AGENTS.md"])
+        self.assertEqual(self.cli("--status").returncode, 0)
+        self.assertEqual(self.cli("--uninstall").returncode, 0)
+        self.assertNotIn(install_policy.START, (self.project / "AGENTS.md").read_text())
+
+    def test_kiro_user_uses_global_steering(self):
+        result = self.cli("kiro", "--user")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        steering = self.home / ".kiro/steering/AGENTS.md"
+        self.command(steering)
+        self.assertFalse((self.home / ".codex/AGENTS.md").exists())
+        self.assertEqual(self.cli("--status", "--user").returncode, 0)
+        self.assertEqual(self.cli("--uninstall", "--user").returncode, 0)
+        self.assertNotIn(install_policy.START, steering.read_text())
+
+    def test_kiro_complete_steering_copy_refuses_before_writes(self):
+        for user in (False, True):
+            with self.subTest(user=user):
+                directory = (self.home if user else self.project) / ".kiro/steering"
+                directory.mkdir(parents=True)
+                (directory / "old-policy.md").write_bytes(install.bundled_baseline().content)
+                result = self.cli("kiro", *(["--user"] if user else []))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("complete", result.stderr)
+                self.assertFalse((self.project / "AGENTS.md").exists())
+                self.assertFalse((directory / "AGENTS.md").exists())
+                (directory / "old-policy.md").unlink()
+
+    def test_kiro_complete_uses_modern_setup_and_legacy_actions_refuse(self):
+        result = self.cli("kiro", "--complete")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("[aiscb-MCPAUTH-001]", (self.project / "AGENTS.md").read_text())
+        result = self.cli("kiro", "--user", "--complete", "--session-switch")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("modular setup only", result.stderr)
+
     def test_refresh_preserves_scope_tools_mode_and_unrelated_prose(self):
         for user in (False, True):
             for complete in (False, True):

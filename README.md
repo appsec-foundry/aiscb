@@ -7,6 +7,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-compatible-D97757?logo=anthropic&logoColor=white)](https://code.claude.com/)
 [![GitHub Copilot](https://img.shields.io/badge/GitHub%20Copilot-compatible-000000?logo=githubcopilot&logoColor=white)](https://github.com/features/copilot)
 [![OpenAI Codex](https://img.shields.io/badge/OpenAI%20Codex-compatible-412991?logo=openai&logoColor=white)](https://developers.openai.com/codex/)
+[![Kiro](https://img.shields.io/badge/Kiro-compatible-9046FF)](https://kiro.dev/)
 
 Install aiscb to give your AI coding assistant a consistent set of security rules. A core stays active throughout the session; additional modules load when needed. Organizations can add their own rules through an overlay.
 
@@ -155,7 +156,7 @@ The assistant always reads the [core](baseline/aiscb-core.md): secure design and
 
 Counts cover rule text only; the catalog, loading instructions, and overlays add context. `authentication` loads `cryptography` and `data-handling`; `cryptography` loads `secrets-initialization`; `llm-agents` and `llm-retrieval-memory` also load `llm-applications`; `mcp-clients-servers` also loads `data-handling`. Shared dependencies load once.
 
-The core enters the context once per session and is not repeated per tool call, so a long session pays the same 1,594 tokens as a short one. Loading it only when a task looks security-related would drop it from the tasks it exists for; [Why the core stays loaded](docs/why-the-core-stays-loaded.md) walks through the alternatives. If you do not want the baseline in every session, install it per project rather than per user.
+The core enters the context once per session and is not repeated per tool call, so a long session pays the same 1,594 tokens as a short one. Loading it only when a task looks security-related would drop it from the tasks that need it most; [Why the core stays loaded](docs/why-the-core-stays-loaded.md) walks through the alternatives. If you do not want the baseline in every session, install it per project rather than per user.
 
 ## What changes in practice
 
@@ -196,15 +197,15 @@ See the [integration guide](docs/agent-integration-verification.md) for client s
 
 ### Modular installation
 
-Modular loading is the default in this checkout and signed release for all three clients. Run:
+Modular loading is the default. The current Quick start release covers Claude Code, Codex, and Copilot; Kiro needs the next release or this checkout. Run:
 
 ```bash
-python3 scripts/install.py claude codex copilot --into /path/to/project
+python3 scripts/install.py claude codex copilot kiro --into /path/to/project
 # Or install for your user account:
-python3 scripts/install.py claude codex copilot --user
+python3 scripts/install.py claude codex copilot kiro --user
 ```
 
-Name only the tools you use, or omit the names for all three. The assistant must be allowed to run the supplied Python 3.10+ loader. The installer preserves unrelated instructions. Restart the assistant after installation.
+Name only the tools you use, or omit the names for all four. Codex and Kiro share the project `AGENTS.md`; for your user account, Kiro reads `~/.kiro/steering/AGENTS.md`. The assistant must be allowed to run the supplied Python 3.10+ loader. The installer preserves unrelated instructions. Restart the assistant after installation.
 
 Modular loading needs verification in the clients you use before rollout; installer tests do not establish that a model selects the right modules. If command execution is unavailable, use `--complete`, provided the client's instruction limit can hold the entire baseline. Only the core, module discovery and loader instructions enter the initial context; module bodies stay on disk until selected. `--modular` remains an explicit spelling of the default.
 
@@ -239,6 +240,7 @@ Start normally to restore the baseline. The switch does not disable project inst
 | Claude Code | `CLAUDE.md` |
 | Codex | `AGENTS.md` |
 | GitHub Copilot | `.github/copilot-instructions.md` |
+| Kiro | `AGENTS.md` |
 
 Support varies between CLI, IDE, cloud agent, review, and completion features. Check the [integration guide](docs/agent-integration-verification.md) for the surface you use, instruction limits, and loading checks.
 

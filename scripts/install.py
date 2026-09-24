@@ -70,6 +70,8 @@ KNOWN_HOOK_DIGESTS = (
 COPILOT_VERSION_HOOK_NAME = "aiscb-baseline-version.json"
 PREVIOUS_COPILOT_VERSION_HOOK_NAME = "aisec-baseline-version.json"
 TOOLS = ("claude", "codex", "copilot")
+# Kiro exists only in the modular setup; legacy management keeps TOOLS.
+MODULAR_TOOLS = (*TOOLS, "kiro")
 TOOL_LABELS = {
     "claude": "Claude Code",
     "codex": "Codex",
@@ -4293,7 +4295,7 @@ def _interactive_check_online(offline: bool) -> bool:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "tools", nargs="*", help=f"any of {', '.join(TOOLS)}; default is all"
+        "tools", nargs="*", help=f"any of {', '.join(MODULAR_TOOLS)}; default is all"
     )
     parser.add_argument(
         "--user", action="store_true", help="install for this user instead of a project"
@@ -4376,12 +4378,13 @@ def main(argv: list[str] | None = None) -> int:
     modern_record = ((Path.home() if args.user else (args.into or Path.cwd())) /
                      ".aiscb/installation.json")
     modern_action = not (args.update or args.refresh_update_cache or args.session_switch)
-    if args.complete and not modern_record.exists() and not args.organization:
+    if (args.complete and not modern_record.exists() and not args.organization
+            and "kiro" not in args.tools):
         modern_action = False
     if args.status or args.uninstall:
         modern_action = modern_record.exists() or args.modular
     if modern_action:
-        if any(tool not in TOOLS for tool in args.tools):
+        if any(tool not in MODULAR_TOOLS for tool in args.tools):
             parser.error("unknown tool")
         if args.offline and not (args.status or args.interactive):
             parser.error("--offline is only valid with --interactive or --status")
@@ -4518,6 +4521,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.offline:
         parser.error("--offline is only valid with --interactive or --status")
     tools = list(args.tools) or (["claude", "codex"] if args.session_switch else list(TOOLS))
+    if "kiro" in tools:
+        parser.error("kiro is supported by the modular setup only; "
+                     "legacy complete management covers claude, codex and copilot")
     unknown = [tool for tool in tools if tool not in TOOLS]
     if unknown:
         parser.error(f"unknown tool {unknown[0]!r}; choose from {', '.join(TOOLS)}")

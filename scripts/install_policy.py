@@ -13,8 +13,9 @@ import build_baseline
 import policy_loader as loader
 
 ROOT = Path(__file__).resolve().parent.parent
+# Kiro loads the project AGENTS.md, so it shares the Codex entry point.
 ENTRY_POINTS = {"claude": "CLAUDE.md", "codex": "AGENTS.md",
-                "copilot": ".github/copilot-instructions.md"}
+                "copilot": ".github/copilot-instructions.md", "kiro": "AGENTS.md"}
 START = "<!-- aiscb managed policy -->"
 END = "<!-- /aiscb managed policy -->"
 
@@ -205,8 +206,12 @@ def install(tools, root, *, modular=True, bundle=None, expected=None,
         block = START + "\n" + initial + "\n" + END
         edits = dict(prepared)
         records = dict(previous.get("entries", {}))
+        written = set()
         for tool in tools:
             rel = entry_points[tool]
+            if rel in written:
+                continue  # Tools sharing an entry point get one block.
+            written.add(rel)
             path = Path(rel) if Path(rel).is_absolute() else root / rel
             if path in prepared:
                 loader.safe_path(Path(path.anchor), str(path.parent).lstrip("/"))
@@ -253,6 +258,9 @@ def install(tools, root, *, modular=True, bundle=None, expected=None,
     if "copilot" in tools:
         messages.append("Copilot: verify the exact CLI/IDE/cloud surface and instruction limits; "
                         "modular mode needs permitted Python command execution. File installation is not loading evidence.")
+    if "kiro" in tools:
+        messages.append("Kiro: modular mode needs approved shell execution of the loader; "
+                        "verify with `aiscb?` in a new session.")
     return messages
 
 
