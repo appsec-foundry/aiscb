@@ -23,9 +23,11 @@ class SplitTests(unittest.TestCase):
             rules.update(re.findall(r'^- \*\*\[([^]]+)\] [^\n]*?:\*\* (.+)$', text, re.M))
         rules['aiscb-MECHANISMS-001'] += ' '+rules.pop('aiscb-AUTHMECHANISMS-001')
         rules['aiscb-WEBTESTS-001'] = rules.pop('aiscb-AUTHTESTS-001').removesuffix('.')+'; '+rules['aiscb-WEBTESTS-001'].removeprefix('Test ')
-        # Canonical rule bodies from the pre-split aiscb-0.1.18 source.
+        # Canonical rule bodies from the pre-split aiscb-0.1.18 source, minus the
+        # webhook clause removed from MECHANISMS-001 by
+        # specs/archive/2026-09-24-trim-webhook-duplicate.
         self.assertEqual(hashlib.sha256(json.dumps(rules, sort_keys=True).encode()).hexdigest(),
-                         'a8bdde767aff9dc93a4d3e0849933aa72801783c9d4e740929acafc7cfaa611a')
+                         'fae7ea1633f7ba928caae71e46f9570b7bf13611f79214dec21986ba5757c6ee')
 
     def test_narrow_loads_and_auth_dependency(self):
         with tempfile.TemporaryDirectory() as tmp:

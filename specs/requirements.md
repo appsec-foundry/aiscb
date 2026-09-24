@@ -191,8 +191,9 @@ aiscb or organization module triggers.
 before affected design or code changes, using only the bounded catalog and
 loader supplied by the adapter. Recheck on scope changes, final diff, resume,
 or context loss. Missing, invalid, incompatible, or conflicting required
-content stops only affected work. Initial context contains core, discovery and
-loader instructions plus supplied always-on overlays; complete loading is explicit.
+content stops only affected work. Initial context contains core, the adapter's
+discovery and loader instructions, and supplied always-on overlays; module
+bodies load only before affected work.
 The `aiscb?` status uses existing context to distinguish available from loaded
 modules and reports unknown state without reading files.
 
@@ -685,13 +686,13 @@ out-of-band verification, and the full session lifecycle are not covered.
 
 **Applies when:** Selecting cryptography, password storage, random tokens, authentication or sessions.
 
-**Requirement:** Use maintained libraries, vetted algorithms, secure randomness and sound password KDFs. Compare secrets in constant time and verify inbound webhook signatures before acting. Do not invent cryptography, authentication or sessions.
+**Requirement:** Use maintained libraries, vetted algorithms, secure randomness and sound password KDFs. Compare secrets in constant time. Do not invent cryptography, authentication or sessions.
 
-**Observable acceptance:** Established security primitives are used; weak hashes and insecure randomness are rejected; secret comparisons and signature verification use sound mechanisms.
+**Observable acceptance:** Established security primitives are used; weak hashes and insecure randomness are rejected; secret comparisons use sound mechanisms. Webhook signature verification belongs to `aiscb-WEBHOOK-001`.
 
 **Model cases:** `greenfield-order-app`
 
-**Evidence and gaps:** Partial. The case covers password hashing; randomness, constant-time comparison and webhook verification are not covered.
+**Evidence and gaps:** Partial. The case covers password hashing; randomness and constant-time comparison are not covered.
 
 ## aiscb-AUTHMECHANISMS-001 — Authentication Mechanisms
 

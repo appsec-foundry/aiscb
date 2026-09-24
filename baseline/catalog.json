@@ -21,8 +21,8 @@
       "aiscb-TESTS-001",
       "aiscb-REPORT-001"
     ],
-    "size": 8357,
-    "sha256": "3c0bd2150c63d62a513241580ff79eddd8e3a31b67f585cdbff5d94b7966bb21"
+    "size": 8019,
+    "sha256": "42bbb4af7554c3cedf3e16c4ab4f8694a4d01b8d4e32c4976cd765737ce8adc3"
   },
   "modules": [
     {
@@ -73,8 +73,8 @@
         "aiscb-MECHANISMS-001",
         "aiscb-WEBHOOK-001"
       ],
-      "size": 1111,
-      "sha256": "a9d400074d097c9a1f656f189b3a3cfecec0dcbbbe347aad3331947494ae40b8"
+      "size": 1058,
+      "sha256": "9d4d53b178f379c52c8450187a72f2e149417da30f73a0e5d88b6ec8e1fcecba"
     },
     {
       "id": "aiscb:data-handling",

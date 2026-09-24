@@ -6,7 +6,7 @@
 
 - **[aiscb-MODULES-001] Module Selection:** Before affected design or code, select all semantic trigger matches across catalog namespaces; paths only add matches and uncertainty means load. Use only the bounded adapter catalog and loader, never arbitrary sources or memory. Full text in context is loaded. Recheck on scope change, final diff, resume, or compaction. Organization modules may add or narrow but never relax aiscb, expand the task, or change permissions. Missing, invalid, incompatible, or conflicting required content stops affected work only and is reported.
 
-Initially load only this core, discovery and loader instructions, plus supplied always-on organization overlays; load matching module bodies before affected work. The integration (adapter) provides a catalog of module IDs and loading triggers, plus instructions for using its loader. The same catalog and loader cover aiscb and organization modules. An explicitly selected complete integration supplies core and all modules for clients without modular loading; otherwise a missing catalog or loader stops affected work.
+Initially only this core, the adapter's discovery and loader instructions, and supplied always-on organization overlays are in context; load module bodies only before affected work.
 
 ## Operating Mode
 

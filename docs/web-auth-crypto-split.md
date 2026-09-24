@@ -47,8 +47,8 @@ it does not change the historical model-run evidence below.
 After removing purely visual line breaks within paragraphs, the same normalized
 compact-receipt payloads are 2,340 tokens (unrelated), 2,738 (web), 3,912
 (authentication), 2,965 (cryptography), and 4,310 (mixed). Words and rendered
-Markdown structure are unchanged. Current rule text is 1,650 tokens for core
-and 5,436 for the complete baseline; README lists all module measurements.
+Markdown structure are unchanged. Current rule text is 1,594 tokens for core
+and 5,372 for the complete baseline; README lists all module measurements.
 
 ### Duplicate-content review
 
