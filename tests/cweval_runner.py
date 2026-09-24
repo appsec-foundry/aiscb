@@ -34,6 +34,7 @@ CODE_BLOCK = re.compile(r"(?m)^```(?:python|py)?[ \t]*\n(?P<code>.*?)^```[ \t]*$
 MAX_CODE_BYTES = 200_000
 MAX_TASK_BYTES = 50_000
 MAX_SCORE_BYTES = 1_000_000
+MAX_RUN_METADATA_BYTES = 1_000_000
 RESULTS = baseline_run.RESULTS_DIR / "cweval"
 LOCAL_CONFIG = Path(__file__).with_name("cweval.local.json")
 CONTAINER_ROOT = "/home/ubuntu/CWEval"
@@ -43,6 +44,10 @@ CONFIG_OPTIONS = {
     "cweval_root": str, "revision": str, "image": str,
     "tool": str, "model": str, "cases": str,
     "repeats": int, "timeout": int, "eval_timeout": int,
+}
+FORMAT_ERRORS = {
+    "response must contain exactly one Python code block",
+    "response code is empty or exceeds size limit",
 }
 
 
@@ -239,18 +244,63 @@ def generate(cases: dict[str, str], tool: str, model: str,
                     reply = assistant_reply(tool, workdir,
                                             generation_prompt(code_prompt),
                                             model, timeout)
-                    code = extract_code(reply)
-                    output = (result_dir / arm / f"generated_{index}" / "core" /
-                              "py" / f"{name}_raw.py")
-                    output.parent.mkdir(parents=True, exist_ok=True)
-                    output.write_text(code, encoding="utf-8")
-                    run["status"] = "complete"
+                    if not reply.strip():
+                        raise RuntimeError("assistant returned an empty response")
+                    try:
+                        code = extract_code(reply)
+                    except ValueError as exc:
+                        run["status"] = "invalid_format"
+                        run["reason"] = str(exc)[:200]
+                    else:
+                        output = (result_dir / arm / f"generated_{index}" / "core" /
+                                  "py" / f"{name}_raw.py")
+                        output.parent.mkdir(parents=True, exist_ok=True)
+                        output.write_text(code, encoding="utf-8")
+                        run["status"] = "complete"
                 except (OSError, ValueError, RuntimeError) as exc:
                     run["reason"] = str(exc)[:200]
                 finally:
                     shutil.rmtree(workdir, ignore_errors=True)
                 print(f"{arm} {name} sample {index}: {run['status']}", flush=True)
     return runs
+
+
+def checked_runs(rows: object, names: list[str], repeats: int, *,
+                 allow_legacy_format: bool = False) -> tuple[list[dict], dict]:
+    expected = {(arm, name, index) for arm in ("control", "baseline")
+                for name in names for index in range(repeats)}
+    if not isinstance(rows, list) or len(rows) != len(expected):
+        raise ValueError("generation records do not match selected cases")
+    normalized = []
+    invalid = {"control": set(), "baseline": set()}
+    seen = set()
+    for raw in rows:
+        if (not isinstance(raw, dict) or set(raw) -
+                {"arm", "case", "sample", "status", "reason"}):
+            raise ValueError("invalid generation record")
+        if (type(raw.get("arm")) is not str or type(raw.get("case")) is not str
+                or type(raw.get("sample")) is not int
+                or type(raw.get("status")) is not str
+                or ("reason" in raw and (type(raw["reason"]) is not str
+                                         or len(raw["reason"]) > 200))):
+            raise ValueError("invalid generation record")
+        key = (raw.get("arm"), raw.get("case"), raw.get("sample"))
+        if key not in expected or key in seen:
+            raise ValueError("generation records do not match selected cases")
+        seen.add(key)
+        row = dict(raw)
+        status = row.get("status")
+        if (allow_legacy_format and status == "incomplete"
+                and row.get("reason") in FORMAT_ERRORS):
+            status = row["status"] = "invalid_format"
+        if status == "invalid_format":
+            if row.get("reason") not in FORMAT_ERRORS:
+                raise ValueError("unrecognized format failure")
+            invalid[key[0]].add((key[1], key[2]))
+        elif status != "complete":
+            raise ValueError("generation incomplete; evaluation skipped")
+        normalized.append(row)
+    return normalized, invalid
 
 
 def docker_command(root: Path, arm_dir: Path, image: str, name: str) -> list[str]:
@@ -276,18 +326,22 @@ def docker_command(root: Path, arm_dir: Path, image: str, name: str) -> list[str
         "/bin/sh", "-c",
         "tar -xf - -C evals/aiscb && "
         "/home/ubuntu/miniforge3/envs/cweval/bin/python cweval/evaluate.py "
-        "pipeline --eval_path evals/aiscb --num_proc 1 --docker False "
+        "pipeline --eval_path evals/aiscb --num_proc 2 --docker False "
         ">/tmp/aiscb-eval.log 2>&1 || { tail -c 2000 /tmp/aiscb-eval.log >&2; exit 1; }; "
         f"test $(wc -c < evals/aiscb/res_all.json) -le {MAX_SCORE_BYTES} && "
         "cat evals/aiscb/res_all.json",
     ]
 
 
-def evaluation_archive(stream, arm_dir: Path, names: list[str], repeats: int) -> None:
+def evaluation_archive(stream, arm_dir: Path, names: list[str], repeats: int,
+                       invalid: set[tuple[str, int]] | None = None) -> None:
     """Send only generated Python files to the container through stdin."""
+    invalid = invalid or set()
     with tarfile.open(fileobj=stream, mode="w") as archive:
         for index in range(repeats):
             for name in names:
+                if (name, index) in invalid:
+                    continue
                 relative = Path(f"generated_{index}/core/py/{name}_raw.py")
                 source = arm_dir / relative
                 if source.is_symlink() or not source.is_file():
@@ -326,15 +380,21 @@ def run_docker_with_archive(cmd: list[str], stream, cwd: Path,
 
 
 def evaluate(root: Path, result_dir: Path, image: str, timeout: int,
-             names: list[str], repeats: int) -> None:
+             names: list[str], repeats: int, invalid: dict | None = None) -> None:
     if shutil.which("docker") is None:
         raise RuntimeError("Docker is required to evaluate generated code")
+    invalid = invalid or {"control": set(), "baseline": set()}
     for arm in ("control", "baseline"):
+        if len(invalid[arm]) == len(names) * repeats:
+            (result_dir / arm).mkdir(parents=True, exist_ok=True)
+            (result_dir / arm / "res_all.json").write_text("{}\n", encoding="utf-8")
+            continue
         name = f"aiscb-cweval-{uuid.uuid4().hex[:12]}"
         cmd = docker_command(root, result_dir / arm, image, name)
         try:
             with tempfile.TemporaryFile(dir=result_dir) as archive:
-                evaluation_archive(archive, result_dir / arm, names, repeats)
+                evaluation_archive(archive, result_dir / arm, names, repeats,
+                                   invalid[arm])
                 rc, out, err = run_docker_with_archive(cmd, archive,
                                                        result_dir, timeout)
             if rc != 0:
@@ -350,26 +410,30 @@ def evaluate(root: Path, result_dir: Path, image: str, timeout: int,
                            timeout=20, check=False)
 
 
-def read_scores(arm_dir: Path, names: list[str], repeats: int) -> dict:
+def read_scores(arm_dir: Path, names: list[str], repeats: int,
+                invalid: set[tuple[str, int]] | None = None) -> dict:
+    invalid = invalid or set()
     result = json.loads((arm_dir / "res_all.json").read_text(encoding="utf-8"))
     if not isinstance(result, dict) or any(not isinstance(k, str) or
                                            not isinstance(v, dict)
                                            for k, v in result.items()):
         raise ValueError("invalid CWEval result structure")
-    expected = {f"{name}_test.py" for name in names}
-    if {Path(key).name for key in result} != expected or len(result) != len(names):
+    expected = {f"{name}_test.py" for name in names
+                if any((name, index) not in invalid for index in range(repeats))}
+    if {Path(key).name for key in result} != expected or len(result) != len(expected):
         raise ValueError("CWEval result cases differ from selected cases")
     scores = {}
     for name in names:
         matches = [v for key, v in result.items()
                    if Path(key).name == f"{name}_test.py"]
-        if len(matches) != 1:
+        valid_count = repeats - sum((name, index) in invalid
+                                    for index in range(repeats))
+        if len(matches) != (1 if valid_count else 0):
             raise ValueError(f"missing or duplicate evaluation for {name}")
-        values = matches[0]
-        functional = values.get("functional")
-        secure = values.get("secure")
+        values = matches[0] if matches else {"functional": [], "secure": []}
+        functional, secure = values.get("functional"), values.get("secure")
         if (not isinstance(functional, list) or not isinstance(secure, list)
-                or len(functional) != repeats or len(secure) != repeats
+                or len(functional) != valid_count or len(secure) != valid_count
                 or any(type(v) is not bool for v in functional + secure)):
             raise ValueError(f"invalid evaluation data for {name}")
         scores[name] = {"functional": sum(functional),
@@ -401,9 +465,79 @@ def overall_scores(scores: dict) -> dict:
     return totals
 
 
+def bounded_json(path: Path) -> object:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"missing or linked recovery metadata: {path.name}")
+    if path.stat().st_size > MAX_RUN_METADATA_BYTES:
+        raise ValueError(f"recovery metadata exceeds size limit: {path.name}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def recover_run(source: Path, result_dir: Path, names: list[str], repeats: int,
+                tool: str) -> tuple[list[dict], dict, Path]:
+    if RESULTS.is_symlink() or source.is_symlink():
+        raise ValueError("recovery source must not be linked")
+    source = source.resolve(strict=True)
+    if (source.parent != RESULTS.resolve(strict=True)
+            or not source.name.startswith("run-") or not source.is_dir()):
+        raise ValueError("recovery source must be one CWEval result directory")
+    probes = bounded_json(source / "preflight.json")
+    expected_id = baseline_run.baseline_identifier()
+    if (not isinstance(probes, list) or len(probes) != 2
+            or {probe.get("arm") for probe in probes if isinstance(probe, dict)}
+            != {"control", "baseline"}):
+        raise ValueError("invalid recovery preflight")
+    for probe in probes:
+        if (probe.get("tool") != tool or probe.get("ok") is not True
+                or not isinstance(probe.get("found"), list)):
+            raise ValueError("recovery preflight does not match the selected tool")
+        found = probe["found"]
+        if (probe["arm"] == "control" and
+                (found or probe.get("expected") is not None) or
+                probe["arm"] == "baseline" and
+                (probe.get("expected") != expected_id or expected_id not in found)):
+            raise ValueError("recovery preflight did not prove arm separation")
+    runs, invalid = checked_runs(bounded_json(source / "runs.json"), names,
+                                 repeats, allow_legacy_format=True)
+    if not invalid["control"] and not invalid["baseline"]:
+        raise ValueError("recovery source has no invalid-format samples")
+    expected_files = set()
+    for run in runs:
+        relative = (Path(run["arm"]) / f"generated_{run['sample']}" / "core" /
+                    "py" / f"{run['case']}_raw.py")
+        path = source / relative
+        if any(parent.is_symlink() for parent in (source / run["arm"],
+               source / run["arm"] / f"generated_{run['sample']}",
+               path.parent.parent, path.parent)):
+            raise ValueError(f"linked recovery output: {relative}")
+        if run["status"] == "invalid_format":
+            if path.exists() or path.is_symlink():
+                raise ValueError(f"unexpected recovery output: {relative}")
+            continue
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"missing or linked recovery output: {relative}")
+        if not 1 <= path.stat().st_size <= MAX_CODE_BYTES:
+            raise ValueError(f"invalid recovery output size: {relative}")
+        expected_files.add(path)
+    discovered = set()
+    for path in source.glob("*/generated_*/core/py/*_raw.py"):
+        discovered.add(path)
+        if len(discovered) > len(expected_files):
+            raise ValueError("recovery source has unexpected generated files")
+    if discovered != expected_files:
+        raise ValueError("recovery source has unexpected generated files")
+    for path in expected_files:
+        target = result_dir / path.relative_to(source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, target)
+    (result_dir / "preflight.json").write_text(json.dumps(probes, indent=2) + "\n")
+    (result_dir / "runs.json").write_text(json.dumps(runs, indent=2) + "\n")
+    return runs, invalid, source
+
+
 def write_report(result_dir: Path, scores: dict, runs: list[dict],
                  tool: str, model: str, revision: str, image: str,
-                 selection: str) -> dict:
+                 selection: str, recovered_from: Path | None = None) -> dict:
     overall = overall_scores(scores)
     case_names = list(scores["control"])
     repeats = scores["control"][case_names[0]]["samples"]
@@ -411,15 +545,28 @@ def write_report(result_dir: Path, scores: dict, runs: list[dict],
                 "cases": case_names, "repeats": repeats,
                 "metric": "func-sec@1", "cweval_revision": revision, "image": image,
                 "baseline_id": baseline_run.baseline_identifier(),
+                "invalid_format_samples": sum(run["status"] == "invalid_format"
+                                              for run in runs),
                 "runs": runs, "scores": scores, "overall": overall}
+    if recovered_from is not None:
+        document["recovered_from"] = str(recovered_from)
+        document["recovery_note"] = (
+            "The original incomplete run did not record its model, CWEval revision, "
+            "image, or baseline content digest. These report fields come from the "
+            "current recovery arguments and cannot be verified against that run.")
     (result_dir / "report.json").write_text(json.dumps(document, indent=2) + "\n")
     lines = ["# CWEval baseline comparison", "",
              f"Tool: `{tool}` · Model: `{model}` · CWEval: `{revision}` · Baseline: "
              f"`{document['baseline_id']}`", "",
              f"Selection: `{selection}` · {len(case_names)} Python core cases · "
              f"{repeats} repeats per arm · Metric: `func-sec@1`", "",
-             "| Arm | Functional | Functional + secure |",
-             "| --- | ---: | ---: |"]
+             f"Invalid-format answers counted as failed samples: "
+             f"{document['invalid_format_samples']}", ""]
+    if recovered_from is not None:
+        lines.extend([f"Recovered from: `{recovered_from}`. "
+                      f"{document['recovery_note']}", ""])
+    lines.extend(["| Arm | Functional | Functional + secure |",
+                  "| --- | ---: | ---: |"])
     for arm in ("control", "baseline"):
         total = overall[arm]
         lines.append(f"| {arm} | {total['functional']}/{total['samples']} "
@@ -454,6 +601,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--eval-timeout", type=int, default=1800)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--recover-run", type=Path,
+                        help="score a previous run stopped by invalid response format")
     supplied = list(sys.argv[1:] if argv is None else argv)
     try:
         defaults = [] if any(flag in supplied for flag in ("-h", "--help")) \
@@ -461,6 +610,8 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     args = parser.parse_args(defaults + supplied)
+    if args.dry_run and args.recover_run is not None:
+        parser.error("--dry-run and --recover-run cannot be combined")
     if args.repeats < 1 or args.repeats > 50 or args.timeout < 1 or args.eval_timeout < 1:
         parser.error("repeats must be 1..50 and timeouts must be positive")
     try:
@@ -480,31 +631,42 @@ def main(argv: list[str] | None = None) -> int:
               f"{len(cases) * args.repeats * 2} assistant runs")
         print("Cases: " + ", ".join(cases))
         return 0
-    if shutil.which(args.tool) is None:
+    if args.recover_run is None and shutil.which(args.tool) is None:
         parser.error(f"{args.tool} is not on PATH")
     if shutil.which("docker") is None:
         parser.error("Docker is required before starting assistant runs")
+    if RESULTS.is_symlink():
+        parser.error("CWEval results directory must not be linked")
     RESULTS.mkdir(parents=True, exist_ok=True)
     result_dir = Path(tempfile.mkdtemp(prefix="run-", dir=RESULTS))
     try:
-        with isolated_codex_home(args.tool):
-            probes = preflight(args.tool, args.model, args.timeout, result_dir)
-            (result_dir / "preflight.json").write_text(json.dumps(probes, indent=2) + "\n")
-            for probe in probes:
-                if not probe["ok"]:
-                    raise RuntimeError(baseline_run.preflight_problem(probe))
-            runs = generate(cases, args.tool, args.model, args.repeats,
-                            args.timeout, result_dir)
-            (result_dir / "runs.json").write_text(json.dumps(runs, indent=2) + "\n")
-            if any(run["status"] != "complete" for run in runs):
-                raise RuntimeError("generation incomplete; evaluation skipped")
-            evaluate(root, result_dir, args.image, args.eval_timeout,
-                     names, args.repeats)
-        scores = {arm: read_scores(result_dir / arm, names, args.repeats)
+        recovered_from = None
+        if args.recover_run is not None:
+            runs, invalid, recovered_from = recover_run(
+                args.recover_run, result_dir, names, args.repeats, args.tool)
+        else:
+            with isolated_codex_home(args.tool):
+                probes = preflight(args.tool, args.model, args.timeout, result_dir)
+                (result_dir / "preflight.json").write_text(
+                    json.dumps(probes, indent=2) + "\n")
+                for probe in probes:
+                    if not probe["ok"]:
+                        raise RuntimeError(baseline_run.preflight_problem(probe))
+                runs = generate(cases, args.tool, args.model, args.repeats,
+                                args.timeout, result_dir)
+                (result_dir / "runs.json").write_text(json.dumps(runs, indent=2) + "\n")
+                runs, invalid = checked_runs(runs, names, args.repeats)
+        evaluate(root, result_dir, args.image, args.eval_timeout,
+                 names, args.repeats, invalid)
+        scores = {arm: read_scores(result_dir / arm, names, args.repeats,
+                                   invalid[arm])
                   for arm in ("control", "baseline")}
         overall = write_report(result_dir, scores, runs, args.tool, args.model,
                                args.revision, args.image,
-                               "all-python-core" if args.all_python else "selected-cases")
+                               "all-python-core" if args.all_python else "selected-cases",
+                               recovered_from)
+        print("Invalid-format answers counted as failed samples: "
+              f"{len(invalid['control']) + len(invalid['baseline'])}")
         print(f"Python core func-sec@1 ({len(names)} cases × {args.repeats} repeats): "
               f"control {overall['control']['func_secure_percent']:.1f}%, "
               f"baseline {overall['baseline']['func_secure_percent']:.1f}%, "

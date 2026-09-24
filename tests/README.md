@@ -1,7 +1,15 @@
 # Testing the baseline
 
-Run `make check` first. It checks the repository, fixtures, and test code without
-calling a model. CI runs this target on every push and pull request.
+Run `make check` for the complete local suite. It checks the repository,
+fixtures, and test code without calling a model. CI runs this target on every
+push and pull request.
+
+For faster feedback while editing, run `make check-changed`. It shows the
+uncommitted files and selected local checks. Shared or unrecognized files use
+the full `make check`; documentation-only changes need no local checks. Use
+`make check-changed ARGS=--dry-run` to see the selection without running it.
+Run `make check` before completing changes to the baseline, specs, test metadata,
+or harness. This shortcut never starts model tests.
 
 For assistant behavior, choose the smallest run that answers your question:
 
@@ -252,6 +260,21 @@ tool, model, revision, image, selection, cases, repeats, and both arm scores.
 This target covers CWEval's Python core, not its other languages; it is not a
 score for the entire multilingual benchmark.
 
+An assistant response with no valid single Python code block counts as a failed
+sample; it is not retried. A failed assistant command or missing response still
+stops the run. To score an older run stopped only by a format error without new
+model calls, use:
+
+```bash
+make test-cweval-full ARGS="--recover-run tests/results/cweval/run-NAME"
+```
+
+Recovery copies validated outputs into a new result directory and leaves the
+original evidence intact. Older
+incomplete runs did not record the original model, image, revision, or baseline
+content digest, so the recovered report marks those fields as supplied by the
+current configuration rather than verified provenance.
+
 The default cases are CWE-20, CWE-22, and CWE-79 in `benchmark/core/py`.
 Select others with `--cases cwe_020_0,cwe_022_0`; this adapter supports Python
 tasks only. It sends the task text before `BEGIN SOLUTION` and never sends the
@@ -260,8 +283,8 @@ Python code block. Claude has model tools disabled; Codex disables shell,
 external tools, and web search and runs in read-only sandbox mode using the
 [documented Codex CLI settings](https://learn.chatgpt.com/docs/config-file/config-basic).
 Both arms use the same CLI, model, task, and repeat count. The
-preflight uses those same CLI settings. A missing response or failed run stops
-evaluation instead of silently changing the denominator.
+preflight uses those same CLI settings. Missing responses and failed commands
+stop evaluation instead of silently changing the denominator.
 For Codex, the runner uses a private temporary `CODEX_HOME` for both arms and
 links only the existing `auth.json` into it. This keeps user-level `AGENTS.md`
 out of the control arm without changing the user's installation. Run the target

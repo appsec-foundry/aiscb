@@ -71,7 +71,7 @@ class CWEvalRunnerTests(unittest.TestCase):
         for arm in ("control", "baseline"):
             self.assertTrue((result / arm / "generated_0/core/py/cwe_020_0_raw.py").is_file())
 
-    def test_incomplete_response_does_not_create_evaluation_input(self):
+    def test_invalid_format_is_counted_without_creating_evaluation_input(self):
         result = self.root / "result"
         result.mkdir()
         with patch.object(runner, "assistant_reply", return_value="No code"), \
@@ -79,8 +79,28 @@ class CWEvalRunnerTests(unittest.TestCase):
                         {"install": lambda workdir: None}):
             runs = runner.generate({"cwe_020_0": "def validate(value):"},
                                    "claude", "model", 1, 10, result)
-        self.assertTrue(all(run["status"] == "incomplete" for run in runs))
+        self.assertTrue(all(run["status"] == "invalid_format" for run in runs))
+        _, invalid = runner.checked_runs(runs, ["cwe_020_0"], 1)
+        self.assertEqual(invalid, {"control": {("cwe_020_0", 0)},
+                                   "baseline": {("cwe_020_0", 0)}})
         self.assertFalse((result / "baseline/generated_0").exists())
+
+    def test_empty_response_and_cli_failure_still_stop_evaluation(self):
+        result = self.root / "result"
+        result.mkdir()
+        with patch.dict(runner.baseline_run.ADAPTERS["claude"],
+                        {"install": lambda workdir: None}):
+            for reply in ("", RuntimeError("assistant exited 1")):
+                with self.subTest(reply=reply), \
+                     patch.object(runner, "assistant_reply",
+                                  side_effect=reply if isinstance(reply, Exception)
+                                  else None, return_value=reply):
+                    runs = runner.generate({"cwe_020_0": "def validate(value):"},
+                                           "claude", "model", 1, 10, result)
+                    self.assertTrue(all(row["status"] == "incomplete"
+                                        for row in runs))
+                    with self.assertRaisesRegex(ValueError, "generation incomplete"):
+                        runner.checked_runs(runs, ["cwe_020_0"], 1)
 
     def test_preflight_detects_control_contamination(self):
         result = self.root / "result"
@@ -139,6 +159,22 @@ class CWEvalRunnerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             runner.read_scores(arm, ["cwe_020_0"], 2)
 
+    def test_scoring_counts_invalid_format_as_zero_and_rejects_other_gaps(self):
+        arm = self.root / "arm"
+        arm.mkdir()
+        key = "evals/aiscb/generated_X/core/py/cwe_020_0_test.py"
+        (arm / "res_all.json").write_text(json.dumps({key: {
+            "functional": [True, True], "secure": [True, False]}}))
+        score = runner.read_scores(arm, ["cwe_020_0"], 3,
+                                   {("cwe_020_0", 2)})["cwe_020_0"]
+        self.assertEqual(score, {"functional": 2, "func_secure": 1, "samples": 3})
+        with self.assertRaisesRegex(ValueError, "invalid evaluation data"):
+            runner.read_scores(arm, ["cwe_020_0"], 3)
+        (arm / "res_all.json").write_text("{}")
+        score = runner.read_scores(arm, ["cwe_020_0"], 2,
+                                   {("cwe_020_0", 0), ("cwe_020_0", 1)})
+        self.assertEqual(score["cwe_020_0"]["func_secure"], 0)
+
     def test_report_compares_joint_success_across_all_cases(self):
         scores = {
             "control": {
@@ -165,6 +201,7 @@ class CWEvalRunnerTests(unittest.TestCase):
         self.assertEqual(document["metric"], "func-sec@1")
         self.assertEqual(document["repeats"], 3)
         self.assertEqual(document["cases"], ["cwe_020_0", "cwe_022_0"])
+        self.assertEqual(document["invalid_format_samples"], 0)
         report = (self.root / "report.md").read_text()
         self.assertIn("| control | 3/6 (50.0%) | 2/6 (33.3%) |", report)
         self.assertIn("| baseline | 5/6 (83.3%) | 4/6 (66.7%) |", report)
@@ -254,6 +291,7 @@ class CWEvalRunnerTests(unittest.TestCase):
         self.assertIn("--pull=never", cmd)
         self.assertEqual(cmd[cmd.index("--user") + 1], "1000:1000")
         self.assertIn("-i", cmd)
+        self.assertIn("--num_proc 2", cmd[-1])
         self.assertTrue(any("evals/aiscb:rw,nosuid,noexec" in value
                             for value in cmd))
         self.assertFalse(any("src=" + str(self.root) + ",dst=" in value
@@ -281,6 +319,64 @@ class CWEvalRunnerTests(unittest.TestCase):
         with tempfile.TemporaryFile() as stream:
             with self.assertRaisesRegex(ValueError, "linked generated file"):
                 runner.evaluation_archive(stream, arm, ["cwe_020_0"], 1)
+
+    def test_archive_omits_only_recorded_invalid_format_samples(self):
+        arm = self.root / "arm"
+        arm.mkdir()
+        with tempfile.TemporaryFile() as stream:
+            runner.evaluation_archive(stream, arm, ["cwe_020_0"], 1,
+                                      {("cwe_020_0", 0)})
+            with tarfile.open(fileobj=stream, mode="r") as archive:
+                self.assertEqual(archive.getnames(), [])
+        with tempfile.TemporaryFile() as stream:
+            with self.assertRaisesRegex(ValueError, "missing or linked"):
+                runner.evaluation_archive(stream, arm, ["cwe_020_0"], 1)
+
+    def test_recovery_preserves_source_and_rejects_other_incomplete_runs(self):
+        results = self.root / "results"
+        source = results / "run-old"
+        target = results / "run-new"
+        source.mkdir(parents=True)
+        target.mkdir()
+        baseline_id = runner.baseline_run.baseline_identifier()
+        probes = [{"arm": "control", "tool": "codex", "ok": True,
+                   "found": [], "expected": None},
+                  {"arm": "baseline", "tool": "codex", "ok": True,
+                   "found": [baseline_id], "expected": baseline_id}]
+        (source / "preflight.json").write_text(json.dumps(probes))
+        rows = []
+        for index in range(2):
+            for arm in ("control", "baseline"):
+                row = {"arm": arm, "case": "cwe_020_0", "sample": index,
+                       "status": "complete"}
+                if arm == "baseline" and index == 1:
+                    row.update(status="incomplete", reason=(
+                        "response must contain exactly one Python code block"))
+                else:
+                    output = (source / arm / f"generated_{index}" / "core" /
+                              "py/cwe_020_0_raw.py")
+                    output.parent.mkdir(parents=True)
+                    output.write_text("def validate(value):\n    return True\n")
+                rows.append(row)
+        (source / "runs.json").write_text(json.dumps(rows))
+        with patch.object(runner, "RESULTS", results):
+            recovered, invalid, origin = runner.recover_run(
+                source, target, ["cwe_020_0"], 2, "codex")
+            self.assertEqual(origin, source)
+            self.assertEqual(invalid["baseline"], {("cwe_020_0", 1)})
+            self.assertEqual(recovered[-1]["status"], "invalid_format")
+            self.assertEqual(json.loads((source / "runs.json").read_text())[-1]
+                             ["status"], "incomplete")
+            self.assertEqual(len(list(target.glob("*/generated_*/*/py/*_raw.py"))), 3)
+            extra = source / "control/generated_0/core/py/cwe_999_0_raw.py"
+            extra.write_text("pass\n")
+            with self.assertRaisesRegex(ValueError, "unexpected generated files"):
+                runner.recover_run(source, target, ["cwe_020_0"], 2, "codex")
+            extra.unlink()
+            rows[-1].update(status="incomplete", reason="assistant exited 1")
+            (source / "runs.json").write_text(json.dumps(rows))
+            with self.assertRaisesRegex(ValueError, "generation incomplete"):
+                runner.recover_run(source, target, ["cwe_020_0"], 2, "codex")
 
 
 if __name__ == "__main__":
