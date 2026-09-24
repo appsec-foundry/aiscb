@@ -50,14 +50,15 @@ not assistant compliance or the security of an application implementation.
 
 **Applies when:** Making input-influenced outbound requests.
 
-**Requirement:** Constrain destinations and connection-time addresses, revalidate redirects, and prevent cross-origin credential forwarding.
+**Requirement:** Constrain destinations and connection-time addresses, validate dynamic URL path segments before encoding, prevent traversal or normalization from changing the allowed resource, revalidate redirects, and prevent cross-origin credential forwarding.
 
-**Observable acceptance:** Tests exercise alternate addresses, redirects and DNS changes at the enforcing boundary.
+**Observable acceptance:** Valid path segments work; tests reject traversal and exercise alternate addresses, redirects and DNS changes at the enforcing boundary.
 
-**Model cases:** None.
+**Model cases:** `greenfield-data-boundaries`
 
-**Evidence and gaps:** None. Deterministic packaging tests verify delivery,
-not assistant compliance or the security of an application implementation.
+**Evidence and gaps:** Partial. The added case checks path segments but has not
+been run with a model. Connection-time enforcement, DNS and redirects remain
+uncovered by this case.
 
 
 ## aiscb-MCPAUTH-001 — MCP Authorization Boundaries
@@ -633,17 +634,19 @@ content, cookies, CORS, or ambient-credential state changes.
 **Requirement:** Use TLS beyond loopback, fail closed on undeclared wider
 exposure, apply the named cookie, CSP, header, cache, CSRF, and exact-origin
 CORS mechanisms, and introduce them compatibly in existing applications while
-requiring them from the start in new browser content.
+requiring them from the start in new browser content. Reject CR, LF, NUL and
+other disallowed control characters before setting untrusted header values.
 
 **Observable acceptance:** Wider exposure cannot start without declared TLS;
 browser policy and CSRF protections work; CORS permits only exact intended
 origins, methods, and headers; and missing controls are reported with their
-blocker and exposure.
+blocker and exposure. Valid header values work and injected controls are rejected.
 
 **Model cases:** `existing-pressure-tls-verify`, `greenfield-order-app`,
-`greenfield-web-api-hardening`, `override-demo-app`
+`greenfield-web-api-hardening`, `override-demo-app`, `greenfield-header-values`
 
-**Evidence and gaps:** Partial. The cases cover TLS, loopback binding, headers,
+**Evidence and gaps:** Partial. The header-value case is added but not model-run.
+The cases cover TLS, loopback binding, headers,
 cookies, CORS, and prototype exposure. Some exact headers and full CSRF behavior
 remain uncovered.
 
@@ -718,15 +721,15 @@ out-of-band verification, and the full session lifecycle are not covered.
 **Normative source:** `baseline/modules/aiscb-web.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-WEBTESTS-001`.
 
-**Applies when:** Changing browser policy, required configuration or ambient-credential state changes.
+**Applies when:** Changing HTTP header values, browser policy, required configuration or ambient-credential state changes.
 
-**Requirement:** Test applicable browser policy, headers, required configuration and rejection of forged cross-site requests.
+**Requirement:** Test valid header values and rejection of injected controls, applicable browser policy, headers, required configuration and rejection of forged cross-site requests.
 
-**Observable acceptance:** Representative tests exercise applicable browser controls and CSRF rejection.
+**Observable acceptance:** Representative tests exercise valid and malicious header values, applicable browser controls and CSRF rejection.
 
-**Model cases:** `existing-pressure-weaken`, `greenfield-order-app`, `greenfield-web-api-hardening`
+**Model cases:** `existing-pressure-weaken`, `greenfield-order-app`, `greenfield-web-api-hardening`, `greenfield-header-values`
 
-**Evidence and gaps:** Partial. Existing cases cover browser controls and CSRF; they do not establish all named headers or configuration boundaries.
+**Evidence and gaps:** Partial. The added header-value case has not been model-run. Existing cases cover browser controls and CSRF; they do not establish all named headers or configuration boundaries.
 
 ## aiscb-AUTHTESTS-001 — Authentication Tests
 
@@ -781,18 +784,23 @@ covered.
 **Normative source:** `baseline/modules/aiscb-data-handling.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-ERRORS-001`.
 
-**Applies when:** Returning errors or recording security-relevant events.
+**Applies when:** Returning errors or logging untrusted data and security-relevant events.
 
 **Requirement:** Return no stack traces, internal paths, or raw exceptions. Log
-enough context to investigate without recording sensitive data.
+enough context to investigate without recording sensitive data. Encode untrusted
+fields for the log format so line breaks and delimiters cannot forge records
+or alter structure.
 
 **Observable acceptance:** External errors reveal no internals and security logs
-remain useful without containing secrets, credentials, tokens, or PII.
+remain useful without containing secrets, credentials, tokens, or PII; untrusted
+messages cannot create extra records or alter log structure.
 
-**Model cases:** `greenfield-untrusted-input`, `greenfield-web-api-hardening`
+**Model cases:** `greenfield-untrusted-input`, `greenfield-web-api-hardening`,
+`greenfield-data-boundaries`
 
 **Evidence and gaps:** Partial. The cases cover raw error responses. Useful
-security-event logging and sensitive-data redaction are not covered.
+security-event logging and sensitive-data redaction are not covered. The new
+log-injection case has not been run with a model.
 
 ## aiscb-LIMITS-001 — Resource Limits
 
@@ -1069,3 +1077,39 @@ attempt, protected, tightened, and correctness-only changes that warrant no
 note, explicit note attribution, and a mix of material and informational
 findings. They do not cover automatically executed configuration, every kind of
 residual risk, or every severity judgment.
+
+## aiscb-DESERIALIZE-001 — Data-Only Deserialization
+
+**Section:** Data Handling
+
+**Normative source:** `baseline/modules/aiscb-data-handling.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-DESERIALIZE-001`.
+
+**Applies when:** Parsing untrusted serialized data.
+
+**Requirement:** Disable executable tags and arbitrary object construction; replace unsafe scaffold loaders.
+
+**Observable acceptance:** Ordinary data parses and executable object tags are rejected without side effects.
+
+**Model cases:** `greenfield-data-boundaries`
+
+**Evidence and gaps:** Partial. The case is added but has not been run with a
+model. The old CWEval run motivates this change, not evidence of its effect.
+
+## aiscb-RESPONSES-001 — Response Fields
+
+**Section:** Data Handling
+
+**Normative source:** `baseline/modules/aiscb-data-handling.md`, published in
+`secure-coding-baseline.md`, rule group `aiscb-RESPONSES-001`.
+
+**Applies when:** Constructing responses from internal records.
+
+**Requirement:** Select output fields explicitly and do not copy internal credential fields into responses.
+
+**Observable acceptance:** Intended fields are returned; internal credentials are absent.
+
+**Model cases:** `greenfield-data-boundaries`
+
+**Evidence and gaps:** Partial. The case is added but has not been run with a
+model. The old CWEval run motivates this change, not evidence of its effect.

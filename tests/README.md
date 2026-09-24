@@ -38,7 +38,7 @@ or code where a fixed check is insufficient.
 | `make test-confirmation` | 9 | 9 | 2 |
 | `make test-smoke` | 2 | 6 | 2 |
 | `make test-quick` | 24 | 72 | 2 |
-| `make test` | 174 | 324 | 2 |
+| `make test` | 186 | 360 | 2 |
 
 These are the default matrices. An agent turn can make several model requests,
 so the counts are not token or dollar limits. `test-fast` and `test-organization`

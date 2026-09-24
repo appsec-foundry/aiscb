@@ -37,8 +37,8 @@
         "aiscb-WEB-001",
         "aiscb-WEBTESTS-001"
       ],
-      "size": 1766,
-      "sha256": "41b75a1e20e721cd4e4f711decb68245b341ba220084f1670b31d85749f94068"
+      "size": 1945,
+      "sha256": "e12a01b64ef7d6b0b62ec81c149589eec2893e8bd7fbeafce1f1ecdfb1ad90b1"
     },
     {
       "id": "aiscb:authentication",
@@ -81,17 +81,19 @@
       "publisher": "aiscb",
       "version": "0.1.19",
       "file": "modules/aiscb-data-handling.md",
-      "trigger": "Request parsing, database access, files, archives, templates, process execution, deserialization, search, pagination, uploads, error responses, logging, or external destinations; not merely reading or editing source or documentation, but changes to their parsing or processing, handling untrusted files, process execution and external destinations remain in scope",
+      "trigger": "Request parsing, database access, files, archives, templates, process execution, deserialization, search, pagination, uploads, response serialization, error responses, logging, or external destinations; not merely reading or editing source or documentation, but changes to their parsing or processing, handling untrusted files, process execution and external destinations remain in scope",
       "paths": [],
       "requires": [],
       "rules": [
         "aiscb-ERRORS-001",
+        "aiscb-DESERIALIZE-001",
+        "aiscb-RESPONSES-001",
         "aiscb-LIMITS-001",
         "aiscb-FILES-001",
         "aiscb-EGRESS-001"
       ],
-      "size": 1943,
-      "sha256": "5c6ccc4f08c9acbb66bf4e141d7e2ae9caff343d698dc7d2c33b8e6c37e69d8d"
+      "size": 2706,
+      "sha256": "0cddc83bc873a90246d3c71a3bb69df0c0f6eef0f067260303b6d51988c482b2"
     },
     {
       "id": "aiscb:secrets-initialization",

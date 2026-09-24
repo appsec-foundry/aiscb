@@ -20,7 +20,7 @@ from split_routing import assess
 
 
 class SplitTests(unittest.TestCase):
-    def test_original_security_clauses_are_preserved(self):
+    def test_reviewed_security_clauses_are_preserved(self):
         rules = {}
         for name in ('web', 'authentication', 'cryptography'):
             text = (ROOT/f'baseline/modules/aiscb-{name}.md').read_text()
@@ -30,8 +30,11 @@ class SplitTests(unittest.TestCase):
         # Canonical rule bodies from the pre-split aiscb-0.1.18 source, minus the
         # webhook clause removed from MECHANISMS-001 by
         # specs/archive/2026-09-24-trim-webhook-duplicate.
+        # Includes the header validation and test additions approved in
+        # specs/archive/2026-09-24-cweval-module-hardening; all other bodies
+        # retain the previous conservation check's content.
         self.assertEqual(hashlib.sha256(json.dumps(rules, sort_keys=True).encode()).hexdigest(),
-                         'fae7ea1633f7ba928caae71e46f9570b7bf13611f79214dec21986ba5757c6ee')
+                         '89168ab0c20bfa942d52472cbf35af8945efe1172a5af411a6edcf8341ae3f55')
 
     def test_narrow_loads_and_auth_dependency(self):
         with tempfile.TemporaryDirectory() as tmp:
