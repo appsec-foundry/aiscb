@@ -1,7 +1,6 @@
 # Cryptography Module
 
-`module-id: aiscb:cryptography`. Load for: Encryption, hashing, signatures, random generation, secret comparison, password hashing, signed tokens, or webhooks.
-Requires `aiscb:secrets-initialization`.
+`module-id: aiscb:cryptography`. Load for: Encryption, hashing, signatures, random generation, secret comparison, password hashing, signed tokens, or webhooks. Requires `aiscb:secrets-initialization`.
 
 ## Cryptography
 

@@ -22,7 +22,7 @@
       "aiscb-REPORT-001"
     ],
     "size": 8357,
-    "sha256": "98d686b9ed16caf28fe37e1f9a0bc6a6b5e27febe159636a4f5e8bbcc62812c5"
+    "sha256": "3c0bd2150c63d62a513241580ff79eddd8e3a31b67f585cdbff5d94b7966bb21"
   },
   "modules": [
     {
@@ -57,7 +57,7 @@
         "aiscb-AUTHTESTS-001"
       ],
       "size": 2688,
-      "sha256": "2060eaf6addaf3b59dc070810e6e95ff0bb66ce490cffea8ac0c6c0a5bd64d0d"
+      "sha256": "d802759e2e7c6e8be1558e19a49a9f076e6119685837de95b33af498753bb9e3"
     },
     {
       "id": "aiscb:cryptography",
@@ -74,7 +74,7 @@
         "aiscb-WEBHOOK-001"
       ],
       "size": 1111,
-      "sha256": "604c2b107595f80f4e87e9637378bb2b1f8af9529700c2a58137ba9663cb5ac2"
+      "sha256": "a9d400074d097c9a1f656f189b3a3cfecec0dcbbbe347aad3331947494ae40b8"
     },
     {
       "id": "aiscb:data-handling",
@@ -91,7 +91,7 @@
         "aiscb-EGRESS-001"
       ],
       "size": 1943,
-      "sha256": "839c183e9158922135761b44f93fd8600faaee8dfec5cd7bb3d665d08dfa9c52"
+      "sha256": "5c6ccc4f08c9acbb66bf4e141d7e2ae9caff343d698dc7d2c33b8e6c37e69d8d"
     },
     {
       "id": "aiscb:secrets-initialization",
@@ -106,7 +106,7 @@
         "aiscb-SECRETTESTS-001"
       ],
       "size": 1900,
-      "sha256": "bb0e50de93b64bf5c1996980dfb22e52bf18bee3ec8b796a331e99cabb98e5c5"
+      "sha256": "28b70bb01837fe635df84689b694b9486c90c2dae88e2aec15b7fd7501fefce8"
     },
     {
       "id": "aiscb:supply-chain",
@@ -120,7 +120,7 @@
         "aiscb-DEPS-001"
       ],
       "size": 1173,
-      "sha256": "09ed296779cd53824c5f4547c6edf790a4c9bae4c234110dd90580d2f18eada3"
+      "sha256": "eddc9c355361a27bd4bfbe070607b6a5fc5f20e25f734d5287e5363ffd1bc0a4"
     },
     {
       "id": "aiscb:deployment-environments",
@@ -136,7 +136,7 @@
         "aiscb-DEPLOYTESTS-001"
       ],
       "size": 1659,
-      "sha256": "94de064002430594fdcb278f540f394706b241881f8b75ee77778827e9abe41b"
+      "sha256": "1968aa3bcf896c190be8af97f572a44f868548b1e6e4f5eb5265857c87f1256b"
     },
     {
       "id": "aiscb:llm-applications",
@@ -150,7 +150,7 @@
         "aiscb-LLM-001"
       ],
       "size": 1252,
-      "sha256": "59063eb8bb6886d3fddecc1579a111b07faddb5867c28ee611c3a2b54e04ace5"
+      "sha256": "4be73e3d30db4cab74ef52ed8b7e855a05169686c52044e8e71665daa45ad759"
     },
     {
       "id": "aiscb:llm-agents",
@@ -169,7 +169,7 @@
         "aiscb-AGENTTESTS-001"
       ],
       "size": 2033,
-      "sha256": "13d2e8041fd0c93ab4919307d75204c90a908d32c08638453c30264b6fd4d608"
+      "sha256": "448d515e8159c17677540e64e3098e9b86a5438c6651dd5350534db972c834ba"
     },
     {
       "id": "aiscb:llm-retrieval-memory",
@@ -187,7 +187,7 @@
         "aiscb-RETRIEVALTESTS-001"
       ],
       "size": 1666,
-      "sha256": "2256a76bdfd36ce8931c4482eec024d61a248f1bed8a8ea6e88542e04b8d5aad"
+      "sha256": "9bd7e081647606e85626d59f369abbe7c4dd8f21d673089d9793033c582a716e"
     },
     {
       "id": "aiscb:mcp-clients-servers",
@@ -205,7 +205,7 @@
         "aiscb-MCPTESTS-001"
       ],
       "size": 2236,
-      "sha256": "f20ef789df1fd7cb252749d93a5f671a929d79dd2e743ddedd88b59ca432f96f"
+      "sha256": "a59321795523530b2fa93aab4944076eeac48cacb79e5ed004532d17ed2d69bc"
     }
   ]
 }

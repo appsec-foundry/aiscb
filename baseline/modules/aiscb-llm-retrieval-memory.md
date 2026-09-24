@@ -1,10 +1,6 @@
 # LLM Retrieval and Memory Module
 
-`module-id: aiscb:llm-retrieval-memory`. Load for: Designing or changing retrieval or
-persistent memory in an LLM application: selecting documents for model answers, RAG,
-vector stores, context caches, or creating, replacing and deleting model/agent memories;
-not ordinary database queries or the coding assistant's own context.
-Requires `aiscb:llm-applications`.
+`module-id: aiscb:llm-retrieval-memory`. Load for: Designing or changing retrieval or persistent memory in an LLM application: selecting documents for model answers, RAG, vector stores, context caches, or creating, replacing and deleting model/agent memories; not ordinary database queries or the coding assistant's own context. Requires `aiscb:llm-applications`.
 
 ## LLM Retrieval and Memory
 

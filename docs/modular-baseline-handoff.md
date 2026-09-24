@@ -65,22 +65,22 @@ Current `o200k_base` measurements are:
 
 | Artifact | Bytes | Tokens |
 | --- | ---: | ---: |
-| Always-on core | 8,357 | 1,656 |
+| Always-on core | 8,357 | 1,650 |
 | `aiscb:web` | 1,766 | 381 |
 | `aiscb:authentication` | 2,688 | 529 |
 | `aiscb:cryptography` | 1,111 | 234 |
-| `aiscb:secrets-initialization` | 1,900 | 351 |
-| `aiscb:deployment-environments` | 1,659 | 311 |
-| `aiscb:llm-applications` | 1,252 | 247 |
-| `aiscb:llm-agents` | 2,033 | 401 |
-| `aiscb:supply-chain` | 1,173 | 223 |
-| `aiscb:data-handling` | 1,943 | 383 |
-| `aiscb:llm-retrieval-memory` | 1,666 | 325 |
-| `aiscb:mcp-clients-servers` | 2,236 | 414 |
-| Complete eager artifact | 27,795 | 5,455 |
+| `aiscb:secrets-initialization` | 1,900 | 350 |
+| `aiscb:deployment-environments` | 1,659 | 309 |
+| `aiscb:llm-applications` | 1,252 | 245 |
+| `aiscb:llm-agents` | 2,033 | 398 |
+| `aiscb:supply-chain` | 1,173 | 222 |
+| `aiscb:data-handling` | 1,943 | 381 |
+| `aiscb:llm-retrieval-memory` | 1,666 | 324 |
+| `aiscb:mcp-clients-servers` | 2,236 | 413 |
+| Complete eager artifact | 27,795 | 5,436 |
 
-The core exceeds its provisional 1,500-token target by 156 tokens; complete
-output exceeds its 4,100-token target by 1,355. Further reduction
+The core exceeds its provisional 1,500-token target by 150 tokens; complete
+output exceeds its 4,100-token target by 1,336. Further reduction
 should be evaluated against lost always-on behavior, not treated as an
 automatic goal. In particular, do not shorten the Security-note contract merely
 to improve the headline number.

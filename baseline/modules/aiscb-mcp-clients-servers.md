@@ -1,10 +1,6 @@
 # MCP Clients and Servers Module
 
-`module-id: aiscb:mcp-clients-servers`. Load when building or changing MCP clients,
-servers, proxies, transports, discovery, or server installation/configuration;
-not merely because the coding assistant uses an existing MCP tool.
-Requires `aiscb:data-handling`. Load web for HTTP and authentication for OAuth, supply-chain
-for server packages, and llm-agents only for model-directed actions.
+`module-id: aiscb:mcp-clients-servers`. Load when building or changing MCP clients, servers, proxies, transports, discovery, or server installation/configuration; not merely because the coding assistant uses an existing MCP tool. Requires `aiscb:data-handling`. Load web for HTTP and authentication for OAuth, supply-chain for server packages, and llm-agents only for model-directed actions.
 
 ## MCP Clients and Servers
 

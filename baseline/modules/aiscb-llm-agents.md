@@ -1,10 +1,6 @@
 # LLM Agents Module
 
-`module-id: aiscb:llm-agents`. Load for: Designing or changing model-directed tool
-execution, autonomous workflows, action permissions or approvals, delegation, or
-multi-agent orchestration in the system being built; not merely the coding assistant's
-own tools.
-Requires `aiscb:llm-applications`.
+`module-id: aiscb:llm-agents`. Load for: Designing or changing model-directed tool execution, autonomous workflows, action permissions or approvals, delegation, or multi-agent orchestration in the system being built; not merely the coding assistant's own tools. Requires `aiscb:llm-applications`.
 
 ## LLM Agents
 

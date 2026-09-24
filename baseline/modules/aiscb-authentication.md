@@ -1,7 +1,6 @@
 # Authentication Module
 
-`module-id: aiscb:authentication`. Load for: Login, registration, account recovery and verification, sessions, session cookies, authentication tokens, passwords, OAuth or OIDC.
-Requires `aiscb:cryptography` and `aiscb:data-handling`.
+`module-id: aiscb:authentication`. Load for: Login, registration, account recovery and verification, sessions, session cookies, authentication tokens, passwords, OAuth or OIDC. Requires `aiscb:cryptography` and `aiscb:data-handling`.
 
 ## Authentication
 

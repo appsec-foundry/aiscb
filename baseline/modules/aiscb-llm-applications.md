@@ -1,9 +1,6 @@
 # LLM Applications Module
 
-`module-id: aiscb:llm-applications`. Load when designing or changing LLM features
-in the system being built: prompts, retrieval, memory, model output, agents,
-tool calls, generated code, or model-selected resources; not merely the coding
-assistant's own prompts, tool use, or code generation.
+`module-id: aiscb:llm-applications`. Load when designing or changing LLM features in the system being built: prompts, retrieval, memory, model output, agents, tool calls, generated code, or model-selected resources; not merely the coding assistant's own prompts, tool use, or code generation.
 
 ## LLM Applications
 

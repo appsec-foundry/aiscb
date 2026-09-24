@@ -1,9 +1,6 @@
 # Deployment and Environments Module
 
-`module-id: aiscb:deployment-environments`. Load for: Network exposure, TLS termination,
-proxies, containers, CI/CD permissions, production configuration, startup requirements,
-or activation, exposure and production separation of debug features, development
-servers, mocks and fixtures; not isolated test-data edits alone.
+`module-id: aiscb:deployment-environments`. Load for: Network exposure, TLS termination, proxies, containers, CI/CD permissions, production configuration, startup requirements, or activation, exposure and production separation of debug features, development servers, mocks and fixtures; not isolated test-data edits alone.
 
 ## Deployment and Environments
 

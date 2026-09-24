@@ -1,8 +1,6 @@
 # Secrets and Initialization Module
 
-`module-id: aiscb:secrets-initialization`. Load for credentials, passwords, tokens,
-keys, signing, secret rotation, first-start setup, seed data, demo accounts, or
-prototype initialization.
+`module-id: aiscb:secrets-initialization`. Load for credentials, passwords, tokens, keys, signing, secret rotation, first-start setup, seed data, demo accounts, or prototype initialization.
 
 ## Secrets and Initialization
 

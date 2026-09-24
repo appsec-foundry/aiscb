@@ -29,7 +29,8 @@ Narrow Web and cryptography work benefits most. Browser login loads all three an
 The current repository and installed loaders retain the verified module ID and
 release but omit the per-module hash from their success output. Full integrity
 verification still runs before output; the trusted digest in the installed
-loader command is unchanged. With the same split-module sets and normalization:
+loader command is unchanged. Before whitespace cleanup, the same split-module
+sets and normalization gave:
 
 | Task | Full-hash receipts | Compact receipts | Tokens saved |
 | --- | ---: | ---: | ---: |
@@ -39,9 +40,15 @@ loader command is unchanged. With the same split-module sets and normalization:
 | cryptography | 3,055 | 2,972 | 83 |
 | mixed | 4,522 | 4,319 | 203 |
 
-Core, module and generated complete rule-text sizes were recomputed and remain
-unchanged. This output-only change also applies to complete installations;
+Core, module and generated complete rule-text sizes were unchanged by the receipt
+change. This output-only change also applies to complete installations;
 it does not change the historical model-run evidence below.
+
+After removing purely visual line breaks within paragraphs, the same normalized
+compact-receipt payloads are 2,340 tokens (unrelated), 2,738 (web), 3,912
+(authentication), 2,965 (cryptography), and 4,310 (mixed). Words and rendered
+Markdown structure are unchanged. Current rule text is 1,650 tokens for core
+and 5,436 for the complete baseline; README lists all module measurements.
 
 ### Duplicate-content review
 
