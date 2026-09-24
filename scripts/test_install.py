@@ -7,7 +7,9 @@ are checked here against a throwaway directory.
 """
 
 import base64
+import contextlib
 import hashlib
+import io
 import json
 import os
 import re
@@ -16,6 +18,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1130,7 +1133,7 @@ with tempfile.TemporaryDirectory() as tmp:
                   "manage" in line for line in migration_output)
           and any(str(source) in line for line in migration_output)
           and any(prompt.startswith(
-              "Switch to a managed copy of aiscb-0.1.18, so updates reach it?")
+              "Switch to a managed copy of aiscb-0.1.19, so updates reach it?")
               for prompt in prompts),
           f"output={migration_output!r}, prompts={prompts!r}")
 
@@ -3592,10 +3595,23 @@ with tempfile.TemporaryDirectory() as tmp:
     def trusted_verify(manifest: bytes, signature_bytes: bytes) -> None:
         install.verify_manifest_signature(manifest, signature_bytes, trusted)
 
-    def run_update(release, tree, verify=trusted_verify, current=bundled):
+    def run_update(release, tree, verify=trusted_verify, current=bundled, assets=None):
         calls: list[str] = []
         lines: list[str] = []
         runs: list[tuple[list[str], dict[str, bytes], Path]] = []
+
+        if assets is not None:
+            release = {**release, "assets": [
+                {"name": name, "size": len(content), "browser_download_url":
+                 f"https://github.com/{install.GITHUB_REPOSITORY}/releases/download/{tag}/{name}"}
+                for name, content in assets.items()
+            ]}
+
+        def fake_asset(url, limit):
+            name = url.rsplit("/", 1)[-1]
+            content = assets[name]
+            assert len(content) <= limit
+            return content
 
         def fake_run(command, check):
             staged = Path(command[1]).parent.parent
@@ -3606,13 +3622,14 @@ with tempfile.TemporaryDirectory() as tmp:
             runs.append((list(command), files, staged))
             return subprocess.CompletedProcess(command, 0)
 
-        code = install.release_update(
-            output=lines.append,
-            current=current,
-            fetch_json=release_tree_fetcher(release, tag, tree, calls),
-            verify=verify,
-            run=fake_run,
-        )
+        with patch.object(install, "read_release_asset", fake_asset):
+            code = install.release_update(
+                output=lines.append,
+                current=current,
+                fetch_json=release_tree_fetcher(release, tag, tree, calls),
+                verify=verify,
+                run=fake_run,
+            )
         return code, calls, lines, runs
 
     code, calls, lines, runs = run_update(stable, good_tree)
@@ -3631,7 +3648,20 @@ with tempfile.TemporaryDirectory() as tmp:
     check("the manifest and its signature are fetched before any bundled file",
           fetched[:2] == [install.MANIFEST_NAME, install.SIGNATURE_NAME]
           and set(fetched[2:]) == set(install.BUNDLE_FILES), str(fetched))
-
+    published_assets = {Path(name).name: content for name, content in good_tree.items()}
+    divergent_tree = {name: b"different source-tree bytes" for name in good_tree}
+    code, calls, lines, runs = run_update(stable, divergent_tree,
+                                         assets=published_assets)
+    check("signed release assets take precedence over divergent tag files",
+          code == 0 and len(runs) == 1 and runs[0][1] == newer_files,
+          f"code={code} lines={lines!r}")
+    tampered_assets = {**published_assets,
+                       "install.py": b"x" + published_assets["install.py"][1:]}
+    code, calls, lines, runs = run_update(stable, good_tree,
+                                         assets=tampered_assets)
+    check("a mismatched asset is refused even when the tag file matches",
+          code == 2 and not runs and any("does not match" in line for line in lines),
+          f"code={code} lines={lines!r}")
     code, calls, lines, runs = run_update(stable, good_tree, current=install.parse_baseline(
         newer_baseline, "installed"))
     check("a release that is not newer changes nothing and fetches no file",
@@ -3808,6 +3838,769 @@ with tempfile.TemporaryDirectory() as tmp:
               f"  aiscb-0.0.1 (update to {bundled.baseline_id} available")
               and line.endswith(", not loaded by any tool)") for line in entries),
           str(entries))
+
+# Release assets are downloaded code. Every refusal below must hold before a
+# byte is read, and the asset-first bundle path must still verify each digest.
+ASSET_TAG = "aiscb-9.9.9"
+ASSET_ROOT = f"https://github.com/{install.GITHUB_REPOSITORY}/releases/download/{ASSET_TAG}"
+ASSET_URL = f"{ASSET_ROOT}/bundle.json"
+RELEASE_BY_TAG = f"https://api.github.com/repos/{install.GITHUB_REPOSITORY}/releases/tags/{ASSET_TAG}"
+
+
+class RecordingOpener(FakeOpener):
+    def __init__(self, response: FakeResponse):
+        super().__init__(response)
+        self.opened: list[str] = []
+
+    def open(self, request: object, timeout: object = None) -> FakeResponse:
+        self.opened.append(request.full_url)  # type: ignore[attr-defined]
+        return self.response
+
+
+def read_asset_with(response: FakeResponse, url: str = ASSET_URL, limit: int = 64):
+    opener = RecordingOpener(response)
+    with patch.object(install.urllib.request, "build_opener", lambda *_h: opener):
+        try:
+            return install.read_release_asset(url, limit), opener.opened
+        except ValueError as error:
+            return error, opener.opened
+
+
+content, opened = read_asset_with(FakeResponse(ASSET_URL, b"signed bytes"))
+check("a release asset on GitHub is read", content == b"signed bytes" and opened == [ASSET_URL])
+content, _ = read_asset_with(FakeResponse(
+    "https://release-assets.githubusercontent.com/storage/bundle.json", b"cdn bytes"))
+check("an asset served from GitHub's asset host is accepted", content == b"cdn bytes")
+for label, url in (("plain HTTP", ASSET_URL.replace("https:", "http:", 1)),
+                   ("another host", "https://example.com/bundle.json"),
+                   ("a look-alike host", "https://github.com.example.com/bundle.json")):
+    error, opened = read_asset_with(FakeResponse(url, b"x"), url)
+    check(f"an asset URL on {label} is refused before any request",
+          isinstance(error, ValueError) and "destination" in str(error) and not opened,
+          f"{error!r} {opened!r}")
+error, _ = read_asset_with(FakeResponse("https://example.com/bundle.json", b"x"))
+check("an asset whose final URL left GitHub is refused",
+      isinstance(error, ValueError) and "destination" in str(error), repr(error))
+error, _ = read_asset_with(FakeResponse(ASSET_URL, b"x", {"Content-Length": "65"}))
+check("an asset announcing more than its limit is refused",
+      isinstance(error, ValueError) and "size limit" in str(error), repr(error))
+error, _ = read_asset_with(FakeResponse(ASSET_URL, b"x" * 65))
+check("an asset delivering more than its limit is refused",
+      isinstance(error, ValueError) and "size limit" in str(error), repr(error))
+
+asset_redirect = install._AssetRedirectHandler()
+original_request = urllib.request.Request(ASSET_URL)
+check("an asset redirect leaving GitHub is refused",
+      rejected(lambda: asset_redirect.redirect_request(
+          original_request, None, 302, "Found", {}, "https://example.com/x"),
+          "destination"))
+followed = asset_redirect.redirect_request(
+    original_request, None, 302, "Found", {},
+    "https://release-assets.githubusercontent.com/storage/bundle.json")
+check("an asset redirect to GitHub's asset host is followed",
+      followed is not None and followed.full_url.startswith(
+          "https://release-assets.githubusercontent.com/"))
+api_redirect = install._GitHubRedirectHandler()
+try:
+    api_redirect.redirect_request(urllib.request.Request(install.LATEST_RELEASE_URL),
+                                  None, 302, "Found", {}, "https://example.com/latest")
+except urllib.error.HTTPError as refusal:
+    api_refused = "cross-host" in str(refusal.reason)
+else:
+    api_refused = False
+check("an API redirect to another host is refused", api_refused)
+
+
+def asset_release(**changes: object) -> dict:
+    release = {"tag_name": ASSET_TAG, "draft": False, "prerelease": False,
+               "assets": [{"name": "bundle.json", "size": 10,
+                           "browser_download_url": ASSET_URL}]}
+    release.update(changes)
+    return release
+
+
+def fetch_asset(release: object, path: str = "bundle.json", limit: int = 64):
+    requested: list[str] = []
+    reads: list[tuple[str, int]] = []
+
+    def fetch_json(url: str) -> object:
+        requested.append(url)
+        return release
+
+    def fake_read(url: str, size: int) -> bytes:
+        reads.append((url, size))
+        return b"asset bytes"
+
+    with patch.object(install, "read_release_asset", fake_read):
+        try:
+            result: object = install.fetch_release_asset(fetch_json, path, ASSET_TAG, limit)
+        except ValueError as error:
+            result = error
+    return result, requested, reads
+
+
+result, requested, reads = fetch_asset(asset_release())
+check("a listed release asset is read through its exact download URL",
+      result == b"asset bytes" and requested == [RELEASE_BY_TAG]
+      and reads == [(ASSET_URL, 64)], f"{result!r} {requested!r} {reads!r}")
+nested_url = f"{ASSET_ROOT}/install.py"
+result, _, reads = fetch_asset(asset_release(assets=[
+    {"name": "install.py", "size": 5, "browser_download_url": nested_url}]),
+    "scripts/install.py")
+check("a bundled script is matched to its asset by file name",
+      result == b"asset bytes" and reads == [(nested_url, 64)], f"{result!r} {reads!r}")
+result, _, reads = fetch_asset(asset_release(assets=[]))
+check("a release without the asset reports none instead of guessing",
+      result is None and not reads)
+for label, release, reason in (
+    ("a release response that is not an object", [], "invalid asset release"),
+    ("a release for another tag", asset_release(tag_name="aiscb-9.9.8"), "invalid asset release"),
+    ("a draft release", asset_release(draft=True), "invalid asset release"),
+    ("a prerelease", asset_release(prerelease=True), "invalid asset release"),
+    ("an asset list that is not a list", asset_release(assets={}), "invalid release assets"),
+    ("two assets with the same name", asset_release(assets=asset_release()["assets"] * 2),
+     "duplicate release asset"),
+    ("an asset URL for another tag", asset_release(assets=[{
+        "name": "bundle.json", "size": 10,
+        "browser_download_url": ASSET_URL.replace(ASSET_TAG, "aiscb-9.9.8")}]),
+     "invalid release asset URL or size"),
+    ("an asset URL on another host", asset_release(assets=[{
+        "name": "bundle.json", "size": 10,
+        "browser_download_url": "https://example.com/bundle.json"}]),
+     "invalid release asset URL or size"),
+    ("an asset without a size", asset_release(assets=[{
+        "name": "bundle.json", "browser_download_url": ASSET_URL}]),
+     "invalid release asset URL or size"),
+    ("an asset size given as a boolean", asset_release(assets=[{
+        "name": "bundle.json", "size": True, "browser_download_url": ASSET_URL}]),
+     "invalid release asset URL or size"),
+    ("an empty asset", asset_release(assets=[{
+        "name": "bundle.json", "size": 0, "browser_download_url": ASSET_URL}]),
+     "invalid release asset URL or size"),
+    ("an asset larger than its limit", asset_release(assets=[{
+        "name": "bundle.json", "size": 65, "browser_download_url": ASSET_URL}]),
+     "invalid release asset URL or size"),
+):
+    result, _, reads = fetch_asset(release)
+    check(f"{label} is refused without a download",
+          isinstance(result, ValueError) and reason in str(result) and not reads,
+          f"{result!r} {reads!r}")
+
+
+def tree_then_assets(contents_error: int, release: object):
+    requested: list[str] = []
+
+    def fetch_json(url: str) -> object:
+        requested.append(url)
+        if url.startswith(install.CONTENTS_ROOT_URL):
+            raise urllib.error.HTTPError(url, contents_error, "error", None, None)  # type: ignore[arg-type]
+        return release
+
+    with patch.object(install, "read_release_asset", lambda _url, _limit: b"asset bytes"):
+        try:
+            result: object = install.fetch_release_file(fetch_json, "bundle.json", ASSET_TAG, 64)
+        except urllib.error.HTTPError as error:
+            result = error
+    return result, requested
+
+
+result, requested = tree_then_assets(404, asset_release())
+check("a file missing from the tag tree is read from the release asset",
+      result == b"asset bytes" and requested[-1] == RELEASE_BY_TAG, repr(result))
+result, _ = tree_then_assets(404, asset_release(assets=[]))
+check("a file in neither the tree nor the assets stays a missing file",
+      isinstance(result, urllib.error.HTTPError) and result.code == 404, repr(result))
+result, requested = tree_then_assets(500, asset_release())
+check("a failed tree lookup is not replaced by an asset download",
+      isinstance(result, urllib.error.HTTPError) and result.code == 500
+      and RELEASE_BY_TAG not in requested, f"{result!r} {requested!r}")
+
+# The bundle path itself: assets first, the tree only for files without one.
+bundled_for_assets = install.bundled_baseline()
+
+
+def bundle_files(version: str) -> dict[str, bytes]:
+    baseline = bundled_for_assets.content.replace(
+        bundled_for_assets.baseline_id.encode(), f"aiscb-{version}".encode(), 1)
+    return {name: baseline if name == install.BASELINE else f"# {name}\n".encode()
+            for name in install.BUNDLE_FILES}
+
+
+def served_bundle(files: dict[str, bytes], manifest: bytes, without_asset: str | None = None):
+    published = {install.MANIFEST_NAME: manifest, install.SIGNATURE_NAME: b"signature",
+                 **files}
+    assets = {Path(name).name: content for name, content in published.items()
+              if name != without_asset}
+    release = asset_release(assets=[
+        {"name": name, "size": len(content), "browser_download_url": f"{ASSET_ROOT}/{name}"}
+        for name, content in assets.items()])
+    contents: list[str] = []
+
+    def fetch_json(url: str) -> object:
+        if url == RELEASE_BY_TAG:
+            return release
+        prefix = install.CONTENTS_ROOT_URL + "/"
+        path = url[len(prefix):].partition("?")[0]
+        contents.append(path)
+        return contents_payload(published[path])
+
+    def fake_read(url: str, limit: int) -> bytes:
+        content = assets[url.rsplit("/", 1)[-1]]
+        assert len(content) <= limit
+        return content
+
+    return fetch_json, fake_read, contents
+
+
+def verified_bundle(files, manifest, without_asset=None):
+    fetch_json, fake_read, contents = served_bundle(files, manifest, without_asset)
+    verified: list[tuple[bytes, bytes]] = []
+    with patch.object(install, "read_release_asset", fake_read):
+        try:
+            result: object = install.fetch_verified_bundle(
+                fetch_json, ASSET_TAG, install.SemVer.parse("9.9.9"),
+                verify=lambda m, s: verified.append((m, s)))
+        except ValueError as error:
+            result = error
+    return result, contents, verified
+
+
+files_999 = bundle_files("9.9.9")
+manifest_999 = install.manifest_document(files_999)
+result, contents, verified = verified_bundle(files_999, manifest_999)
+check("a bundle published as assets is verified without reading the tag tree",
+      result == files_999 and not contents
+      and verified == [(manifest_999, b"signature")], f"{result!r} {contents!r}")
+result, contents, _ = verified_bundle(files_999, manifest_999, "scripts/install.py")
+check("a bundled file without an asset falls back to the tag tree, still pinned",
+      result == files_999 and contents == ["scripts/install.py"], f"{result!r} {contents!r}")
+files_998 = bundle_files("9.9.8")
+relabelled = json.loads(install.manifest_document(files_998))
+relabelled["baseline_id"] = "aiscb-9.9.9"
+result, _, _ = verified_bundle(files_998, json.dumps(relabelled).encode())
+check("a manifest naming another baseline than the file it pins is refused",
+      isinstance(result, ValueError) and "disagree" in str(result), repr(result))
+
+check("a bundle manifest needs exactly the bundled files",
+      rejected(lambda: install.manifest_document(
+          {install.BASELINE: files_999[install.BASELINE]}), "exactly the bundled files"))
+derived_files = {**files_999, install.BASELINE: files_999[install.BASELINE].replace(
+    b"aiscb-9.9.9", b"acme-sec-1.0.0", 1)}
+check("a derived baseline is never described by a release manifest",
+      rejected(lambda: install.manifest_document(derived_files), "only the official baseline"))
+for label, manifest in (("an empty manifest", b""),
+                        ("an oversized manifest", b" " * (install.MAX_MANIFEST_BYTES + 1))):
+    check(f"{label} is refused before parsing",
+          rejected(lambda: install.parse_manifest(manifest), "invalid size"))
+    refusal = verification_error(manifest, install.SIGNATURE_HEADER, ("signer",))
+    check(f"{label} is refused before signature verification",
+          refusal is not None and "invalid size" in refusal, str(refusal))
+
+
+def release_lookup_output(code: int) -> tuple[int, list[str]]:
+    lines: list[str] = []
+
+    def fetch_json(url: str) -> object:
+        raise urllib.error.HTTPError(url, code, "error", None, None)  # type: ignore[arg-type]
+
+    result = install.release_update(output=lines.append, current=bundled_for_assets,
+                                    fetch_json=fetch_json,
+                                    run=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError))
+    return result, lines
+
+
+check("a missing release is reported, not treated as an update",
+      release_lookup_output(404) == (1, ["No published release found."]))
+check("a failing release lookup is reported, not treated as an update",
+      release_lookup_output(503) == (1, ["The release lookup failed."]))
+
+check("a malformed semantic version is refused",
+      rejected(lambda: install.SemVer.parse("1.2"), "invalid semantic version"))
+check("a prerelease version keeps its label when printed",
+      str(install.SemVer.parse("1.2.3-rc.1+build.5")) == "1.2.3-rc.1+build.5")
+check("empty baseline content is refused",
+      rejected(lambda: install.parse_baseline(b"", "test"), "invalid size"))
+check("baseline content that is not UTF-8 is refused",
+      rejected(lambda: install.parse_baseline(b"`baseline-id: aiscb-1.0.0`\n\xff", "test"),
+               "not UTF-8"))
+with tempfile.TemporaryDirectory() as tmp:
+    oversized = Path(tmp) / "large"
+    oversized.write_bytes(b"x" * 11)
+    check("a file beyond its read limit is refused",
+          rejected(lambda: install.read_limited(oversized, 10), "too large"))
+
+
+# The command line refuses contradictory or unsafe requests before any setup.
+class Terminal(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def run_main(argv: list[str], home: Path, cwd: Path, *, tty: bool = False,
+             **patched: object) -> tuple[object, str, str]:
+    out, err = io.StringIO(), io.StringIO()
+    previous = os.getcwd()
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(patch.dict(os.environ, {"HOME": str(home)}))
+        stack.enter_context(patch.object(install, "REPO", home / "no-checkout"))
+        stack.enter_context(patch.object(sys, "stdin", Terminal() if tty else io.StringIO()))
+        for name, value in patched.items():
+            stack.enter_context(patch.object(install, name, value))
+        stack.enter_context(contextlib.redirect_stdout(out))
+        stack.enter_context(contextlib.redirect_stderr(err))
+        os.chdir(cwd)
+        try:
+            code: object = install.main(argv)
+        except SystemExit as exit_:
+            code = exit_.code
+        finally:
+            os.chdir(previous)
+    return code, out.getvalue(), err.getvalue()
+
+
+def raising(error: BaseException):
+    def call(*_args: object, **_kwargs: object) -> object:
+        raise error
+    return call
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    sandbox = Path(tmp).resolve()
+    home, project = sandbox / "home", sandbox / "project"
+    home.mkdir()
+    project.mkdir()
+    bundle_dir = sandbox / "organization"
+    bundle_dir.mkdir()
+    refusals = [
+        (["--dry-run"], "--dry-run requires --refresh-installed"),
+        (["--refresh-installed", "claude"], "--refresh-installed takes only"),
+        (["--status", "--uninstall"], "choose one setup or management action"),
+        (["--session-switch", "--user"], "legacy complete-mode operation"),
+        (["unknown-tool"], "unknown tool"),
+        (["--offline"], "--offline is only valid"),
+        (["--interactive", "claude"], "--interactive cannot be combined"),
+        (["--modular", "--status", "claude"], "--status and --uninstall do not take tools"),
+        (["--into", str(sandbox / "missing")], "--into must be an existing non-root directory"),
+        (["--organization-sha256", "0" * 64], "--organization-sha256 requires --organization"),
+        (["--organization", str(bundle_dir)], "requires --organization-sha256"),
+        (["--interactive"], "the guided setup needs a terminal"),
+        (["--update", "--modular"], "cannot be combined with legacy management actions"),
+        (["--session-switch", "--complete", "--offline"], "--session-switch takes only"),
+        (["--session-switch", "--complete"], "applies to the user installation"),
+        (["--session-switch", "--complete", "--user", "kiro"], "modular setup only"),
+        (["--session-switch", "--complete", "--user", "copilot"], "claude and codex only"),
+        (["--complete", "--uninstall", "claude"], "--uninstall takes only"),
+        (["--refresh-update-cache", "--user"], "--refresh-update-cache takes no other"),
+        (["--update", "claude"], "--update takes no other arguments"),
+        (["--update"], "needs a terminal"),
+        (["--complete", "--interactive", "claude"], "--interactive cannot be combined"),
+        (["--complete", "--status", "claude"], "--status cannot be combined"),
+        (["--complete", "--offline"], "--offline is only valid"),
+        (["--complete", "unknown-tool"], "unknown tool"),
+    ]
+    for argv, reason in refusals:
+        code, out, err = run_main(argv, home, project)
+        check(f"install.py {' '.join(argv)} is refused",
+              code == 2 and reason in err and not out, f"code={code} err={err[-300:]!r}")
+    check("the refused commands left the project and home untouched",
+          not any(project.iterdir()) and not any(home.iterdir()),
+          str([*project.iterdir(), *home.iterdir()]))
+
+    for label, inventory in (
+        ("an inventory that is not an object", "[]"),
+        ("an inventory with too many entries",
+         json.dumps({f"baseline/{index}.md": "" for index in range(65)})),
+        ("an absolute resource path", json.dumps({"/etc/aiscb": ""})),
+        ("a resource path with ..", json.dumps({"baseline/../../escape": ""})),
+        ("a resource path with a backslash", json.dumps({"baseline\\escape": ""})),
+        ("a resource outside baseline/ and scripts/", json.dumps({"other/file": ""})),
+        ("a resource that is not text", json.dumps({"baseline/core.md": 1})),
+    ):
+        code, out, err = run_main(["claude"], home, project, EMBEDDED_POLICY=inventory)
+        check(f"an embedded policy with {label} is refused",
+              code == 1 and "Local policy setup refused" in err and not out
+              and not any(project.iterdir()), f"code={code} err={err!r}")
+
+    (home / ".aiscb").mkdir()
+    (home / ".aiscb/installation.json").write_text("{}")
+    code, _, err = run_main(["--session-switch", "--complete", "--user"], home, project)
+    check("the legacy session switch never replaces a modular installation",
+          code == 2 and "cannot replace a modular installation" in err, err)
+    (home / ".aiscb/installation.json").unlink()
+    (home / ".aiscb").rmdir()
+
+    code, _, err = run_main(["--update"], home, project, tty=True,
+                            release_update=raising(ValueError("bad signature")))
+    check("a failed update reports that nothing was changed",
+          code == 1 and "nothing was changed" in err, err)
+    code, _, err = run_main(["--complete", "--interactive"], home, project, tty=True,
+                            interactive_setup=raising(EOFError()))
+    check("a cancelled legacy guided setup exits as cancelled",
+          code == 130 and "Setup cancelled" in err, err)
+    code, _, err = run_main(["--complete", "--interactive"], home, project, tty=True,
+                            interactive_setup=raising(OSError("disk")))
+    check("a failed legacy guided setup points at the reported files",
+          code == 1 and "review the reported files" in err, err)
+    code, _, err = run_main(["--complete", "--status"], home, project,
+                            installation_status=raising(ValueError("broken")))
+    check("a failed status check is reported as stopped",
+          code == 1 and "Status check stopped" in err, err)
+    code, out, _ = run_main(["--session-switch", "--complete", "--user", "claude"],
+                            home, project,
+                            install_session_switch=lambda *_a: ["blocked: claude"])
+    check("a blocked session switch is printed and fails",
+          code == 1 and "blocked: claude" in out, out)
+
+    checkout = sandbox / "checkout"
+    (checkout / "baseline").mkdir(parents=True)
+    (checkout / "baseline/catalog.json").write_text("{}")
+    with patch.object(install.build_baseline, "validate",
+                      raising(ValueError("catalog digest mismatch"))):
+        code, _, err = run_main(["--complete", "--status"], home, project,
+                                REPO=checkout)
+        check("a legacy action from a checkout with invalid sources is refused",
+              code == 2 and "catalog digest mismatch" in err, err)
+        code, _, err = run_main(["claude"], home, project, REPO=checkout)
+        check("a modular setup from a checkout with invalid sources is refused",
+              code == 1 and "Local policy setup refused: catalog digest mismatch" in err, err)
+
+    class FakePolicySetup:
+        def __init__(self, error: BaseException | None = None):
+            self.error = error
+            self.calls: list[object] = []
+
+        def run(self, module: object, args: object) -> int:
+            self.calls.append((module, args))
+            if self.error is not None:
+                raise self.error
+            return 0
+
+    staged: list[bool] = []
+    inventory = json.dumps({"scripts/aiscb_staged_marker.py": "MARKER = 1\n"})
+    for error, expected in ((None, 0), (EOFError(), 130), (ImportError("broken"), 1)):
+        fake = FakePolicySetup(error)
+        with patch.dict(sys.modules, {"policy_setup": fake}):
+            code, _, err = run_main(["claude"], home, project, EMBEDDED_POLICY=inventory)
+        staged.append(any(Path(entry, "aiscb_staged_marker.py").is_file()
+                          for entry in sys.path if "aiscb-runtime-" in entry))
+        check(f"embedded policy setup ending with {type(error).__name__} exits {expected}",
+              code == expected and len(fake.calls) == 1
+              and fake.calls[0][0] is install
+              and fake.calls[0][1].tools == ["claude"], f"code={code} err={err!r}")
+    check("staged embedded resources do not outlive the setup", not any(staged))
+    for entry in [entry for entry in sys.path if "aiscb-runtime-" in entry]:
+        sys.path.remove(entry)
+
+# Copies never replace content the installer does not own.
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp).resolve()
+    source = root / "source.md"
+    source.write_bytes(b"new baseline\n")
+    report: list[str] = []
+    target = root / "rules" / "copy.md"
+    check("a missing copy is created",
+          install.install_copy(target, source, report, root)
+          and target.read_bytes() == b"new baseline\n" and report[-1].startswith("copied"))
+    check("an identical copy stays in place",
+          install.install_copy(target, source, report, root)
+          and report[-1] == f"in place {target}")
+    target.write_bytes(b"old baseline\n")
+    check("a copy of the previous baseline is updated",
+          install.install_copy(target, source, report, root, previous=b"old baseline\n")
+          and target.read_bytes() == b"new baseline\n" and report[-1] == f"updated {target}")
+    target.write_bytes(b"edited by hand\n")
+    check("a copy edited by hand is left alone",
+          not install.install_copy(target, source, report, root, previous=b"old baseline\n")
+          and target.read_bytes() == b"edited by hand\n" and "replace it by hand" in report[-1])
+    target.unlink()
+    target.mkdir()
+    check("a directory where the copy belongs is left alone",
+          not install.install_copy(target, source, report, root)
+          and target.is_dir() and "replace it by hand" in report[-1])
+    target.rmdir()
+    target.symlink_to(source)
+    check("a link to the baseline becomes a copy",
+          install.install_copy(target, source, report, root)
+          and not target.is_symlink() and target.read_bytes() == b"new baseline\n"
+          and "replaced the link with a copy" in report[-1])
+    target.unlink()
+    elsewhere = root / "elsewhere.md"
+    elsewhere.write_bytes(b"someone else's file\n")
+    target.symlink_to(elsewhere)
+    check("a link pointing elsewhere is never followed or replaced",
+          not install.install_copy(target, source, report, root)
+          and target.is_symlink() and elsewhere.read_bytes() == b"someone else's file\n"
+          and "points elsewhere" in report[-1])
+    real_rules = root / "real-rules"
+    real_rules.mkdir()
+    (root / "linked").symlink_to(real_rules)
+    check("a copy below a symlinked directory is refused",
+          not install.install_copy(root / "linked" / "copy.md", source, report, root)
+          and not any(real_rules.iterdir()) and "is a symlink" in report[-1])
+
+# Copilot, import-line, link and helper placement share the same rule: content
+# the installer cannot prove it owns is reported, never overwritten.
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp).resolve()
+    source = root / "source.md"
+    source.write_bytes(b"new baseline\n")
+    header = install.VSCODE_INSTRUCTIONS_HEADER
+    report = []
+    target = root / ".github" / "instructions.md"
+    check("Copilot instructions are written with their frontmatter",
+          install.install_vscode_copy(target, source, report, scope=root)
+          and target.read_bytes() == header + b"new baseline\n")
+    check("identical Copilot instructions stay in place",
+          install.install_vscode_copy(target, source, report, scope=root)
+          and report[-1] == f"in place {target}")
+    target.write_bytes(header + b"old baseline\n")
+    check("Copilot instructions from the previous baseline are updated",
+          install.install_vscode_copy(target, source, report, scope=root,
+                                      previous=b"old baseline\n")
+          and target.read_bytes() == header + b"new baseline\n")
+    target.write_bytes(b"project instructions\n")
+    check("other Copilot instructions are left alone",
+          not install.install_vscode_copy(target, source, report, scope=root,
+                                          previous=b"old baseline\n")
+          and target.read_bytes() == b"project instructions\n")
+    target.write_bytes(b"x" * (install.MAX_INSTRUCTION_BYTES + 1))
+    check("oversized Copilot instructions are left alone",
+          not install.install_vscode_copy(target, source, report, scope=root)
+          and "different Copilot instructions" in report[-1])
+    target.unlink()
+    target.symlink_to(source)
+    check("a symlinked Copilot instructions file is refused",
+          not install.install_vscode_copy(target, source, report, scope=root)
+          and target.is_symlink() and "is a symlink" in report[-1])
+    target.unlink()
+    shared = root / "shared"
+    shared.mkdir()
+    (root / "linked-github").symlink_to(shared)
+    check("Copilot instructions below a symlinked directory are refused",
+          not install.install_vscode_copy(root / "linked-github" / "instructions.md",
+                                          source, report, scope=root)
+          and not any(shared.iterdir()))
+
+    agents = root / "AGENTS.md"
+    agents.write_bytes(b"\xff\xfe not text")
+    check("an instruction file that is not UTF-8 is not edited",
+          not install.install_import_line(agents, source, report)
+          and agents.read_bytes() == b"\xff\xfe not text" and "cannot safely read" in report[-1])
+    agents.write_text("# Project rules")
+    with patch.object(install, "_atomic_replace", raising(OSError("read-only"))):
+        appended = install.install_import_line(agents, source, report)
+    check("a failed import-line append is reported",
+          not appended and "cannot append" in report[-1]
+          and agents.read_text() == "# Project rules")
+    check("an import line is appended after existing text",
+          install.install_import_line(agents, source, report)
+          and agents.read_text() == f"# Project rules\n@{source}\n")
+    shared_agents = root / "shared-agents.md"
+    shared_agents.write_text("# Shared\n")
+    linked_agents = root / "linked" / "AGENTS.md"
+    linked_agents.parent.mkdir()
+    linked_agents.symlink_to(shared_agents)
+    check("an import line is never appended through a symlink",
+          not install.install_import_line(linked_agents, source, report)
+          and shared_agents.read_text() == "# Shared\n" and "is a symlink" in report[-1])
+    linked_agents.unlink()
+    linked_agents.symlink_to(root / "missing.md")
+    check("a broken symlinked instruction file is refused",
+          not install.install_import_line(linked_agents, source, report)
+          and not (root / "missing.md").exists() and "broken symlink" in report[-1])
+
+    codex_target = root / "codex" / "AGENTS.md"
+    codex_target.parent.mkdir()
+    override = codex_target.with_name("AGENTS.override.md")
+    check("no Codex override means nothing hides the instructions",
+          install.codex_override(codex_target) is None)
+    override.write_text("")
+    check("an empty Codex override hides nothing", install.codex_override(codex_target) is None)
+    override.write_text("override")
+    check("a Codex override with content is reported",
+          install.codex_override(codex_target) == override)
+    override.unlink()
+    override.mkdir()
+    check("a Codex override that is not a file is reported",
+          install.codex_override(codex_target) == override)
+    override.rmdir()
+    override.symlink_to(root / "missing.md")
+    check("a symlinked Codex override is reported",
+          install.codex_override(codex_target) == override)
+
+    link_target = root / "fallback" / "AGENTS.md"
+    with patch.object(Path, "symlink_to", raising(OSError("no symlinks"))):
+        linked = install.install_link(link_target, source, report, relative=True, scope=root)
+    check("without symlinks the baseline is copied instead",
+          linked and link_target.read_bytes() == b"new baseline\n"
+          and "symlink unavailable" in report[-1])
+    link_target.unlink()
+    with patch.object(Path, "symlink_to", raising(OSError("no symlinks"))), \
+            patch.object(install, "_write_new", raising(OSError("read-only"))):
+        linked = install.install_link(link_target, source, report, relative=True, scope=root)
+    check("a link that can be neither created nor copied is reported",
+          not linked and not link_target.exists() and "cannot create" in report[-1])
+
+    home = root / "home"
+    installer_target = install.user_data_root(home) / install.INSTALLER_NAME
+    installer_target.parent.mkdir(parents=True)
+    installer_target.write_bytes(b"x" * (install.MAX_INSTALLER_BYTES + 1))
+    check("an unreadable existing installer is not replaced",
+          install._place_installer(home, report) is None
+          and "cannot safely read" in report[-1]
+          and installer_target.stat().st_size == install.MAX_INSTALLER_BYTES + 1)
+    installer_target.write_bytes(b"older installer")
+    with patch.object(install, "_atomic_replace", raising(OSError("read-only"))):
+        placed = install._place_installer(home, report)
+    check("an installer that cannot be replaced is reported",
+          placed is None and "cannot replace" in report[-1]
+          and installer_target.read_bytes() == b"older installer")
+    check("an older installer is replaced by this one",
+          install._place_installer(home, report) == installer_target
+          and installer_target.read_bytes() == install.INSTALLER_SOURCE.read_bytes())
+    with patch.object(install, "INSTALLER_SOURCE", installer_target):
+        check("an installer running from its own place stays there",
+              install._place_installer(home, report) == installer_target
+              and report[-1] == f"in place {installer_target}")
+
+    hook_target = install.version_hook_path(root, home)
+    with patch.object(install, "VERSION_HOOK_SOURCE", root / "missing-helper.py"):
+        check("a missing hook helper source places nothing",
+              install._place_version_hook(root, home, report) is None
+              and not hook_target.exists() and "source is missing" in report[-1])
+    hook_target.write_bytes(b"x" * (install.MAX_BASELINE_BYTES + 1))
+    check("an unreadable existing hook helper is not replaced",
+          install._place_version_hook(root, home, report) is None
+          and "cannot safely read" in report[-1])
+    hook_target.write_bytes(b"print('someone else')\n")
+    check("hook helper code the installer did not ship is not replaced",
+          install._place_version_hook(root, home, report) is None
+          and hook_target.read_bytes() == b"print('someone else')\n"
+          and "different hook helper code" in report[-1])
+
+# A Copilot hook file is replaced only when it holds this installer's own
+# entry for a helper that has moved; anything else is somebody's configuration.
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp).resolve()
+
+    def hook_config(folder: str, command: str = "python3") -> dict[str, object]:
+        return {"version": 1, "hooks": {"sessionStart": [{
+            "type": "command", "bash": f"{command} {folder}/{install.VERSION_HOOK_NAME}"}]}}
+
+    config = hook_config("/new")
+    path = root / "hooks" / "aiscb.json"
+    report = []
+    install._install_copilot_version_hook(path, config, report)
+    check("a Copilot version hook is written",
+          json.loads(path.read_text()) == config and report[-1] == f"wrote {path}")
+    install._install_copilot_version_hook(path, config, report)
+    check("an identical Copilot version hook stays in place", report[-1] == f"in place {path}")
+    path.write_text(json.dumps(hook_config("/old")))
+    install._install_copilot_version_hook(path, config, report)
+    check("a Copilot version hook for a moved helper is updated",
+          json.loads(path.read_text()) == config and "now reads the current helper" in report[-1])
+    custom = hook_config("/old")
+    custom["hooks"]["sessionStart"].append({"type": "command", "bash": "./project-check.sh"})
+    path.write_text(json.dumps(custom))
+    install._install_copilot_version_hook(path, config, report)
+    check("a customized Copilot hook command is left alone",
+          json.loads(path.read_text()) == custom and "different hook configuration" in report[-1])
+    path.write_text('{"version": 1, "version": 2}')
+    install._install_copilot_version_hook(path, config, report)
+    check("an ambiguous Copilot hook file is left alone",
+          path.read_text() == '{"version": 1, "version": 2}'
+          and "cannot safely install" in report[-1])
+
+    previous = root / "hooks" / "previous.json"
+    path.unlink()
+    previous.write_text("not json")
+    install._install_copilot_version_hook_with_migration(path, previous, config, report)
+    check("an unreadable previous Copilot hook blocks the migration",
+          not path.exists() and "cannot safely migrate" in report[-1])
+    previous.write_text(json.dumps(custom))
+    install._install_copilot_version_hook_with_migration(path, previous, config, report)
+    check("a previous Copilot hook with other commands is not migrated",
+          not path.exists() and json.loads(previous.read_text()) == custom
+          and "migrate to the current hook name" in report[-1])
+    previous.write_text(json.dumps(hook_config("/old")))
+    install._install_copilot_version_hook_with_migration(path, previous, config, report)
+    check("a previous Copilot hook of this installer is migrated and removed",
+          json.loads(path.read_text()) == config and not previous.exists()
+          and report[-1] == f"removed {previous}: migrated to {path}")
+
+    home, project = root / "home", root / "project"
+    home.mkdir()
+    project.mkdir()
+    for user in (False, True):
+        lines: list[str] = []
+        code = install.uninstall(home=home, root=project, user=user, output=lines.append)
+        check(f"uninstalling an empty {'user' if user else 'project'} scope changes nothing",
+              code == 1 and lines == ["Nothing installed here."]
+              and not any(project.iterdir()) and not any(home.iterdir()), str(lines))
+
+# The installation registry is state other runs trust. Anything unexpected is
+# reported and left unwritable instead of being overwritten.
+with tempfile.TemporaryDirectory() as tmp:
+    home = Path(tmp).resolve()
+    path = install.registry_path(home)
+    path.parent.mkdir(parents=True)
+    for label, content in (
+        ("invalid JSON", b"{"),
+        ("an unsupported schema", json.dumps({"schema": 99, "projects": {}}).encode()),
+        ("project entries that are not an object",
+         json.dumps({"schema": 1, "projects": [], "user": None}).encode()),
+        ("too many projects", json.dumps({"schema": 1, "user": None, "projects": {
+            f"/p{index}": {} for index in range(install.MAX_PROJECTS + 1)}}).encode()),
+        ("a user entry that is not an object",
+         json.dumps({"schema": 1, "projects": {}, "user": "me"}).encode()),
+        ("an oversized file", b" " * (install.MAX_REGISTRY_BYTES + 1)),
+    ):
+        path.write_bytes(content)
+        registry, writable, note = install.load_registry(path)
+        check(f"a registry with {label} is reported and not writable",
+              not writable and note and registry == install.empty_registry(), str(note))
+    path.unlink()
+    elsewhere = home / "elsewhere.json"
+    elsewhere.write_text(json.dumps(install.empty_registry()))
+    path.symlink_to(elsewhere)
+    registry, writable, note = install.load_registry(path)
+    check("a symlinked registry is not trusted", not writable and "regular file" in str(note))
+    check("a symlinked registry is never written through",
+          rejected(lambda: install.save_registry(path, install.empty_registry()), "symlink")
+          and json.loads(elsewhere.read_text()) == install.empty_registry())
+    path.unlink()
+    check("a registry beyond its size limit is not saved",
+          rejected(lambda: install.save_registry(path, {
+              **install.empty_registry(), "padding": "x" * install.MAX_REGISTRY_BYTES}),
+              "too large") and not path.exists())
+
+    previous_path = install.previous_registry_path(home)
+    previous_path.parent.mkdir(parents=True)
+    previous_path.write_text("not json")
+    registry, writable, note = install.load_registry_with_previous(home, path)
+    check("an invalid previous registry is reported and not imported",
+          writable and "not imported" in str(note) and previous_path.exists())
+    previous_path.write_text(json.dumps({
+        "schema": 1, "projects": {"/old/project": {"tools": ["claude"]}},
+        "user": {"tools": ["codex"]}, "update_check": {"enabled": True}}))
+    install.save_registry(path, {"schema": 1, "user": None,
+                                 "projects": {"/current": {"tools": ["codex"]}}})
+    registry, writable, note = install.load_registry_with_previous(home, path)
+    saved = json.loads(path.read_text())
+    check("previous records are merged without replacing current ones",
+          writable and str(note).startswith("Imported installation records")
+          and saved["projects"] == {"/current": {"tools": ["codex"]},
+                                    "/old/project": {"tools": ["claude"]}}
+          and saved["user"] == {"tools": ["codex"]}
+          and saved["update_check"] == {"enabled": True}, str(saved))
+    check("the imported previous registry is archived, not left to import twice",
+          not previous_path.exists()
+          and previous_path.with_name("installations.json.migrated").exists())
+    previous_path.write_text(json.dumps({"schema": 1, "projects": {}, "user": None}))
+    with patch.object(install.os, "replace", raising(OSError("read-only"))):
+        _, writable, note = install.load_registry_with_previous(home, path)
+    check("a previous registry that cannot be archived is reported",
+          writable and "could not be archived" in str(note) and previous_path.exists())
 
 print(f"\ninstall: {'ok' if not failures else f'{failures} failures'}")
 sys.exit(1 if failures else 0)

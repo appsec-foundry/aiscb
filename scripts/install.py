@@ -396,25 +396,10 @@ def fetch_release_file(
     except urllib.error.HTTPError as missing:
         if missing.code != 404:
             raise
-        # New releases publish generated files as assets, not source-tree files.
-        release = fetch_json(f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/tags/{urllib.parse.quote(ref, safe='')}")
-        if not isinstance(release, dict) or release.get("tag_name") != ref or release.get("draft") or release.get("prerelease"):
-            raise ValueError("invalid asset release")
-        assets = release.get("assets", [])
-        if not isinstance(assets, list):
-            raise ValueError("invalid release assets")
-        name = Path(path).name
-        matches = [a for a in assets if isinstance(a, dict) and a.get("name") == name]
-        if not matches:
+        asset = fetch_release_asset(fetch_json, path, ref, limit)
+        if asset is None:
             raise missing
-        if len(matches) != 1:
-            raise ValueError("duplicate release asset")
-        asset = matches[0]
-        expected = f"https://github.com/{GITHUB_REPOSITORY}/releases/download/{urllib.parse.quote(ref, safe='')}/{name}"
-        if (asset.get("browser_download_url") != expected or type(asset.get("size")) is not int
-                or not 0 < asset["size"] <= limit):
-            raise ValueError("invalid release asset URL or size")
-        return read_release_asset(expected, limit)
+        return asset
     if not isinstance(payload, dict) or payload.get("type") != "file":
         raise ValueError(f"release {path} is not a file")
     if payload.get("encoding") != "base64" or not isinstance(payload.get("content"), str):
@@ -427,6 +412,30 @@ def fetch_release_file(
     if len(content) > limit:
         raise ValueError(f"release {path} is too large")
     return content
+
+
+def fetch_release_asset(
+    fetch_json: Callable[[str], object], path: str, ref: str, limit: int
+) -> bytes | None:
+    """Read an exact release asset when one exists for this tag and filename."""
+    release = fetch_json(f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/tags/{urllib.parse.quote(ref, safe='')}")
+    if not isinstance(release, dict) or release.get("tag_name") != ref or release.get("draft") or release.get("prerelease"):
+        raise ValueError("invalid asset release")
+    assets = release.get("assets", [])
+    if not isinstance(assets, list):
+        raise ValueError("invalid release assets")
+    name = Path(path).name
+    matches = [a for a in assets if isinstance(a, dict) and a.get("name") == name]
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise ValueError("duplicate release asset")
+    asset = matches[0]
+    expected = f"https://github.com/{GITHUB_REPOSITORY}/releases/download/{urllib.parse.quote(ref, safe='')}/{name}"
+    if (asset.get("browser_download_url") != expected or type(asset.get("size")) is not int
+            or not 0 < asset["size"] <= limit):
+        raise ValueError("invalid release asset URL or size")
+    return read_release_asset(expected, limit)
 
 
 class _AssetRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -1988,17 +1997,21 @@ def fetch_verified_bundle(
     verify: Callable[[bytes, bytes], None] = verify_manifest_signature,
 ) -> dict[str, bytes]:
     """Download one release bundle, accepting nothing the signed manifest does not pin."""
-    manifest_content = fetch_release_file(
-        fetch_json, MANIFEST_NAME, tag, MAX_MANIFEST_BYTES
-    )
-    signature = fetch_release_file(fetch_json, SIGNATURE_NAME, tag, MAX_SIGNATURE_BYTES)
+    def bundle_file(path: str, limit: int) -> bytes:
+        # A published bundle may differ from files at the same Git tag. Prefer
+        # its release asset; older tree-only releases retain their fallback.
+        asset = fetch_release_asset(fetch_json, path, tag, limit)
+        return asset if asset is not None else fetch_release_file(fetch_json, path, tag, limit)
+
+    manifest_content = bundle_file(MANIFEST_NAME, MAX_MANIFEST_BYTES)
+    signature = bundle_file(SIGNATURE_NAME, MAX_SIGNATURE_BYTES)
     verify(manifest_content, signature)
     manifest = parse_manifest(manifest_content)
     if manifest.version != version:
         raise ValueError("the manifest does not describe the release it was fetched from")
     files: dict[str, bytes] = {}
     for name, (size, digest) in manifest.files.items():
-        content = fetch_release_file(fetch_json, name, tag, size)
+        content = bundle_file(name, size)
         if len(content) != size or hashlib.sha256(content).hexdigest() != digest:
             raise ValueError(f"release {name} does not match the signed manifest")
         files[name] = content

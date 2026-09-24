@@ -134,7 +134,7 @@ class CWEvalRunnerTests(unittest.TestCase):
         source.mkdir()
         auth = source / "auth.json"
         auth.write_text("test credential placeholder")
-        (source / "AGENTS.md").write_text("baseline-id: aiscb-0.1.18")
+        (source / "AGENTS.md").write_text("baseline-id: aiscb-0.1.19")
         (source / "config.toml").write_text("test setting")
         with patch.dict(os.environ, {"CODEX_HOME": str(source)}):
             with runner.isolated_codex_home("codex"):
@@ -377,6 +377,346 @@ class CWEvalRunnerTests(unittest.TestCase):
             (source / "runs.json").write_text(json.dumps(rows))
             with self.assertRaisesRegex(ValueError, "generation incomplete"):
                 runner.recover_run(source, target, ["cwe_020_0"], 2, "codex")
+
+
+IMAGE = "co1lin/cweval@sha256:" + "b" * 64
+QUIET = io.StringIO
+
+
+class CWEvalBoundaryTests(unittest.TestCase):
+    """Refusals and fixed flows that need no assistant, network or Docker."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.tasks = self.root / "benchmark/core/py"
+        self.tasks.mkdir(parents=True)
+        (self.tasks / "cwe_020_0_task.py").write_text(
+            "def validate(value):\n# BEGIN SOLUTION\nreturn value\n")
+        (self.tasks / "cwe_020_0_test.py").write_text("pass\n")
+
+    def generated(self, arm, index=0, content="x = 1\n"):
+        path = self.root / arm / f"generated_{index}/core/py/cwe_020_0_raw.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return path
+
+    def test_local_config_absent_is_empty_and_malformed_config_is_refused(self):
+        self.assertEqual(runner.local_config_args(self.root / "absent.json"), [])
+        directory = self.root / "config-dir"
+        directory.mkdir()
+        large = self.root / "large.json"
+        large.write_text(json.dumps({"model": "m" * 5000}))
+        broken = self.root / "broken.json"
+        broken.write_text("{not json")
+        wrong_type = self.root / "wrong.json"
+        wrong_type.write_text(json.dumps({"repeats": "3"}))
+        for path, message in ((directory, "regular file"), (large, "4096 bytes"),
+                              (broken, "not valid JSON"), (wrong_type, "invalid repeats")):
+            with self.assertRaisesRegex(ValueError, message):
+                runner.local_config_args(path)
+
+    def test_checkout_must_be_the_pinned_clean_revision(self):
+        with self.assertRaisesRegex(ValueError, "full lowercase"):
+            runner.checked_checkout(self.root, "HEAD")
+        with self.assertRaisesRegex(ValueError, "lacks cweval/evaluate.py"):
+            runner.checked_checkout(self.root, "a" * 40)
+        (self.root / "cweval").mkdir()
+        (self.root / "cweval/evaluate.py").write_text("pass\n")
+        git = ["git", "-C", str(self.root), "-c", "user.name=t", "-c", "user.email=t@t",
+               "-c", "commit.gpgsign=false"]
+        for step in (["init", "-q"], ["add", "."], ["commit", "-q", "-m", "fixture"]):
+            runner.subprocess.run(git + step, check=True, capture_output=True)
+        head = runner.subprocess.run(git + ["rev-parse", "HEAD"], check=True,
+                                     capture_output=True, text=True).stdout.strip()
+        self.assertEqual(runner.checked_checkout(self.root, head), self.root.resolve())
+        with self.assertRaisesRegex(ValueError, "expected " + "c" * 40):
+            runner.checked_checkout(self.root, "c" * 40)
+        (self.root / "cweval/evaluate.py").write_text("changed\n")
+        with self.assertRaisesRegex(ValueError, "must be clean"):
+            runner.checked_checkout(self.root, head)
+
+    def test_task_prompt_and_case_listing_refuse_unusable_tasks(self):
+        task = self.tasks / "cwe_020_0_task.py"
+        for content, message in (("x" * (runner.MAX_TASK_BYTES + 1), "size limit"),
+                                 ("def f():\n    pass\n", "solution boundary"),
+                                 ("x BEGIN PROMPT\n# BEGIN SOLUTION\n", "empty task prompt")):
+            task.write_text(content)
+            with self.assertRaisesRegex(ValueError, message):
+                runner.task_prompt(self.root, "cwe_020_0")
+        task.unlink()
+        with self.assertRaisesRegex(ValueError, "1..30 valid"):
+            runner.python_core_cases(self.root)
+
+    def test_empty_code_block_is_a_format_failure(self):
+        with self.assertRaisesRegex(ValueError, "empty or exceeds"):
+            runner.extract_code("```python\n\n```\n")
+
+    def test_assistant_failures_are_classified_and_codex_reads_its_reply_file(self):
+        cases = (((1, "Rate limit reached", ""), runner.baseline_run.QuotaExhausted, "quota"),
+                 ((-1, "", ""), RuntimeError, "timed out"),
+                 ((2, "", "boom"), RuntimeError, "exited 2"))
+        for result, error, message in cases:
+            with patch.object(runner.baseline_run, "run_capture", return_value=result):
+                with self.assertRaisesRegex(error, message):
+                    runner.assistant_reply("claude", self.root, "p", "m", 5)
+        with patch.object(runner.baseline_run, "run_capture", return_value=(0, "", "")) as run:
+            with self.assertRaisesRegex(RuntimeError, "no final response file"):
+                runner.assistant_reply("codex", self.root, "p", "m", 5)
+            (self.root / "_agent_reply.txt").write_text("final answer")
+            self.assertEqual(runner.assistant_reply("codex", self.root, "p", "m", 5),
+                             "final answer")
+        command = run.call_args.args[0]
+        self.assertIn("read-only", command)
+        self.assertIn("shell_tool", command)
+
+    def test_codex_home_is_restored_when_it_was_unset(self):
+        with runner.isolated_codex_home("claude"):
+            pass
+        with patch.dict(os.environ, {"HOME": str(self.root)}):
+            os.environ.pop("CODEX_HOME", None)
+            with runner.isolated_codex_home("codex"):
+                inside = os.environ["CODEX_HOME"]
+                self.assertEqual(list(Path(inside).iterdir()), [])
+            self.assertNotIn("CODEX_HOME", os.environ)
+
+    def test_generation_records_must_match_the_selection_exactly(self):
+        good = [{"arm": arm, "case": "cwe_020_0", "sample": 0, "status": "complete"}
+                for arm in ("control", "baseline")]
+        bad_sets = ([good[0]],
+                    [good[0], "row"],
+                    [good[0], {**good[1], "extra": 1}],
+                    [good[0], {**good[1], "sample": "0"}],
+                    [good[0], {**good[1], "reason": "r" * 201}],
+                    [good[0], dict(good[0])])
+        for rows in bad_sets:
+            with self.assertRaises(ValueError):
+                runner.checked_runs(rows, ["cwe_020_0"], 1)
+        unknown = [good[0], {**good[1], "status": "invalid_format", "reason": "other"}]
+        with self.assertRaisesRegex(ValueError, "unrecognized format failure"):
+            runner.checked_runs(unknown, ["cwe_020_0"], 1)
+
+    def test_archive_refuses_empty_generated_file(self):
+        self.generated("control", content="")
+        with tempfile.TemporaryFile() as stream:
+            with self.assertRaisesRegex(ValueError, "invalid generated file size"):
+                runner.evaluation_archive(stream, self.root / "control", ["cwe_020_0"], 1)
+
+    def test_docker_stream_runner_returns_output_and_kills_on_timeout(self):
+        with tempfile.TemporaryFile() as stream:
+            stream.write(b"payload")
+            stream.seek(0)
+            rc, out, _ = runner.run_docker_with_archive(
+                [runner.sys.executable, "-c", "import sys; print(sys.stdin.read())"],
+                stream, self.root, 10)
+        self.assertEqual((rc, out.strip()), (0, "payload"))
+        with tempfile.TemporaryFile() as stream:
+            rc, _, _ = runner.run_docker_with_archive(
+                [runner.sys.executable, "-c", "import time; time.sleep(30)"],
+                stream, self.root, 0.3)
+        self.assertEqual(rc, -1)
+
+    def test_evaluation_needs_docker_skips_all_invalid_arms_and_checks_results(self):
+        with patch.object(runner.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "Docker is required"):
+                runner.evaluate(self.root, self.root, IMAGE, 5, ["cwe_020_0"], 1)
+        self.generated("baseline")
+        invalid = {"control": {("cwe_020_0", 0)}, "baseline": set()}
+        score = '{"cwe_020_0_test.py": {"functional": [true], "secure": [true]}}'
+        with patch.object(runner.shutil, "which", return_value="/usr/bin/docker"), \
+             patch.object(runner.subprocess, "run") as cleanup, \
+             patch.object(runner, "run_docker_with_archive", return_value=(0, score, "")):
+            runner.evaluate(self.root, self.root, IMAGE, 5, ["cwe_020_0"], 1, invalid)
+        self.assertEqual((self.root / "control/res_all.json").read_text(), "{}\n")
+        self.assertEqual((self.root / "baseline/res_all.json").read_text(), score)
+        self.assertEqual(cleanup.call_args.args[0][:3], ["docker", "rm", "-f"])
+        for result, error, message in (((-1, "", ""), RuntimeError, "timed out"),
+                                       ((1, "", "trace"), RuntimeError, "exited 1: trace"),
+                                       ((0, "x" * (runner.MAX_SCORE_BYTES + 1), ""),
+                                        ValueError, "exceeds size limit")):
+            with patch.object(runner.shutil, "which", return_value="/usr/bin/docker"), \
+                 patch.object(runner.subprocess, "run") as cleanup, \
+                 patch.object(runner, "run_docker_with_archive", return_value=result):
+                with self.assertRaisesRegex(error, message):
+                    runner.evaluate(self.root, self.root, IMAGE, 5, ["cwe_020_0"], 1, invalid)
+            cleanup.assert_called_once()
+
+    def test_scores_refuse_malformed_results_and_empty_comparisons(self):
+        arm = self.root / "arm"
+        arm.mkdir()
+        for content in ('[]', '{"a": 1}', '{"other_test.py": {}}'):
+            (arm / "res_all.json").write_text(content)
+            with self.assertRaises(ValueError):
+                runner.read_scores(arm, ["cwe_020_0"], 1)
+        empty = {"control": {}, "baseline": {}}
+        with self.assertRaisesRegex(ValueError, "no samples"):
+            runner.overall_scores(empty)
+
+    def recovery_source(self, results):
+        source = results / "run-old"
+        source.mkdir(parents=True)
+        baseline_id = runner.baseline_run.baseline_identifier()
+        probes = [{"arm": "control", "tool": "codex", "ok": True, "found": [],
+                   "expected": None},
+                  {"arm": "baseline", "tool": "codex", "ok": True,
+                   "found": [baseline_id], "expected": baseline_id}]
+        rows = [{"arm": "control", "case": "cwe_020_0", "sample": 0, "status": "complete"},
+                {"arm": "baseline", "case": "cwe_020_0", "sample": 0,
+                 "status": "invalid_format",
+                 "reason": "response must contain exactly one Python code block"}]
+        (source / "preflight.json").write_text(json.dumps(probes))
+        (source / "runs.json").write_text(json.dumps(rows))
+        output = source / "control/generated_0/core/py/cwe_020_0_raw.py"
+        output.parent.mkdir(parents=True)
+        output.write_text("x = 1\n")
+        return source, probes, rows, output
+
+    def test_recovery_refuses_unproven_or_inconsistent_sources(self):
+        results = self.root / "results"
+        source, probes, rows, output = self.recovery_source(results)
+        target = self.root / "target"
+        target.mkdir()
+
+        def refused(message, tool="codex", path=source):
+            with patch.object(runner, "RESULTS", results):
+                with self.assertRaisesRegex(ValueError, message):
+                    runner.recover_run(path, target, ["cwe_020_0"], 1, tool)
+
+        link = results / "run-link"
+        link.symlink_to(source)
+        refused("must not be linked", path=link)
+        other = self.root / "run-elsewhere"
+        other.mkdir()
+        refused("one CWEval result directory", path=other)
+        refused("does not match the selected tool", tool="claude")
+        (source / "preflight.json").write_text(json.dumps(probes[:1]))
+        refused("invalid recovery preflight")
+        swapped = [dict(probes[0], found=["aiscb-0.0.1"]), probes[1]]
+        (source / "preflight.json").write_text(json.dumps(swapped))
+        refused("arm separation")
+        (source / "preflight.json").write_text("x" * (runner.MAX_RUN_METADATA_BYTES + 1))
+        refused("exceeds size limit")
+        (source / "preflight.json").unlink()
+        refused("missing or linked recovery metadata")
+        (source / "preflight.json").write_text(json.dumps(probes))
+        complete = [rows[0], {**rows[1], "status": "complete"}]
+        (source / "runs.json").write_text(json.dumps(complete))
+        refused("no invalid-format samples")
+        (source / "runs.json").write_text(json.dumps(rows))
+        stray = source / "baseline/generated_0/core/py/cwe_020_0_raw.py"
+        stray.parent.mkdir(parents=True)
+        stray.write_text("x = 2\n")
+        refused("unexpected recovery output")
+        stray.unlink()
+        output.write_text("")
+        refused("invalid recovery output size")
+        output.unlink()
+        refused("missing or linked recovery output")
+
+    def test_report_names_recovery_source_and_its_unverifiable_fields(self):
+        scores = {arm: {"cwe_020_0": {"functional": 1, "func_secure": 1, "samples": 1}}
+                  for arm in ("control", "baseline")}
+        runs = [{"status": "invalid_format"}]
+        runner.write_report(self.root, scores, runs, "codex", "m", "a" * 40, IMAGE,
+                            "selected-cases", self.root / "run-old")
+        report = (self.root / "report.md").read_text()
+        self.assertIn("Recovered from:", report)
+        self.assertIn("cannot be verified", report)
+        document = json.loads((self.root / "report.json").read_text())
+        self.assertEqual(document["invalid_format_samples"], 1)
+
+    def run_main(self, argv, config=None):
+        stdout, stderr = QUIET(), QUIET()
+        side = config if isinstance(config, Exception) else None
+        with patch.object(runner, "local_config_args", return_value=[] if side is None else None,
+                          side_effect=side), \
+             patch.object(runner, "checked_checkout", return_value=self.root), \
+             redirect_stdout(stdout), patch.object(runner.sys, "stderr", stderr):
+            try:
+                code = runner.main(argv)
+            except SystemExit as exit:
+                code = exit.code
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def base_args(self, **overrides):
+        values = {"--cweval-root": str(self.root), "--revision": "a" * 40,
+                  "--image": IMAGE, "--model": "model", "--cases": "cwe_020_0",
+                  "--repeats": "1", **overrides}
+        return [part for key, value in values.items() for part in (key, value)]
+
+    def test_main_refuses_invalid_arguments_before_any_run(self):
+        self.assertEqual(self.run_main(self.base_args(), ValueError("bad config"))[0], 2)
+        refusals = (self.base_args() + ["--dry-run", "--recover-run", "x"],
+                    self.base_args(**{"--repeats": "0"}),
+                    self.base_args(**{"--model": "bad model"}),
+                    self.base_args(**{"--image": "cweval:latest"}),
+                    self.base_args(**{"--cases": "cwe_020_0,cwe_020_0"}))
+        for argv in refusals:
+            code, _, error = self.run_main(argv)
+            self.assertEqual(code, 2, argv)
+            self.assertTrue(error, argv)
+        with patch.object(runner.shutil, "which", return_value=None):
+            code, _, error = self.run_main(self.base_args())
+        self.assertEqual(code, 2)
+        self.assertIn("claude is not on PATH", error)
+        with patch.object(runner.shutil, "which", side_effect=lambda n: None if n == "docker" else n):
+            code, _, error = self.run_main(self.base_args())
+        self.assertIn("Docker is required", error)
+        results = self.root / "results-link"
+        results.symlink_to(self.root)
+        with patch.object(runner.shutil, "which", return_value="/usr/bin/x"), \
+             patch.object(runner, "RESULTS", results):
+            code, _, error = self.run_main(self.base_args())
+        self.assertIn("must not be linked", error)
+
+    def test_main_runs_preflight_generation_scoring_and_report(self):
+        results = self.root / "results"
+        probes = [{"tool": "claude", "arm": "control", "ok": True},
+                  {"tool": "claude", "arm": "baseline", "ok": True}]
+        runs = [{"arm": arm, "case": "cwe_020_0", "sample": 0, "status": "complete"}
+                for arm in ("control", "baseline")]
+        scores = {"cwe_020_0": {"functional": 1, "func_secure": 1, "samples": 1}}
+        with patch.object(runner.shutil, "which", return_value="/usr/bin/x"), \
+             patch.object(runner, "RESULTS", results), \
+             patch.object(runner, "preflight", return_value=probes), \
+             patch.object(runner, "generate", return_value=runs) as generate, \
+             patch.object(runner, "evaluate") as evaluate, \
+             patch.object(runner, "read_scores", return_value=scores):
+            code, out, _ = self.run_main(self.base_args())
+        self.assertEqual(code, 0)
+        self.assertIn("control 100.0%, baseline 100.0%", out)
+        self.assertEqual(generate.call_args.args[0], {"cwe_020_0": "def validate(value):"})
+        evaluate.assert_called_once()
+        run_dir = next(results.glob("run-*"))
+        self.assertTrue((run_dir / "report.md").is_file())
+        self.assertEqual(json.loads((run_dir / "runs.json").read_text()), runs)
+        failed = [dict(probes[0], ok=False, found=["aiscb-0.1.0"]), probes[1]]
+        with patch.object(runner.shutil, "which", return_value="/usr/bin/x"), \
+             patch.object(runner, "RESULTS", results), \
+             patch.object(runner, "preflight", return_value=failed), \
+             patch.object(runner, "generate") as generate:
+            code, _, error = self.run_main(self.base_args())
+        self.assertEqual(code, 1)
+        self.assertIn("Incomplete CWEval run", error)
+        generate.assert_not_called()
+
+    def test_main_recovers_a_previous_run_without_calling_the_assistant(self):
+        results = self.root / "results"
+        source, _, _, _ = self.recovery_source(results)
+        scores = {"cwe_020_0": {"functional": 0, "func_secure": 0, "samples": 1}}
+        with patch.object(runner.shutil, "which",
+                          side_effect=lambda n: "/usr/bin/docker" if n == "docker" else None), \
+             patch.object(runner, "RESULTS", results), \
+             patch.object(runner, "preflight") as preflight, \
+             patch.object(runner, "evaluate") as evaluate, \
+             patch.object(runner, "read_scores", return_value=scores):
+            code, out, _ = self.run_main(self.base_args(**{"--tool": "codex"})
+                                         + ["--recover-run", str(source)])
+        self.assertEqual(code, 0, out)
+        preflight.assert_not_called()
+        self.assertEqual(evaluate.call_args.args[-1]["baseline"], {("cwe_020_0", 0)})
+        self.assertIn("Invalid-format answers counted as failed samples: 1", out)
 
 
 if __name__ == "__main__":

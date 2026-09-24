@@ -417,6 +417,128 @@ class ModularSetupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.command(self.home / ".codex/AGENTS.md")
 
+    def args(self, **values):
+        import argparse
+        defaults = dict(into=None, user=False, tools=[], interactive=False, status=False,
+                        uninstall=False, complete=False, organization=None,
+                        organization_sha256=None, migrate=False)
+        return argparse.Namespace(**{**defaults, **values})
+
+    def run_setup(self, answers=(), **values):
+        answers = iter(answers)
+        messages = []
+        code = policy_setup.run(install, self.args(**values), home=self.home,
+                                input_fn=lambda _: next(answers), output=messages.append)
+        return code, messages
+
+    def test_invalid_scope_tool_or_combination_refuses_before_writes(self):
+        with self.assertRaisesRegex(ValueError, "choose u or p"):
+            self.run_setup(("x",), into=self.project, interactive=True)
+        with self.assertRaisesRegex(ValueError, "unknown tool"):
+            self.run_setup(into=self.project, tools=["vim"])
+        with self.assertRaisesRegex(ValueError, "cannot be combined"):
+            self.run_setup(into=self.project, user=True)
+        self.assertEqual(list(self.project.iterdir()), [])
+
+    def test_too_many_automatic_instruction_files_refuse(self):
+        rules = self.project / ".claude/rules"
+        rules.mkdir(parents=True)
+        for index in range(257):
+            (rules / f"rule-{index}.md").write_text("Team rule.\n")
+        result = self.cli("claude")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("too many instruction files", result.stderr)
+        self.assertFalse((self.project / "CLAUDE.md").exists())
+
+    def test_interactive_migration_requires_explicit_yes(self):
+        source = self.legacy(False)
+        agents = (self.project / "AGENTS.md").read_bytes()
+        with self.assertRaisesRegex(ValueError, "migration not approved"):
+            self.run_setup(("p", "", "", "n"), into=self.project, interactive=True)
+        self.assertEqual((self.project / "AGENTS.md").read_bytes(), agents)
+        code, messages = self.run_setup(("p", "", "", "y"), into=self.project, interactive=True)
+        self.assertEqual(code, 0)
+        self.assertTrue(any("--migrate" in m for m in messages))
+        self.assertTrue(any("Migrated managed instructions" in m for m in messages))
+        self.command(self.project / "AGENTS.md")
+        self.assertTrue(source.is_file())
+
+    def test_migration_refuses_unregular_or_derived_source(self):
+        source = self.legacy(False)
+        raw = source.read_bytes()
+        source.unlink()
+        copy = self.base / "elsewhere.md"
+        copy.write_bytes(raw)
+        source.symlink_to(copy)
+        with self.assertRaisesRegex(ValueError, "no regular managed source"):
+            self.run_setup(into=self.project, migrate=True)
+        source.unlink()
+        source.write_bytes(raw.replace(build_baseline.BASELINE_ID.encode(), b"acme-sec-1.0.0"))
+        with self.assertRaisesRegex(ValueError, "derived baseline"):
+            self.run_setup(into=self.project, migrate=True)
+
+    def test_migration_refuses_foreign_link_or_extra_baseline_text(self):
+        self.legacy(False)
+        foreign = self.base / "foreign.md"
+        foreign.write_bytes(install.bundled_baseline().content)
+        (self.project / "AGENTS.md").unlink()
+        (self.project / "AGENTS.md").symlink_to(foreign)
+        with self.assertRaisesRegex(ValueError, "unmanaged baseline link"):
+            self.run_setup(into=self.project, migrate=True)
+        self.assertTrue((self.project / "AGENTS.md").is_symlink())
+
+    def test_user_import_with_additional_baseline_text_is_not_migrated(self):
+        self.legacy(True)
+        claude = self.home / ".claude/CLAUDE.md"
+        claude.write_text(claude.read_text() + "`baseline-id: team-copy`\n")
+        before = claude.read_bytes()
+        with self.assertRaisesRegex(ValueError, "unmanaged or modified baseline instructions"):
+            self.run_setup(user=True, migrate=True)
+        self.assertEqual(claude.read_bytes(), before)
+
+    def test_dynamic_hook_shapes_fail_closed_or_skip_when_absent(self):
+        self.legacy(True)
+        install.install_session_switch(["codex"], self.project, self.home)
+        hook = self.home / ".codex/hooks.json"
+        original = hook.read_text()
+        for config, message in (({"hooks": []}, "invalid session hook configuration"),
+                                ({"hooks": {"SessionStart": {}}}, "invalid session hook event")):
+            with self.subTest(message=message):
+                hook.write_text(json.dumps(config))
+                with self.assertRaisesRegex(ValueError, message):
+                    self.run_setup(user=True, tools=["codex"], migrate=True)
+        hook.write_text(original)
+        hook.unlink()
+        code, _ = self.run_setup(user=True, tools=["codex"], migrate=True)
+        self.assertEqual(code, 0)
+        self.assertFalse(hook.exists())
+        self.command(self.home / ".codex/AGENTS.md")
+
+    def test_invalid_updater_ownership_record_refuses(self):
+        (self.home / ".aiscb").mkdir()
+        record = self.home / ".aiscb/updater.json"
+        for content in ("[]", '{"install.py": "not-a-digest"}', '{"other": "x"}'):
+            with self.subTest(content=content):
+                record.write_text(content)
+                with self.assertRaisesRegex(ValueError, "invalid updater ownership record"):
+                    self.run_setup(user=True, tools=["codex"])
+                self.assertFalse((self.home / ".codex/AGENTS.md").exists())
+
+    def test_legacy_refresh_refuses_unwritable_registry_or_incomplete_update(self):
+        self.legacy(False)
+        with patch.object(install, "load_registry", return_value=({}, False, None)):
+            with self.assertRaisesRegex(ValueError, "registry is not writable"):
+                self.run_setup(into=self.project, refresh_installed=True, dry_run=False)
+        with patch.object(install, "_apply_update", return_value=(False, True)):
+            with self.assertRaisesRegex(ValueError, "could not be refreshed"):
+                self.run_setup(into=self.project, refresh_installed=True, dry_run=False)
+
+    def test_modular_refresh_without_supported_tools_refuses(self):
+        self.assertEqual(self.cli("claude", "--into", str(self.project)).returncode, 0)
+        with patch.object(install, "MODULAR_TOOLS", ("codex",)):
+            with self.assertRaisesRegex(ValueError, "no supported installed tools"):
+                self.run_setup(into=self.project, refresh_installed=True, dry_run=False)
+
     def source_copy(self):
         import shutil
         root = self.base / "source"

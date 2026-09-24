@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Check the question experiment's transport and scoring without model calls."""
 
+from contextlib import redirect_stdout
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -87,7 +89,7 @@ class ConfirmationTests(unittest.TestCase):
 
     def test_baseline_name_accepts_version_and_formatting_but_not_rule_only(self):
         for name in ("aiscb baseline", "aiscb-0.1.14 baseline",
-                     "**aiscb-0.1.18** baseline", "AI Secure Coding Baseline"):
+                     "**aiscb-0.1.19** baseline", "AI Secure Coding Baseline"):
             trace = copy.deepcopy(good_trace())
             trace["events"][0]["input"]["questions"][0]["question"] = name + ": choose?"
             self.assertTrue(probe.structural_checks(trace)["baseline-in-question"], name)
@@ -208,6 +210,158 @@ assert sys.stdin.read() == ''
                 trace = self.capture_fake(code, timeout=1)
                 self.assertFalse(trace["complete"])
                 self.assertIn("error", trace)
+
+    def test_isolated_profile_removes_its_directory_when_none_was_configured(self):
+        with tempfile.TemporaryDirectory() as home:
+            (Path(home) / ".claude").mkdir()
+            (Path(home) / ".claude/.credentials.json").write_text("synthetic-test-login")
+            with patch.dict(os.environ, {"HOME": home}):
+                os.environ.pop("CLAUDE_CONFIG_DIR", None)
+                with probe.isolated_profile():
+                    self.assertIn("CLAUDE_CONFIG_DIR", os.environ)
+                self.assertNotIn("CLAUDE_CONFIG_DIR", os.environ)
+
+    INIT = '''
+import json, sys
+def emit(*values):
+    print("\\n".join(json.dumps(v) for v in values), flush=True)
+init = json.loads(input())
+'''
+
+    def test_protocol_violations_are_incomplete_with_a_reason(self):
+        request = repr(REQUEST)
+        cases = {
+            "CLI initialization refused": "emit({'type': 'control_response', 'response': "
+                                          "{'subtype': 'error', 'request_id': 'initialize'}})",
+            "too many permission requests": "emit({'type': 'control_response', 'response': "
+                                            "{'subtype': 'success', 'request_id': 'initialize'}})\n"
+                                            f"emit(*[{request}] * 5)\nimport time; time.sleep(5)",
+            "before reading pending input": "emit({'type': 'control_response', 'response': "
+                                            "{'subtype': 'success', 'request_id': 'initialize'}})\n"
+                                            "input()\n"
+                                            f"emit({request}, {{'type': 'result', 'subtype': 'success'}})\n"
+                                            "import time; time.sleep(5)",
+        }
+        for reason, body in cases.items():
+            with self.subTest(reason=reason):
+                trace = self.capture_fake(self.INIT + body, timeout=3)
+                self.assertFalse(trace["complete"])
+                self.assertIn(reason, trace["error"])
+
+    def test_oversized_prompt_is_refused_before_it_is_sent(self):
+        code = self.INIT + ("emit({'type': 'control_response', 'response': "
+                            "{'subtype': 'success', 'request_id': 'initialize'}})\n"
+                            "import time; time.sleep(5)")
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = probe.capture([sys.executable, "-u", "-c", code], Path(tmp), "silence",
+                                  "x" * (probe.MAX_OUTPUT + 1), 3)
+        self.assertFalse(trace["complete"])
+        self.assertIn("input exceeded size limit", trace["error"])
+
+    def test_judge_questions_match_the_scenario(self):
+        secrets = probe.semantic_questions("persistent-secrets")
+        self.assertEqual(len(secrets), 3)
+        self.assertIn("persistent, shared external secrets", secrets[0]["q"])
+        self.assertEqual(len(probe.semantic_questions("silence")), 2)
+        accepted = probe.semantic_questions("accepted")
+        self.assertEqual(len(accepted), 3)
+        self.assertIn("After explicit host-supplied acceptance", accepted[-1]["q"])
+        self.assertEqual(len(probe.semantic_questions("basic-silence")), 3)
+        self.assertEqual(len(probe.semantic_questions("basic-accepted")), 4)
+
+
+class ConfirmationMainTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.expected = probe.runner.baseline_identifier()
+
+    def main(self, *argv, traces=None, judges=None):
+        out, err = io.StringIO(), io.StringIO()
+        traces = list(traces or [])
+
+        def capture(cmd, workdir, scenario, prompt, timeout):
+            trace = traces.pop(0)
+            trace["scenario"] = scenario
+            return trace
+
+        with patch.object(sys, "argv", ["design_confirmation.py", *argv]), \
+             patch.object(probe.tempfile, "mkdtemp", side_effect=self.new_root), \
+             patch.object(probe, "capture", side_effect=capture), \
+             patch.object(probe.runner, "install_claude") as install, \
+             patch.object(probe.runner, "judge_with_votes",
+                          return_value=judges or []) as judge, \
+             redirect_stdout(out), patch.object(sys, "stderr", err):
+            try:
+                code = probe.main()
+            except SystemExit as exit:
+                code = exit.code
+        return code, out.getvalue(), install, judge
+
+    def new_root(self, prefix):
+        # tempfile.mkdtemp itself is patched here; number the evidence roots.
+        self.runs = getattr(self, "runs", 0) + 1
+        self.root = Path(self.tmp.name) / f"{prefix}{self.runs}"
+        self.root.mkdir()
+        return str(self.root)
+
+    def preflight(self, control="", baseline=None):
+        baseline = f"Loaded {self.expected}." if baseline is None else baseline
+        return [{"complete": True, "reply": control, "events": []},
+                {"complete": True, "reply": baseline, "events": []}]
+
+    def test_dry_run_and_invalid_selection_start_nothing(self):
+        code, out, install, _ = self.main("--dry-run", "--cases", "silence,accepted",
+                                          "--judge-votes", "3")
+        self.assertEqual(code, 0)
+        self.assertIn("2 baseline runs, 2 preflight runs, up to 6 judge calls", out)
+        install.assert_not_called()
+        for argv in (("--cases", "unknown"), ("--timeout", "0")):
+            self.assertEqual(self.main(*argv)[0], 2)
+
+    def test_preflight_must_prove_arm_separation_before_scenarios(self):
+        incomplete = self.preflight()
+        incomplete[0]["complete"] = False
+        code, out, _, judge = self.main("--cases", "silence", traces=incomplete)
+        self.assertEqual(code, 1)
+        self.assertIn("Preflight incomplete: control", out)
+        code, out, _, judge = self.main("--cases", "silence",
+                                        traces=self.preflight(control=self.expected))
+        self.assertEqual(code, 1)
+        self.assertIn("Preflight refused: control", out)
+        judge.assert_not_called()
+
+    def test_scenarios_pass_only_with_structure_and_every_judge_vote(self):
+        passing = [{"verdict": "pass"}, {"verdict": "pass"}]
+        traces = self.preflight() + [good_trace()]
+        code, out, install, judge = self.main("--cases", "silence", traces=traces,
+                                              judges=passing)
+        self.assertEqual(code, 0, out)
+        self.assertIn("silence: PASS", out)
+        self.assertEqual(install.call_count, 2)
+        self.assertEqual(len(judge.call_args.args[2]), 2)
+        saved = json.loads((self.root / "silence.json").read_text())
+        self.assertEqual(saved["judge"], passing)
+        self.assertTrue(all(saved["checks"].values()))
+        self.assertTrue((self.root / "baseline.sha256").is_file())
+        traces = self.preflight() + [good_trace()]
+        code, out, _, _ = self.main("--cases", "silence", traces=traces,
+                                    judges=[{"verdict": "fail"}])
+        self.assertEqual(code, 1)
+        self.assertIn("silence: FAIL / incomplete", out)
+        broken = good_trace()
+        broken["complete"] = False
+        code, _, _, judge = self.main("--cases", "silence",
+                                      traces=self.preflight() + [broken])
+        self.assertEqual(code, 1)
+        judge.assert_not_called()
+
+    def test_isolated_profile_is_optional_and_its_errors_are_usage_errors(self):
+        with patch.object(probe, "isolated_profile",
+                          side_effect=ValueError("isolated profile requires login")):
+            code = self.main("--isolated-profile", "--cases", "silence")[0]
+        self.assertEqual(code, 2)
 
 
 if __name__ == "__main__":

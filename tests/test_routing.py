@@ -79,7 +79,8 @@ class RoutingTests(unittest.TestCase):
                         if scenario == 'missing':
                             self.assertEqual(output, '')
                     self.implement(state, phase)
-                    self.assertTrue(ROUTING.evaluate(state, phase, before, offset)['passed'])
+                    result = ROUTING.evaluate(state, phase, before, offset)
+                    self.assertTrue(result['passed'], result.get('oracle_error'))
 
     def test_real_installer_initial_context_contains_no_module_bodies(self):
         for tool in ROUTING.RUNNER.ADAPTERS:
@@ -115,7 +116,7 @@ class RoutingTests(unittest.TestCase):
         before = ROUTING.hashes(state['workdir'])
         self.implement(state)
         result = ROUTING.evaluate(state, 0, before, 0)
-        self.assertTrue(result['checks']['application_behavior'])
+        self.assertTrue(result['checks']['application_behavior'], result.get('oracle_error'))
         self.assertFalse(result['passed'])
         self.load(state, self.ids('semantic', 0))
         result = ROUTING.evaluate(state, 0, before, 0)
@@ -154,7 +155,7 @@ class RoutingTests(unittest.TestCase):
         before, offset = ROUTING.hashes(state['workdir']), len(ROUTING.read_events(state))
         self.implement(state, 1)
         result = ROUTING.evaluate(state, 1, before, offset)
-        self.assertTrue(result['checks']['application_behavior'])
+        self.assertTrue(result['checks']['application_behavior'], result.get('oracle_error'))
         self.assertFalse(result['checks']['required_modules'])
 
     def test_oracle_rejects_cross_user_tenant_and_expiry_bypasses(self):
@@ -181,7 +182,8 @@ class RoutingTests(unittest.TestCase):
         self.load(state, [ROUTING.AUTH])
         self.assertFalse(ROUTING.evaluate(state, 0, before, 0)['passed'])
         self.implement(state)
-        self.assertTrue(ROUTING.evaluate(state, 0, before, 0)['passed'])
+        result = ROUTING.evaluate(state, 0, before, 0)
+        self.assertTrue(result['passed'], result.get('oracle_error'))
         path = state['workdir'] / 'src/routes/account.cjs'
         path.write_text(path.read_text().replace('=> false', '=> true'))
         self.assertFalse(ROUTING.evaluate(state, 0, before, 0)['passed'])
@@ -235,8 +237,31 @@ assert.equal(process.env.AISCB_ROUTING_TEST_MARKER, undefined);
 '''.replace('HOST_PATH', json.dumps(str(outside)))
         path.write_text(path.read_text() + boundary_checks)
         with patch.dict('os.environ', {'AISCB_ROUTING_TEST_MARKER': 'synthetic marker'}):
-            self.assertTrue(ROUTING.evaluate(state, 0, before, 0)['passed'])
+            result = ROUTING.evaluate(state, 0, before, 0)
+            self.assertTrue(result['passed'], result.get('oracle_error'))
         self.assertFalse((state['workdir'] / 'unexpected.txt').exists())
+
+    def test_oracle_bind_source_is_read_only_and_cleaned_up(self):
+        state = self.prepare()
+        before = ROUTING.hashes(state['workdir'])
+        self.load(state, self.ids('semantic', 0))
+        self.implement(state)
+        bound = []
+
+        def inspect(command, _workdir, _timeout):
+            source = Path(command[command.index('/oracle.cjs') - 1])
+            bound.append(source)
+            self.assertEqual(source.read_bytes(), (HERE / 'oracles/routing.cjs').read_bytes())
+            self.assertEqual(source.stat().st_mode & 0o777, 0o444)
+            self.assertTrue(source.parent.stat().st_mode & 0o001)
+            self.assertTrue(source.is_relative_to('/tmp'))
+            self.assertFalse(source.is_relative_to(state['workdir']))
+            return 0, '', ''
+
+        with patch.object(ROUTING.RUNNER, 'run_capture', side_effect=inspect):
+            self.assertTrue(ROUTING.evaluate(state, 0, before, 0)['passed'])
+        self.assertEqual(len(bound), 1)
+        self.assertFalse(bound[0].exists())
 
     def test_unavailable_sandbox_cannot_pass_behavior_check(self):
         state = self.prepare()
@@ -244,7 +269,138 @@ assert.equal(process.env.AISCB_ROUTING_TEST_MARKER, undefined);
         self.load(state, self.ids('semantic', 0))
         self.implement(state)
         with patch.object(ROUTING.RUNNER, 'run_capture', return_value=(1, '', 'sandbox refused')):
-            self.assertFalse(ROUTING.evaluate(state, 0, before, 0)['passed'])
+            result = ROUTING.evaluate(state, 0, before, 0)
+        self.assertFalse(result['passed'])
+        self.assertFalse(result['checks']['application_behavior'])
+        self.assertIn('sandbox refused', result['oracle_error'])
+
+    def test_adapter_command_must_appear_exactly_once(self):
+        install = ROUTING.install_policy.install
+
+        def duplicate(tools, workdir, **kwargs):
+            install(tools, workdir, **kwargs)
+            entry = workdir / ROUTING.install_policy.ENTRY_POINTS[tools[0]]
+            entry.write_text(entry.read_text() * 2)
+
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(ROUTING.install_policy, 'install', side_effect=duplicate):
+            with self.assertRaisesRegex(ValueError, 'exactly once'):
+                ROUTING.prepare(Path(tmp), 'semantic', 'claude')
+
+    def test_load_evidence_with_unknown_ids_bad_hashes_or_false_delivery_is_refused(self):
+        state = self.prepare()
+        hashes = ROUTING.hashes(state['workdir'])
+        good = {'requested': [ROUTING.WEB], 'delivered': [ROUTING.WEB], 'ok': True, 'hashes': hashes}
+        for event, message in (({**good, 'requested': ['aiscb:unknown']}, 'module evidence'),
+                               ({**good, 'hashes': dict.fromkeys(hashes, 'nothex')}, 'source evidence'),
+                               ({**good, 'ok': False}, 'claims delivery')):
+            (state['root'] / 'loads.jsonl').write_text(json.dumps(event) + '\n')
+            with self.assertRaisesRegex(ValueError, message):
+                ROUTING.read_events(state)
+
+    def test_deleted_fixture_file_fails_the_fixture_check(self):
+        state = self.prepare()
+        before = ROUTING.hashes(state['workdir'])
+        self.load(state, self.ids('semantic', 0))
+        self.implement(state)
+        (state['workdir'] / 'README.md').unlink()
+        with patch.object(ROUTING.RUNNER, 'run_capture', return_value=(0, '', '')):
+            result = ROUTING.evaluate(state, 0, before, 0)
+        self.assertFalse(result['passed'])
+        self.assertFalse(result['checks']['fixture_intact'])
+
+    def test_failed_turn_ends_the_case_before_later_phases(self):
+        args = types.SimpleNamespace(model=None, timeout=10)
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = ROUTING.RUNNER.ADAPTERS['claude']
+            with patch.dict(adapter, {'cmd': lambda work, prompt, model, turn: [str(turn)]}), \
+                 patch.object(ROUTING.RUNNER, 'run_capture', return_value=(1, 'out', 'err')) as run, \
+                 patch.object(ROUTING, 'evaluate', return_value={'passed': True, 'checks': {}}):
+                result = ROUTING.run_case(Path(tmp), 'scope-change', 'claude', args)
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual((Path(tmp) / 'phase-1.log').read_text(), 'outerr')
+        self.assertFalse(result['passed'])
+        self.assertEqual([p['complete'] for p in result['phases']], [False])
+
+
+class RoutingMainTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / 'evidence'
+
+    def evidence_root(self, prefix):
+        self.root.mkdir()
+        return str(self.root)
+
+    def main(self, *argv, installed=True, probes=None, cases=None):
+        out, err = io.StringIO(), io.StringIO()
+        real = Path
+        node = types.SimpleNamespace(is_file=lambda: installed)
+        preflight = patch.object(ROUTING.RUNNER, 'preflight',
+                                 side_effect=probes if isinstance(probes, Exception) else None,
+                                 return_value=None if isinstance(probes, Exception) else probes)
+        with patch('sys.argv', ['routing.py', *argv]), \
+             patch.object(ROUTING.shutil, 'which', return_value='/usr/bin/tool'), \
+             patch.object(ROUTING, 'Path', side_effect=lambda *a: node if a == ('/usr/bin/node',) else real(*a)), \
+             preflight as preflight_mock, \
+             patch.object(ROUTING, 'run_case', side_effect=list(cases or [])) as run_case, \
+             patch.object(ROUTING.tempfile, 'mkdtemp', side_effect=self.evidence_root), \
+             contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                code = ROUTING.main()
+            except SystemExit as exit:
+                code = exit.code
+        return code, out.getvalue(), err.getvalue(), run_case, preflight_mock
+
+    def test_loader_mode_requires_ids_and_delegates_to_the_loader(self):
+        self.assertEqual(self.main('--load', '/x/routing.json')[0], 2)
+        with patch.object(ROUTING, 'load_policy', return_value=0) as load:
+            self.assertEqual(self.main('--load', '/x/routing.json', ROUTING.WEB)[0], 0)
+        load.assert_called_once_with(Path('/x/routing.json'), [ROUTING.WEB])
+
+    def test_invalid_selection_or_missing_tools_start_nothing(self):
+        for argv in (('--cases', 'unknown'), ('--cases', 'semantic,semantic'),
+                     ('--timeout', '0'), ('stray-id',)):
+            code, _, _, run_case, preflight = self.main(*argv)
+            self.assertEqual(code, 2, argv)
+            run_case.assert_not_called()
+            preflight.assert_not_called()
+        code, _, err, run_case, _ = self.main('--cases', 'semantic', installed=False)
+        self.assertEqual(code, 2)
+        self.assertIn('/usr/bin/node and bubblewrap', err)
+
+    def test_quota_or_failed_preflight_runs_no_cases(self):
+        code, _, err, run_case, _ = self.main('--cases', 'semantic',
+                                              probes=ROUTING.RUNNER.QuotaExhausted())
+        self.assertEqual(code, 1)
+        self.assertIn('quota exhausted', err)
+        code, _, err, run_case, _ = self.main('--cases', 'semantic', probes=[{'ok': False}])
+        self.assertEqual(code, 1)
+        self.assertIn('Preflight failed', err)
+        run_case.assert_not_called()
+
+    def test_cases_report_oracle_errors_and_stop_after_an_incomplete_phase(self):
+        passing = {'case': 'semantic', 'passed': True, 'phases': [{'complete': True}]}
+        broken = {'case': 'multiple', 'passed': False,
+                  'phases': [{'complete': False, 'oracle_error': 'Routing oracle exited 1: boom'}]}
+        code, out, err, run_case, _ = self.main('--cases', 'semantic,multiple,missing',
+                                                probes=[{'ok': True}], cases=[passing, broken])
+        self.assertEqual(code, 1)
+        self.assertEqual(run_case.call_count, 2)
+        self.assertIn('semantic: pass', out)
+        self.assertIn('multiple: fail', out)
+        self.assertIn('Routing oracle exited 1: boom', err)
+        report = json.loads((self.root / 'results.json').read_text())
+        self.assertEqual((report['expected_cases'], len(report['runs'])), (3, 2))
+        self.assertRegex(report['catalog_sha256'], r'^[0-9a-f]{64}$')
+
+    def test_all_passing_cases_succeed(self):
+        passing = {'case': 'semantic', 'passed': True, 'phases': [{'complete': True}]}
+        code, out, _, _, _ = self.main('--cases', 'semantic', probes=[{'ok': True}],
+                                       cases=[passing])
+        self.assertEqual(code, 0, out)
+        self.assertIn(f'Results and fixtures: {self.root}', out)
 
 
 if __name__ == '__main__':

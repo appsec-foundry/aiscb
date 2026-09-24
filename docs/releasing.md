@@ -119,8 +119,8 @@ Historical releases keep their Git-tree files and tags unchanged. The published
 `tests/fixtures/published-bootstrap/` as immutable compatibility fixtures.
 The current README pins the 0.1.18 asset bootstrap.
 
-The new updater supports legacy Git-tree files and, when a file is absent,
-the same release's assets. Both paths still require the signed manifest before
+The updater prefers the same release's assets and falls back to legacy Git-tree
+files when an asset is absent. Both paths still require the signed manifest before
 executing downloaded code. Asset URLs are restricted to the expected release;
 downloads and redirects are HTTPS-bound and size-limited.
 

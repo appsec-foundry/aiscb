@@ -4,7 +4,7 @@ Some users would rather not have anything sit in the context permanently and ask
 
 ## What the core costs
 
-The core is about 1,600 tokens (see [Structure and context budget](../README.md#structure-and-context-budget)). It is read once at session start from the assistant's instruction file and is not repeated per prompt or tool call. A session with three hundred tool calls pays the same as one with three; what grows in a long session is tool output.
+The core is about 1,600 tokens (see [Structure and context budget](../README.md#structure-and-context-budget)). It is read once at session start from the assistant's instruction file and occupies the context once; prompts and tool calls do not add further copies. A session with three hundred tool calls holds the same core as one with three; what grows in a long session is tool output. Each model request still sends the full context, but the unchanged instruction prefix is what prompt caching serves at reduced cost, where the client and provider support it.
 
 Modules are already loaded on demand. Only the catalog and the loader instructions are always present.
 

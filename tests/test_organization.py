@@ -172,6 +172,105 @@ class OrganizationTests(unittest.TestCase):
             source.write_text(source.read_text().replace('claims => false', 'claims => true'))
             self.assertFalse(ORG.evaluate(state)['passed'])
 
+    def test_oversized_loader_config_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = ORG.prepare(Path(tmp), 'matching', 'claude')
+            (state['policy'] / 'config.json').write_text(' ' * 8193)
+            rc, out = self.load(state, 'access-pack')
+            self.assertEqual((rc, out), (1, ''))
+            self.assertFalse((state['policy'] / 'events.jsonl').exists())
+
+    def test_load_record_without_a_named_artifact_is_invalid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = ORG.prepare(Path(tmp), 'unrelated', 'claude')
+            record = {'artifact': 7, 'ok': True, 'source_hash': '0' * 64}
+            (state['policy'] / 'events.jsonl').write_text(json.dumps(record) + '\n')
+            self.assertEqual(ORG.evaluate(state),
+                             {'passed': False, 'checks': {'valid_load_evidence': False}})
+
+
+class OrganizationMainTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name) / 'evidence'
+
+    def evidence_root(self, prefix):
+        self.root.mkdir()
+        return str(self.root)
+
+    def main(self, *argv, which='/usr/bin/tool', probes=None, runs=None):
+        out, err = io.StringIO(), io.StringIO()
+        runs = list(runs or [])
+        calls = []
+
+        def run_capture(cmd, cwd, timeout):
+            calls.append(cmd)
+            # Oracle calls always pass; agent calls return the scripted result.
+            return (0, '', '') if cmd[0] == 'node' else runs.pop(0)
+
+        preflight = patch.object(ORG.RUNNER, 'preflight',
+                                 side_effect=probes if isinstance(probes, Exception) else None,
+                                 return_value=probes if not isinstance(probes, Exception) else None)
+        with patch('sys.argv', ['organization.py', *argv]), \
+             patch.object(ORG.shutil, 'which', return_value=which), \
+             preflight as preflight_mock, \
+             patch.object(ORG.RUNNER, 'run_capture', side_effect=run_capture), \
+             patch.object(ORG.tempfile, 'mkdtemp', side_effect=self.evidence_root), \
+             contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                code = ORG.main()
+            except SystemExit as exit:
+                code = exit.code
+        return code, out.getvalue(), err.getvalue(), calls, preflight_mock
+
+    def test_invalid_selection_or_missing_cli_starts_nothing(self):
+        for argv in (('--cases', 'unknown'), ('--cases', 'overlay,overlay'),
+                     ('--timeout', '0'), ('--timeout', '901')):
+            code, _, _, calls, preflight = self.main(*argv)
+            self.assertEqual(code, 2, argv)
+            self.assertEqual(calls, [])
+            preflight.assert_not_called()
+        code, _, err, _, _ = self.main('--cases', 'overlay', which=None)
+        self.assertEqual(code, 2)
+        self.assertIn('claude CLI not found on PATH', err)
+
+    def test_quota_or_failed_preflight_stops_before_cases(self):
+        code, _, err, calls, _ = self.main('--cases', 'overlay',
+                                           probes=ORG.RUNNER.QuotaExhausted())
+        self.assertEqual((code, calls), (1, []))
+        self.assertIn('quota exhausted', err)
+        code, _, err, calls, _ = self.main('--cases', 'overlay', probes=[{'ok': False}])
+        self.assertEqual((code, calls), (1, []))
+        self.assertIn('Baseline preflight failed', err)
+
+    def test_cases_run_in_fresh_fixtures_and_write_results(self):
+        code, out, _, calls, _ = self.main('--cases', 'unrelated', probes=[{'ok': True}],
+                                           runs=[(0, 'agent output', '')])
+        self.assertEqual(code, 0, out)
+        self.assertIn('unrelated: pass', out)
+        self.assertEqual(calls[0][0], 'claude')
+        report = json.loads((self.root / 'results.json').read_text())
+        self.assertEqual(report['expected_runs'], 1)
+        self.assertTrue(report['runs'][0]['passed'] and report['runs'][0]['complete'])
+        self.assertEqual((self.root / 'unrelated/agent.log').read_text(), 'agent output')
+
+    def test_quota_during_a_case_stops_the_matrix_and_fails(self):
+        code, out, _, calls, _ = self.main('--cases', 'unrelated,overlay',
+                                           probes=[{'ok': True}],
+                                           runs=[(1, '', 'Usage limit reached')])
+        self.assertEqual(code, 1)
+        self.assertIn('unrelated: incomplete', out)
+        self.assertEqual(len([c for c in calls if c[0] != 'node']), 1)
+        report = json.loads((self.root / 'results.json').read_text())
+        self.assertEqual(len(report['runs']), 1)
+
+    def test_load_flag_runs_the_loader_instead_of_cases(self):
+        with patch.object(ORG, 'load_policy', return_value=0) as load:
+            code = self.main('--load', '/nonexistent/config.json', 'access-pack')[0]
+        self.assertEqual(code, 0)
+        load.assert_called_once_with(Path('/nonexistent/config.json'), 'access-pack')
+
 
 if __name__ == '__main__':
     unittest.main()

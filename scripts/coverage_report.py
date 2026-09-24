@@ -31,8 +31,10 @@ REPO = Path(__file__).resolve().parent.parent
 # Test files measure the code under test, not themselves, and neither does this
 # script. tests/run.py is the model runner: it only executes during `make test`,
 # which spends tokens and hours, so its coverage under the free suite would say
-# nothing useful.
-OMIT = ("*/test_*.py", "*/tests/run.py", "*/scripts/coverage_report.py")
+# nothing useful. The probe_* scripts are opt-in checks against installed CLIs
+# and never run in the free suite either.
+OMIT = ("*/test_*.py", "*/tests/run.py", "*/scripts/probe_*.py",
+        "*/scripts/coverage_report.py")
 
 SITECUSTOMIZE = "import coverage\ncoverage.process_startup()\n"
 
@@ -42,7 +44,8 @@ def write_config(workdir: Path) -> Path:
     rcfile = workdir / "coveragerc"
     rcfile.write_text(
         "[run]\n"
-        "source = scripts,tests,examples\n"
+        # Absolute, so children started in another directory still match.
+        f"source = {REPO / 'scripts'},{REPO / 'tests'},{REPO / 'examples'}\n"
         "parallel = True\n"
         f"data_file = {workdir / 'data'}\n"
         "omit =\n" + "".join(f"    {pattern}\n" for pattern in OMIT),
@@ -81,10 +84,15 @@ def main(argv: list[str] | None = None) -> int:
 
         failed = []
         for test in args.tests:
+            # `python3 test.py` puts the test's directory first on sys.path;
+            # `coverage run` does not, so sibling imports would fail unmeasured.
+            test_env = dict(env)
+            test_env["PYTHONPATH"] = os.pathsep.join(
+                [str((REPO / test).parent), env["PYTHONPATH"]])
             result = subprocess.run(
                 [sys.executable, "-m", "coverage", "run",
                  f"--rcfile={rcfile}", test],
-                cwd=REPO, env=env,
+                cwd=REPO, env=test_env,
             )
             if result.returncode != 0:
                 failed.append(test)

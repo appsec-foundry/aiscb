@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 import upgrade_organization as upgrade
 
@@ -258,6 +259,120 @@ class UpgradeTests(unittest.TestCase):
         (self.source / 'build.py').write_text('raise RuntimeError("UNTRUSTED SCRIPT")')
         self.assertEqual(self.cli().returncode, 0)
         self.assertFalse((self.source / '.aiscb-upgrade/build.py').exists())
+
+    def refused(self, message, source=None, **kwargs):
+        with self.assertRaisesRegex(upgrade.UpgradeError, message):
+            upgrade.prepare(source or self.source, **kwargs)
+
+    def edit_catalog(self, edit):
+        path = self.source / 'catalog.json'
+        value = json.loads(path.read_text())
+        edit(value)
+        path.write_text(json.dumps(value))
+
+    def test_source_shape_is_refused_before_reading_policy(self):
+        self.refused('overlay file or organization source directory', self.root / 'absent')
+        empty = self.root / 'empty'
+        empty.mkdir()
+        self.refused('directory containing overlay.md', empty)
+        (self.source / 'manifest.json').write_text('{}')
+        self.refused('not a built or installed bundle')
+        (self.source / 'manifest.json').unlink()
+        (self.source / 'catalog.json').unlink()
+        (self.source / 'catalog.json').mkdir()
+        self.refused('regular files only')
+
+    def test_pack_tree_entries_are_bounded_to_policy_files(self):
+        shutil.rmtree(self.source / 'blueprints')
+        (self.source / 'blueprints').write_text('not a directory')
+        self.refused('must be directories')
+        (self.source / 'blueprints').unlink()
+        (self.source / 'packs/notes.txt').write_text('text')
+        self.refused('unsupported file in packs or blueprints')
+        (self.source / 'packs/notes.txt').unlink()
+        (self.source / 'packs/with space.md').write_text('# Pack\n')
+        self.refused('unsupported characters')
+
+    @unittest.skipIf(os.geteuid() == 0, 'root can read unreadable directories')
+    def test_unreadable_pack_directory_is_refused(self):
+        hidden = self.source / 'packs/hidden'
+        hidden.mkdir()
+        hidden.chmod(0)
+        self.addCleanup(hidden.chmod, 0o700)
+        self.refused('cannot read the complete policy source tree')
+
+    def test_stale_checkout_metadata_is_refused(self):
+        real = upgrade.build_baseline.render_catalog
+        stale = lambda catalog, artifacts: real(catalog, artifacts) + b' '
+        with unittest.mock.patch.object(upgrade.build_baseline, 'render_catalog', side_effect=stale):
+            self.refused('stale baseline metadata')
+
+    def test_reserved_or_malformed_namespace_is_refused(self):
+        for namespace in ('aiscb', 'Acme', 'acme:x'):
+            with self.subTest(namespace=namespace):
+                self.refused('organization name, not aiscb', namespace=namespace)
+
+    def test_missing_identity_upstream_and_custom_import_block_readiness(self):
+        path = self.source / 'overlay.md'
+        text = path.read_text()
+        text = text.replace('`baseline-id: acme-sec-1.0.0`. Extends aiscb (`aiscb-0.1.15`).', 'Acme overlay.')
+        text = text.replace('@<bundle-dir>/secure-coding-baseline.md', '@<bundle-dir>/custom.md', 1)
+        path.write_text(text)
+        files, report, _ = upgrade.prepare(self.source)
+        self.assertIsNone(report['organization_id'])
+        self.assertFalse(report['ready_for_policy_review'])
+        for issue in ('overlay-identity', 'organization-version', 'upstream-reference', 'custom-import'):
+            self.assertTrue(any(x.startswith(issue) for x in report['issues']), issue)
+        self.assertTrue(files['overlay.md'].startswith(b'@<bundle-dir>/custom.md'))
+        self.assertEqual(self.cli().returncode, 2)
+
+    def test_malformed_catalog_entries_are_refused(self):
+        cases = (
+            (lambda c: c.__setitem__('packs', {}), 'expected packs list'),
+            (lambda c: c.__setitem__('owner', 'x'), 'expected packs list'),
+            (lambda c: c['packs'].__setitem__(0, 'acme-authentication'), 'invalid organization catalog entry'),
+            (lambda c: c['packs'][0].__setitem__('file', 'packs/absent.md'), 'reference a supplied pack file'),
+            (lambda c: c['packs'][0].__setitem__('file', 'blueprints/spa/1.0.0.json'), 'reference a supplied pack file'),
+            (lambda c: c['packs'][0].__setitem__('blueprints', 'blueprints/spa/1.0.0.json'), 'blueprints must be a list'),
+            (lambda c: c['packs'][0].__setitem__('blueprints', ['blueprints/absent.json']), 'supplied blueprint file'),
+            (lambda c: c['packs'].extend({'id': 'acme-x'} for _ in range(upgrade.MAX_FILES)), 'too many catalog entries'),
+        )
+        original = (self.source / 'catalog.json').read_text()
+        for edit, message in cases:
+            with self.subTest(message=message):
+                (self.source / 'catalog.json').write_text(original)
+                self.edit_catalog(edit)
+                self.refused(message)
+
+    def test_explicit_module_id_declaration_is_namespaced(self):
+        path = self.source / 'packs/authentication.md'
+        path.write_text(path.read_text().replace('Pack `acme-authentication`.', '`module-id: acme-authentication`.'))
+        files, report, _ = upgrade.prepare(self.source)
+        self.assertIn(b'`module-id: acme:authentication`.', files['packs/authentication.md'])
+        self.assertNotIn('module-declaration', ' '.join(report['issues']))
+        path.write_text(path.read_text().replace('`module-id: acme-authentication`.', 'Pack acme-authentication.'))
+        _, report, _ = upgrade.prepare(self.source)
+        self.assertTrue(any(x.startswith('module-declaration') for x in report['issues']))
+
+    def test_output_must_be_separate_from_source(self):
+        files, report, diff = upgrade.prepare(self.source)
+        for output in (self.source, self.root, self.source / 'packs/new'):
+            with self.subTest(output=output):
+                with self.assertRaisesRegex(upgrade.UpgradeError, 'separate from source'):
+                    upgrade.emit(output, self.source, files, report, diff)
+        with self.assertRaisesRegex(upgrade.UpgradeError, 'parent must exist'):
+            upgrade.emit(self.root / 'missing/out', self.source, files, report, diff)
+
+    def test_failed_output_write_leaves_no_partial_candidate(self):
+        files, report, diff = upgrade.prepare(self.source)
+        output = self.root / 'candidate'
+        with unittest.mock.patch.object(upgrade, 'write_files', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                upgrade.emit(output, self.source, files, report, diff)
+        self.assertFalse(output.exists())
+        upgrade.emit(output, self.source, files, report, diff)
+        self.assertEqual(json.loads((output / 'upgrade-report.json').read_text())['organization_id'],
+                         report['organization_id'])
 
 
 if __name__ == '__main__':

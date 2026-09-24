@@ -3,31 +3,41 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
+## [0.1.19](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.19) (2026-09-24)
+
+- Split the web, login and cryptography rules into three modules, so a task
+  loads only what it needs. Login rules bring cryptography and data handling
+  with them.
+- Shortened the core and removed rules that were stated twice.
+- A confirmed decision stays confirmed: the assistant asks again only when the
+  action, exposure or scope changes. Routine secure work no longer mentions aiscb.
+- Loading modules takes less context.
+- Added Kiro to the installer.
+- Updates now take their files from the signed release, not from the repository.
+
+**Updating:** Run the [Quick start](README.md#quick-start) once. Installations
+from 0.1.18 and earlier cannot install this release through `--update`.
+
 ## [0.1.18](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.18) (2026-09-20)
 
-- Let compatible appsec-advisor installations refresh recorded AISCB installations through the signed installer, and point Claude Code update notices at the enabled plugin's update skill.
-
-- Add a no-option organization upgrade command that prepares a separate draft,
-  preserves custom rules, and reports unresolved legacy loading instructions.
-  Organization packages can now contain only an always-on overlay, with no
-  organization modules.
+- appsec-advisor can now update existing aiscb installations through the
+  signed installer.
+- Added an upgrade command for organization rules. It prepares a separate
+  draft and keeps custom rules. Organization packages may now consist of
+  always-on rules only.
 
 ## [0.1.17](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.17) (2026-09-19)
 
-- Make modular loading the default for Claude Code, Codex and Copilot project
-  and user installations: core and discovery first, module bodies when needed.
-- Add explicit migration of verified complete installations and detect inherited
-  complete policy before project setup; preserve unrelated instructions.
-- Replace the status question with `aiscb?`, separating available modules from
-  loaded bodies and reporting the installation mode without file reads.
-- Package modular sources and loaders inside the verified release installer.
+- Installations for Claude Code, Codex and Copilot now load modules as needed
+  by default. The installer contains everything required for this.
+- Added migration of existing complete installations. Other instructions in
+  the same files are kept.
+- Replaced the status question with `aiscb?`. It shows the installation mode
+  and which modules are available and loaded.
 - Clarified what the core covers and when a Security note is required.
-- Clarified that the session switch requires dynamic loading in a user installation.
 
-**Updating:** Close agent sessions, then migrate existing complete installations
-with the 0.1.17 installer and `--user --migrate` or `--into PROJECT --migrate`.
-The verified Quick start offers migration during guided setup.
-Restart the clients and ask `aiscb?`.
+**Updating:** Close agent sessions, then run the Quick start. Guided setup
+offers to migrate complete installations. Restart the clients and ask `aiscb?`.
 
 ## [0.1.16](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.16) (2026-09-19)
 

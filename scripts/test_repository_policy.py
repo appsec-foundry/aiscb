@@ -189,6 +189,124 @@ class RepositoryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "does not describe"):
                 bundle_manifest.verify_release(target)
 
+    def signed_bundle(self):
+        self.source_copy()
+        target = build_release.stage(build.VERSION, "1", self.root)
+        key = self.root / "test-only-key"
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
+        signers = patch.object(install, "ALLOWED_SIGNERS", (bundle_manifest.public_key_line(key),))
+        signers.start()
+        self.addCleanup(signers.stop)
+        return target, key
+
+    def test_signing_refuses_unknown_or_malformed_keys(self):
+        self.source_copy()
+        target = build_release.stage(build.VERSION, "1", self.root)
+        key = self.root / "unknown-key"
+        subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
+        with self.assertRaisesRegex(ValueError, "does not carry this key"):
+            bundle_manifest.sign_manifest(target, key)
+        self.assertFalse((target / install.SIGNATURE_NAME).exists())
+        broken = self.root / "broken-key"
+        broken.with_name("broken-key.pub").write_text("ssh-ed25519\n")
+        with self.assertRaisesRegex(ValueError, "not an OpenSSH public key"):
+            bundle_manifest.public_key_line(broken)
+
+    def test_release_gate_checks_directory_and_bootstrap(self):
+        target, key = self.signed_bundle()
+        bundle_manifest.sign_manifest(target, key)
+        bundle_manifest.verify_release(target)
+        renamed = target.with_name("staging")
+        shutil.copytree(target, renamed)
+        with self.assertRaisesRegex(ValueError, "dist/aiscb-VERSION/bundle-N"):
+            bundle_manifest.verify_release(renamed)
+        setup = target / "setup.sh"
+        original = setup.read_text()
+        setup.write_text(original.replace(f"aiscb-bundle-{build.VERSION}-1", f"aiscb-bundle-{build.VERSION}-7"))
+        with self.assertRaisesRegex(ValueError, "bootstrap release mismatch"):
+            bundle_manifest.verify_release(target)
+        digest = json.loads((target / "bundle.json").read_text())["files"][install.BASELINE]["sha256"]
+        setup.write_text(original.replace(digest, "0" * 64))
+        with self.assertRaisesRegex(ValueError, "bootstrap hashes"):
+            bundle_manifest.verify_release(target)
+
+    def test_manifest_command_line_writes_signs_and_verifies(self):
+        target, key = self.signed_bundle()
+        (target / "bundle.json").unlink()
+        quiet = patch("sys.stdout"), patch("sys.stderr")
+        with quiet[0], quiet[1]:
+            self.assertEqual(bundle_manifest.main(["--bundle-dir", str(target), "--write"]), 0)
+            self.assertTrue((target / "bundle.json").is_file())
+            self.assertEqual(bundle_manifest.main(["--bundle-dir", str(target), "--verify"]), 1)
+            self.assertEqual(bundle_manifest.main(["--bundle-dir", str(target), "--sign", str(key)]), 0)
+            self.assertEqual(bundle_manifest.main(["--bundle-dir", str(target), "--verify"]), 0)
+            (target / install.BASELINE).write_bytes(b"tampered\n")
+            self.assertEqual(bundle_manifest.main(["--bundle-dir", str(target), "--verify"]), 1)
+
+    def test_staging_refuses_stale_catalog_and_symlinked_dist(self):
+        self.source_copy()
+        catalog = self.root / "baseline/catalog.json"
+        original = catalog.read_bytes()
+        catalog.write_bytes(original.replace(b'"size": ', b'"size": 1', 1))
+        with self.assertRaisesRegex(ValueError, "stale catalog metadata"):
+            build_release.stage(build.VERSION, "1", self.root)
+        catalog.write_bytes(original)
+        outside = self.root / "outside"
+        outside.mkdir()
+        (self.root / "dist").symlink_to(outside)
+        with self.assertRaisesRegex(ValueError, "symlink in release staging path"):
+            build_release.stage(build.VERSION, "1", self.root)
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_staging_command_line_reports_refusal_and_target(self):
+        self.source_copy()
+        script = self.root / "scripts/build_release.py"
+        refused = subprocess.run([sys.executable, str(script), "--version", "99.0.0", "--revision", "1"],
+                                 capture_output=True, text=True, timeout=60)
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("Release staging refused", refused.stderr)
+        self.assertFalse((self.root / "dist").exists())
+        staged = subprocess.run([sys.executable, str(script), "--version", build.VERSION, "--revision", "3"],
+                                capture_output=True, text=True, timeout=60)
+        self.assertEqual(staged.returncode, 0, staged.stderr)
+        self.assertEqual(Path(staged.stdout.strip()),
+                         self.root / "dist" / build.BASELINE_ID / "bundle-3")
+        argv = ["build_release.py", "--version", build.VERSION, "--revision", "4"]
+        with patch.object(sys, "argv", argv), patch("sys.stderr"), \
+                patch.object(build_release, "stage", side_effect=ValueError("exists")):
+            with self.assertRaises(SystemExit) as refused_in_process:
+                build_release.main()
+        self.assertEqual(refused_in_process.exception.code, 1)
+
+    def test_embedded_installer_resources_fail_closed(self):
+        import bundle_resources
+        from types import SimpleNamespace
+        self.source_copy()
+        embedded = SimpleNamespace(EMBEDDED_POLICY="{}", INSTALLER_SOURCE=self.root / "scripts/install.py",
+                                   MAX_INSTALLER_BYTES=install.MAX_INSTALLER_BYTES,
+                                   read_limited=install.read_limited)
+        # A signed release installer reproduces itself instead of re-embedding sources.
+        self.assertEqual(bundle_resources.installer_bytes(embedded),
+                         (self.root / "scripts/install.py").read_bytes())
+        checkout = SimpleNamespace(EMBEDDED_POLICY=None, MAX_INSTALLER_BYTES=install.MAX_INSTALLER_BYTES)
+        result = bundle_resources.installer_bytes(checkout, self.root)
+        import ast
+        slot = next(line for line in result.decode().splitlines() if line.startswith("EMBEDDED_POLICY = "))
+        embedded_files = json.loads(ast.literal_eval(slot.split(" = ", 1)[1]))
+        self.assertEqual(embedded_files["baseline/catalog.json"],
+                         (self.root / "baseline/catalog.json").read_text())
+        self.assertIn("scripts/policy_setup.py", embedded_files)
+        with self.assertRaisesRegex(ValueError, "size limit"):
+            bundle_resources.installer_bytes(SimpleNamespace(EMBEDDED_POLICY=None, MAX_INSTALLER_BYTES=1000), self.root)
+        installer = self.root / "scripts/install.py"
+        installer.write_text(installer.read_text().replace(bundle_resources.MARKER, "EMBEDDED_POLICY = None"))
+        with self.assertRaisesRegex(ValueError, "exactly one release resource slot"):
+            bundle_resources.installer_bytes(checkout, self.root)
+        catalog = self.root / "baseline/catalog.json"
+        catalog.write_bytes(catalog.read_bytes().replace(b'"size": ', b'"size": 1', 1))
+        with self.assertRaisesRegex(ValueError, "stale catalog metadata"):
+            bundle_resources.installer_bytes(checkout, self.root)
+
 
 if __name__ == "__main__":
     unittest.main()

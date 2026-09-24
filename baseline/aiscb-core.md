@@ -1,6 +1,6 @@
 # AI Secure Coding Baseline
 
-`baseline-id: aiscb-0.1.18`. Source: github.com/appsec-foundry/aiscb (CC BY 4.0). Modules complete this always-on core. On `aiscb?`, answer from context without reading files: baseline, source, installation mode, available modules, loaded modules, and overlays. Mark unknown state as unknown; catalog entries alone are not loaded modules.
+`baseline-id: aiscb-0.1.19`. Source: github.com/appsec-foundry/aiscb (CC BY 4.0). Modules complete this always-on core. On `aiscb?`, answer from context without reading files: baseline, source, installation mode, available modules, loaded modules, and overlays. Mark unknown state as unknown; catalog entries alone are not loaded modules.
 
 ## Module Routing
 

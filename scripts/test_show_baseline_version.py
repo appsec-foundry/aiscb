@@ -33,7 +33,7 @@ REGISTRY_FILE = ".config/aiscb/installations.json"
 sys.path.insert(0, str(HELPER.parent))
 import show_baseline_version as hook  # noqa: E402
 
-VALID_ID = "aiscb-0.1.18"
+VALID_ID = "aiscb-0.1.19"
 VALID = f"# AI Secure Coding Baseline\n\n`baseline-id: {VALID_ID}`\n\nRules follow.\n"
 
 # The installer may place the baseline beside the helper or one level above it.
@@ -49,7 +49,7 @@ READ_FAILURES = [
     ("ID not at line start", {BASELINE: f"see `baseline-id: {VALID_ID}`\n"}),
     ("malformed version", {BASELINE: "`baseline-id: aiscb-1.2`\n"}),
     ("leading zero in the version", {BASELINE: "`baseline-id: aiscb-0.01.0`\n"}),
-    ("invalid UTF-8", {BASELINE: b"`baseline-id: aiscb-0.1.18`\n\xff\xfe\n"}),
+    ("invalid UTF-8", {BASELINE: b"`baseline-id: aiscb-0.1.19`\n\xff\xfe\n"}),
     ("one byte over the size limit",
      {BASELINE: VALID + "x" * (MAX_BASELINE_BYTES - len(VALID) + 1)}),
     ("a symlinked baseline", {BASELINE: ("symlink", "elsewhere.md"),
@@ -400,8 +400,170 @@ def check_update_provider(failures):
                     failures.append("project disable ignored")
 
 
+def session_call(root: Path, part: int, disable: str | None) -> dict:
+    environment = {} if disable is None else {"AISCB_DISABLE": disable}
+    with helper_in(root), patch.dict(os.environ, environment):
+        if disable is None:
+            os.environ.pop("AISCB_DISABLE", None)
+        return hook.session_context(part)
+
+
+def check_session_context(failures: list[str]) -> None:
+    """The switchable loader supplies the rules in parts or stops the session."""
+    root = build(ABOVE)
+    result = session_call(root, 0, "maybe")
+    if result.get("continue") is not False or "0 or 1" not in result.get("stopReason", ""):
+        failures.append(f"an invalid AISCB_DISABLE value did not stop: {result}")
+
+    first = session_call(root, 0, None)
+    context = first.get("hookSpecificOutput", {}).get("additionalContext", "")
+    if (not context.startswith(f"aiscb-session-part: 1/{hook.SESSION_PARTS}; source: ")
+            or "Rules follow." not in context
+            or VALID_ID not in first.get("systemMessage", "")):
+        failures.append(f"part 1 does not carry the rules and the ID: {first}")
+    second = session_call(root, 1, "0")
+    if "systemMessage" in second or "Rules follow." in json.dumps(second):
+        failures.append(f"a later part repeated the banner or the first part: {second}")
+
+    disabled = session_call(root, 0, "1")
+    context = disabled.get("hookSpecificOutput", {}).get("additionalContext", "")
+    if (not context.startswith("aiscb-session-disabled: ") or "Rules follow." in context
+            or "AISCB_DISABLE=1" not in disabled.get("systemMessage", "")):
+        failures.append(f"the opt-out still supplied rules: {disabled}")
+
+    for label, layout in (
+        ("a missing baseline", {}),
+        ("a baseline beyond the session capacity",
+         {BASELINE: VALID + "x" * (hook.SESSION_PARTS * hook.SESSION_PART_CHARS)}),
+    ):
+        stopped = session_call(build(layout), 0, "1")
+        if stopped.get("continue") is not False or "hookSpecificOutput" in stopped:
+            failures.append(f"{label} did not stop the session: {stopped}")
+
+
+def check_session_arguments(failures: list[str]) -> None:
+    """The hook modes refuse ambiguous arguments and report a broken install."""
+    for argv in (["--session-check", "--part", "0"], ["--session-context"],
+                 ["--part", "1"]):
+        code, out, _ = call(ABOVE, argv)
+        if code != 2 or out:
+            failures.append(f"{argv} was accepted: code={code} out={out!r}")
+
+    code, out, _ = call(ABOVE, ["--session-check"])
+    if code != 0 or out.strip() != "{}":
+        failures.append(f"a valid installation blocked the prompt: {out!r}")
+    code, out, _ = call({}, ["--session-check"])
+    try:
+        decision = json.loads(out)
+    except json.JSONDecodeError:
+        decision = {}
+    if code != 0 or decision.get("decision") != "block" or decision.get("continue") is not False:
+        failures.append(f"a missing baseline did not block the prompt: {out!r}")
+
+    code, out, _ = call(ABOVE, ["--session-context", "--part", "0"])
+    try:
+        result = json.loads(out)
+    except json.JSONDecodeError:
+        result = {}
+    if (code != 0 or VALID_ID not in result.get("systemMessage", "")
+            or "update status not checked" not in result.get("systemMessage", "")):
+        failures.append(f"part 0 lacks the banner and update note: {out!r}")
+
+    code, out, err = call({}, [])
+    if code != 1 or out or "Could not read" not in err:
+        failures.append(f"a missing baseline was not reported: {code} {out!r} {err!r}")
+    code, out, _ = call(ABOVE, ["--output", "copilot"])
+    lines = out.splitlines()
+    try:
+        progress = json.loads(lines[0])
+    except (IndexError, json.JSONDecodeError):
+        progress = {}
+    if (code != 0 or len(lines) != 2 or lines[1] != "{}"
+            or progress.get("type") != "progress" or VALID_ID not in progress.get("message", "")):
+        failures.append(f"Copilot output is malformed: {out!r}")
+
+
+def check_provider_refusals(failures: list[str]) -> None:
+    """Ambiguous, oversized or misplaced provider metadata keeps the URL."""
+    with tempfile.TemporaryDirectory() as temporary:
+        home = Path(temporary)
+        project = home / "workspace"
+        project.mkdir()
+        config = home / ".claude"
+        cache = config / "plugins/cache"
+        root = cache / "catalog/revision"
+        outside = home / "outside"
+        name = "appsec-advisor@example"
+        (root / "skills/update-baseline").mkdir(parents=True)
+        (root / "skills/update-baseline/SKILL.md").write_text("Update skill")
+        outside.mkdir()
+
+        def write(path: Path, value: object) -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(value))
+
+        def entry(scope: str, path: Path = root, **extra: object) -> dict:
+            return {"scope": scope, "installPath": str(path), **extra}
+
+        write(config / "settings.json", {"enabledPlugins": {name: True}})
+        write(root / ".claude-plugin/plugin.json", {"name": "appsec-advisor"})
+        write(root / "data/aiscb-update-provider.json", {
+            "schema": 1, "skill": "/appsec-advisor:update-baseline",
+            "installer_protocol": "aiscb-refresh-installed-v1"})
+        installed = config / "plugins/installed_plugins.json"
+
+        def guide(plugins: object) -> str:
+            write(installed, plugins)
+            with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(config)}):
+                return hook.update_guide(home, project, claude=True)
+
+        skill = "/appsec-advisor:update-baseline"
+        local = entry("local", projectPath=str(project))
+        if guide({"version": 2, "plugins": {name: [entry("user", outside), local]}}) != skill:
+            failures.append("a project-local provider did not take precedence")
+        if guide({"version": 2, "plugins": {name: [
+                entry("project", projectPath=str(home / "elsewhere"))]}}) != hook.UPDATE_GUIDE:
+            failures.append("a provider installed for another project was offered")
+        for label, plugins in (
+            ("two providers of equal rank", {"version": 2, "plugins": {name: [
+                entry("user"), entry("user", outside)]}}),
+            ("a provider outside the plugin cache", {"version": 2, "plugins": {
+                name: [entry("user", outside)]}}),
+            ("an entry list that is not a list", {"version": 2, "plugins": {name: {}}}),
+            ("an oversized entry list", {"version": 2, "plugins": {name: [entry("user")] * 65}}),
+            ("an entry that is not an object", {"version": 2, "plugins": {name: ["user"]}}),
+            ("an unknown registry version", {"version": 3, "plugins": {name: [entry("user")]}}),
+            ("an install path that does not exist", {"version": 2, "plugins": {
+                name: [entry("user", root / "missing")]}}),
+            ("registry metadata that is not an object", []),
+        ):
+            if guide(plugins) != hook.UPDATE_GUIDE:
+                failures.append(f"{label} was offered as the update skill")
+
+        good = {"version": 2, "plugins": {name: [entry("user")]}}
+        (root / "skills/update-baseline/SKILL.md").unlink()
+        if guide(good) != hook.UPDATE_GUIDE:
+            failures.append("a provider without its update skill was offered")
+        (root / "skills/update-baseline/SKILL.md").write_text("Update skill")
+
+        write(config / "settings.json", {"enabledPlugins": [name]})
+        if guide(good) != hook.UPDATE_GUIDE:
+            failures.append("malformed enabledPlugins was trusted")
+        (config / "settings.json").write_text("x" * (hook.MAX_REGISTRY_BYTES + 1))
+        if guide(good) != hook.UPDATE_GUIDE:
+            failures.append("oversized settings were read")
+        (config / "settings.json").unlink()
+        (config / "settings.json").symlink_to(outside / "settings.json")
+        write(outside / "settings.json", {"enabledPlugins": {name: True}})
+        if guide(good) != hook.UPDATE_GUIDE:
+            failures.append("symlinked settings were followed")
+
+
 def main() -> int:
     failures: list[str] = []
+    check_session_context(failures)
+    check_session_arguments(failures)
+    check_provider_refusals(failures)
     check_success(failures)
     check_failures(failures)
     check_update_note(failures)

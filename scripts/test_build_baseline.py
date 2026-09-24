@@ -142,4 +142,117 @@ with fixture() as root:
         "secure-coding-baseline.md is not the generated eager artifact"],
         "changed eager output is rejected")
 
+
+def edit_catalog(edit):
+    def change(_root: Path) -> None:
+        value = catalog()
+        edit(value)
+        write_catalog(value)
+    return change
+
+
+def edit_file(relative: str, edit):
+    def change(root: Path) -> None:
+        target = root / "baseline" / relative
+        target.write_bytes(edit(target.read_bytes()))
+    return change
+
+
+def raw_catalog(content: str):
+    def change(_root: Path) -> None:
+        BUILD.CATALOG.write_text(content, encoding="utf-8")
+    return change
+
+
+def module_path(root: Path) -> Path:
+    return root / "baseline" / catalog()["modules"][0]["file"]
+
+
+def symlinked_module(root: Path) -> None:
+    target = module_path(root)
+    copy = root / "elsewhere.md"
+    copy.write_bytes(target.read_bytes())
+    target.unlink()
+    target.symlink_to(copy)
+
+
+def missing_module(root: Path) -> None:
+    module_path(root).unlink()
+
+
+def first_module(key: str, value):
+    return edit_catalog(lambda c: c["modules"][0].__setitem__(key, value))
+
+
+FIRST = "modules/aiscb-web.md"
+CORE = "aiscb-core.md"
+REJECTIONS = [
+    (raw_catalog("{"), "cannot read catalog", "unparsable catalog"),
+    (raw_catalog('{"schema": 1, "schema": 1}'), "duplicate catalog key", "duplicate catalog keys"),
+    (raw_catalog("[]"), "catalog must be an object", "non-object catalog"),
+    (edit_catalog(lambda c: c.__setitem__("extra", 1)), "catalog keys must be exactly", "extra catalog key"),
+    (edit_catalog(lambda c: c.__setitem__("schema", 2)), "schema 1", "unknown catalog schema"),
+    (edit_catalog(lambda c: c.__setitem__("baseline_id", "aiscb-0.0.1")), "schema 1", "foreign baseline ID"),
+    (edit_catalog(lambda c: c.__setitem__("core", [])), "core keys must be exactly", "malformed core entry"),
+    (edit_catalog(lambda c: c.__setitem__("modules", [])), "non-empty list", "empty module list"),
+    (edit_catalog(lambda c: c["core"].__setitem__("file", 7)), "must be a string", "non-string artifact path"),
+    (edit_catalog(lambda c: c["core"].__setitem__("file", "../aiscb-core.md")), "unsafe or unexpected", "core path traversal"),
+    (first_module("file", "modules/../aiscb-core.md"), "unsafe or unexpected", "module path traversal"),
+    (first_module("file", "other/aiscb-web.md"), "unsafe or unexpected", "module outside modules/"),
+    (symlinked_module, "contains a symlink", "symlinked module file"),
+    (missing_module, "must be a regular file", "missing module file"),
+    (edit_file(FIRST, lambda _raw: b""), "invalid size", "empty module file"),
+    (edit_file(FIRST, lambda raw: raw + b"\xff\xfe\n"), "not UTF-8", "non-UTF-8 module"),
+    (edit_file(FIRST, lambda raw: raw.rstrip(b"\n")), "end with a newline", "missing final newline"),
+    (edit_file(CORE, lambda raw: raw + b"`baseline-id: aiscb-0.0.1`\n"), "must declare exactly", "second core baseline ID"),
+    (edit_file(CORE, lambda raw: raw + b"- **[aiscb-bad] Bad:** x\n"), "invalid rule-group bullet", "malformed rule bullet"),
+    (edit_file(CORE, lambda raw: raw + b"- **[aiscb-ZZZ-001] Extra:** x\n"), "core rule list does not match", "unlisted core rule"),
+    (edit_file(FIRST, lambda raw: raw.replace(b"- **[", b"- [", 99)), "no rule groups", "module without rules"),
+    (edit_file(FIRST, lambda raw: raw + raw[raw.index(b"- **["):]), "repeats a rule ID", "rule repeated within a module"),
+    (edit_catalog(lambda c: c["core"].__setitem__("rules", "x")), "list of non-empty strings", "non-list rule inventory"),
+    (edit_catalog(lambda c: c["modules"].__setitem__(0, [])), "keys must be exactly", "non-object module entry"),
+    (first_module("id", "Web Module"), "invalid module id", "invalid module ID"),
+    (first_module("trigger", " "), "semantic trigger", "blank module trigger"),
+    (first_module("paths", [""]), "list of non-empty strings", "empty path pattern"),
+    (edit_catalog(lambda c: c["modules"][0].__setitem__("requires", [c["modules"][0]["id"]])),
+     "requires itself", "self-dependency"),
+    (edit_file(FIRST, lambda raw: raw.replace(b"`module-id: aiscb:web`", b"`module-id: aiscb:other`")),
+     "must declare exactly", "module file declaring another ID"),
+    (edit_file(FIRST, lambda raw: raw + b"`baseline-id: aiscb-0.0.1`\n"), "declares a baseline ID", "module declaring a baseline ID"),
+    (first_module("rules", ["aiscb-WEB-999"]), "rule list does not match", "module rule list mismatch"),
+]
+for change, expected, name in REJECTIONS:
+    check(rejected(change, expected), f"{name} is rejected")
+
+
+def run_main(*argv: str) -> int:
+    import sys
+    from contextlib import redirect_stderr, redirect_stdout
+    from io import StringIO
+    old = sys.argv
+    sys.argv = ["build_baseline.py", *argv]
+    try:
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            return BUILD.main()
+    finally:
+        sys.argv = old
+
+
+with fixture() as root:
+    old_root = BUILD.ROOT
+    BUILD.ROOT = root
+    try:
+        check(run_main("--check") == 0, "--check accepts current generated outputs")
+        module = root / "baseline" / FIRST
+        module.write_text(module.read_text() + "\nChanged.\n")
+        check(run_main("--check") == 1, "--check fails on stale outputs without writing")
+        check(run_main("--write") == 0 and run_main("--check") == 0,
+              "--write regenerates catalog metadata and eager output")
+        check(BUILD.EAGER.read_bytes() == BUILD.validate()[2],
+              "--write stores exactly the validated eager artifact")
+        module.write_text("")
+        check(run_main("--write") == 1, "--write refuses invalid sources")
+    finally:
+        BUILD.ROOT = old_root
+
 print(f"modular baseline builder: ok ({checks} checks)")

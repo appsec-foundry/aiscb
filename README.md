@@ -11,7 +11,7 @@
 
 Install aiscb to give your AI coding assistant a consistent set of security rules. A core stays active throughout the session; additional modules load when needed. Organizations can add their own rules through an overlay.
 
-Current baseline: `aiscb-0.1.18`.
+Current baseline: `aiscb-0.1.19`.
 
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
@@ -49,7 +49,7 @@ Without that integration, update a user-level installation from a terminal, outs
 python3 ~/.aiscb/install.py --update
 ```
 
-The command verifies the signed release, then opens guided setup to choose the installation scope. The new baseline applies to new sessions. Older complete installations may keep the updater at `~/.local/share/aiscb/install.py`. If the command is unavailable or refuses the update, run the current [Quick start](#quick-start).
+The command verifies the signed release, then opens guided setup to choose the installation scope. The new baseline applies to new sessions. Older complete installations may keep the updater at `~/.local/share/aiscb/install.py`. If the command is unavailable or refuses the update, run the current [Quick start](#quick-start). Updaters from 0.1.18 and earlier refuse newer releases because they compare a repository file with the signed release; run Quick start once to move past them.
 
 ## Why this exists
 
@@ -134,11 +134,11 @@ The crypto example shows Claude Code with `aiscb-0.1.14` in the baseline session
 
 ## Structure and context budget
 
-The assistant always reads the [core](baseline/aiscb-core.md): secure design and coding rules, how to scope work and handle security decisions, and what to test, review, and report. It loads modules as the task requires—for example, `web` and `authentication` for a browser login, with `cryptography` loaded as an authentication dependency. The [catalog](baseline/catalog.json) lists when each module applies. An organization can add rules through an overlay, but cannot relax the baseline.
+The assistant always reads the [core](baseline/aiscb-core.md): secure design and coding rules, how to scope work and handle security decisions, and what to test, review, and report. It loads modules as the task requires, for example `web` and `authentication` for a browser login, with `cryptography` loaded as an authentication dependency. The [catalog](baseline/catalog.json) lists when each module applies. An organization can add rules through an overlay, but cannot relax the baseline.
 
 | Component | Covers | Bytes | Tokens (OpenAI `o200k_base`)[^tokens] |
 | --- | --- | ---: | ---: |
-| aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review—including when a Security note is required | 8,019 | 1,594 |
+| aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review, including when a Security note is required | 8,019 | 1,594 |
 | `aiscb:web` | Protect browser content, transport and cross-site boundaries | 1,766 | 381 |
 | `aiscb:authentication` | Protect login, account flows, sessions and authentication mechanisms | 2,688 | 529 |
 | `aiscb:cryptography` | Use sound cryptography and verify signed webhooks | 1,058 | 226 |
@@ -156,7 +156,7 @@ The assistant always reads the [core](baseline/aiscb-core.md): secure design and
 
 Counts cover rule text only; the catalog, loading instructions, and overlays add context. `authentication` loads `cryptography` and `data-handling`; `cryptography` loads `secrets-initialization`; `llm-agents` and `llm-retrieval-memory` also load `llm-applications`; `mcp-clients-servers` also loads `data-handling`. Shared dependencies load once.
 
-The core enters the context once per session and is not repeated per tool call, so a long session pays the same 1,594 tokens as a short one. Loading it only when a task looks security-related would drop it from the tasks that need it most; [Why the core stays loaded](docs/why-the-core-stays-loaded.md) walks through the alternatives. If you do not want the baseline in every session, install it per project rather than per user.
+The core takes about 0.8% of a 200,000-token context window, or 0.16% of a 1-million-token window. It is part of the instruction prefix and occupies the context once per session; prompts and tool calls do not add further copies. Every model request still sends the full context, core included. The prefix stays unchanged, so clients with prompt caching read it from the cache at a fraction of the normal input price. Whether and how long a cache holds depends on the client and provider. Loading it only when a task looks security-related would drop it from the tasks that need it most; [Why the core stays loaded](docs/why-the-core-stays-loaded.md) walks through the alternatives. If you do not want the baseline in every session, install it per project rather than per user.
 
 ## What changes in practice
 
@@ -246,7 +246,7 @@ Support varies between CLI, IDE, cloud agent, review, and completion features. C
 
 ### Verify it loaded
 
-Start a fresh session after installing 0.1.18. Ask `aiscb?`; the answer should include `aiscb-0.1.18`, its source, installation mode, available modules, loaded modules, and any overlays. In a fresh modular session, no module bodies should be loaded. Catalog entries are availability information, not loaded modules. Status must not read files.
+Start a fresh session after installing 0.1.19. Ask `aiscb?`; the answer should include `aiscb-0.1.19`, its source, installation mode, available modules, loaded modules, and any overlays. In a fresh modular session, no module bodies should be loaded. Catalog entries are availability information, not loaded modules. Status must not read files.
 
 The answer reports what the assistant sees in context; it does not prove that all rules are followed. Check the client's loaded instructions too, as described in the [verification guide](docs/agent-integration-verification.md).
 
@@ -274,7 +274,7 @@ The [LLM and agentic alignment review](docs/owasp-llm-agentic-review.md) compare
 
 ## Development
 
-Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under `baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.18/` is generated from those sources with `make build-full-baseline`. See [Structure and context budget](#structure-and-context-budget) for current token measurements.
+Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under `baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.19/` is generated from those sources with `make build-full-baseline`. See [Structure and context budget](#structure-and-context-budget) for current token measurements.
 
 The provisional budgets are roughly 1,500 tokens for the core and 4,100 for the complete baseline. The expanded rules currently exceed them by 94 and 1,272 tokens respectively; these are targets, not enforced limits. Adapter discovery and overlay text add to the actual session context.
 

@@ -141,13 +141,13 @@ def read_events(state):
     return events
 
 
-def oracle_command(workdir, mode, previous):
+def oracle_command(workdir, oracle_source, mode, previous):
     """Run generated fixture code without host files, credentials or networking."""
     command = ['bwrap', '--unshare-all', '--die-with-parent', '--new-session',
                '--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib',
                '--ro-bind', '/lib64', '/lib64', '--proc', '/proc', '--dev', '/dev',
                '--tmpfs', '/tmp', '--ro-bind', str(workdir), '/work',
-               '--ro-bind', str(HERE / 'oracles/routing.cjs'), '/oracle.cjs',
+               '--ro-bind', str(oracle_source), '/oracle.cjs',
                '--chdir', '/work', '--clearenv', '--setenv', 'PATH', '/usr/bin:/bin']
     bootstrap = (
         "import os,resource,sys; "
@@ -183,10 +183,17 @@ def evaluate(state, phase, before, offset):
         checks['failed_required_load'] = any(not e['ok'] and AUTH in e['requested'] for e in events)
         checks['no_delivery'] = not delivered
     mode = 'missing' if missing else 'typo' if typo else 'call' if call else 'reset'
-    rc, _, _ = RUNNER.run_capture(
-        oracle_command(state['workdir'], mode,
-                       'reset' if scenario == 'context-loss' and phase == 1 else 'stub'),
-        state['workdir'], 10)
+    # The checkout may live below a private home directory inaccessible to bwrap.
+    # Stage only this public oracle outside the agent's writable fixture.
+    with tempfile.TemporaryDirectory(prefix='aiscb-routing-oracle-', dir='/tmp') as staging:
+        oracle_source = Path(staging) / 'routing.cjs'
+        shutil.copyfile(HERE / 'oracles/routing.cjs', oracle_source)
+        os.chmod(oracle_source, 0o444)
+        os.chmod(staging, 0o711)
+        rc, out, err = RUNNER.run_capture(
+            oracle_command(state['workdir'], oracle_source, mode,
+                           'reset' if scenario == 'context-loss' and phase == 1 else 'stub'),
+            state['workdir'], 10)
     checks['application_behavior'] = rc == 0
     try:
         current = hashes(state['workdir'])
@@ -196,7 +203,11 @@ def evaluate(state, phase, before, offset):
             checks['unrelated_readme_unchanged'] = current['README.md'] == before['README.md']
     except OSError:
         checks['fixture_intact'] = False
-    return {'passed': all(checks.values()), 'checks': checks}
+    result = {'passed': all(checks.values()), 'checks': checks}
+    if rc != 0:
+        detail = (err or out).strip()[:2000] or 'no output'
+        result['oracle_error'] = f'Routing oracle exited {rc}: {detail}'
+    return result
 
 
 def run_case(root, scenario, tool, args):
@@ -262,6 +273,9 @@ def main():
         result = run_case(case_root, scenario, args.tool, args)
         results.append(result)
         print(f"{scenario}: {'pass' if result['passed'] else 'fail'}", flush=True)
+        for phase in result['phases']:
+            if 'oracle_error' in phase:
+                print(phase['oracle_error'], file=sys.stderr)
         if any(not phase['complete'] for phase in result['phases']):
             break
     report = {'tool': args.tool, 'model': RUNNER.model_for(args.tool, args),

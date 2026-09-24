@@ -2,7 +2,7 @@
 # so the expensive targets run the free self-check before spending anything.
 
 .DEFAULT_GOAL := check
-.PHONY: check check-release build-release build-full-baseline coverage setup update status sign-bundle install uninstall install-claude \
+.PHONY: check check-changed check-release build-release build-full-baseline coverage setup update status sign-bundle install uninstall install-claude \
         install-codex install-copilot dry-run test-smoke test-quick test-rule test-confirmation \
         test test-all test-fast test-organization test-cweval test-cweval-full test-context clean-results help
 
@@ -12,6 +12,7 @@ CHECK_TESTS = tests/selfcheck.py \
               scripts/test_modular_setup.py \
               scripts/test_install_policy.py \
               scripts/test_repository_policy.py \
+              scripts/test_check_changed.py \
               tests/test_selfcheck.py \
               tests/test_run.py \
               tests/test_design_confirmation.py \
@@ -38,6 +39,10 @@ check:
 	python3 scripts/build_baseline.py --check
 	python3 scripts/build_baseline.py --write
 	@set -e; for t in $(CHECK_TESTS); do echo "python3 $$t"; python3 $$t; done
+
+## check-changed  run checks for uncommitted changes; shared or unknown paths use make check
+check-changed:
+	python3 scripts/check_changed.py $(ARGS) $(CHECK_TESTS)
 
 ## coverage    statement coverage of the check suite; needs the coverage package
 ##             ARGS=--xml=coverage.xml also writes a report for CI upload
