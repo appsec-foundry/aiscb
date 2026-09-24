@@ -29,8 +29,8 @@ Use the guided installer to install or update aiscb. The complete command verifi
 curl --proto '=https' \
   --fail --silent --show-error \
   --output aiscb-setup.sh \
-  https://raw.githubusercontent.com/appsec-foundry/aiscb/41aed4d7db30a56b68914f3bd6f021628d3720ec/setup.sh &&
-echo 'd688133e45a205cff71d2c9ef83b85bd625e7a327fdb3b83414b271095c3f28e  aiscb-setup.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/aiscb/88568fe4a0d7ecb2af645f79986ac5ee3e5940d8/setup.sh &&
+echo '4c0d8bf87233757626fc05dcd64b0ceb71f0a4fbe6216399cdf126ea392976b1  aiscb-setup.sh' |
   sha256sum --check &&
 bash aiscb-setup.sh
 ```
