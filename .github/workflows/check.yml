@@ -9,9 +9,22 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # 22.04, not latest: 24.04 restricts the unprivileged user namespaces that
+    # bubblewrap needs, and lifting that restriction would weaken the runner.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      # The routing tests run their oracle in bubblewrap with /usr/bin/node.
+      # The image's preinstalled Node lives under /usr/local, which bwrap
+      # mounts with /usr; apt's Node 12 is too old for node: requires.
+      - name: Install the routing test sandbox
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          node="$(readlink -f /usr/local/bin/node)"
+          case "$node" in /usr/*) ;; *) echo "node outside /usr: $node" >&2; exit 1 ;; esac
+          test -x /usr/bin/node || sudo ln -s "$node" /usr/bin/node
+          /usr/bin/node --version
       - run: make check
 
       # The same suite again, measured. Kept separate from the gate above so a
