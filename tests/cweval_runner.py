@@ -160,11 +160,14 @@ def assistant_reply(tool: str, workdir: Path, prompt: str,
     else:
         # Disable command execution and external tools; read-only is a second
         # boundary if a future CLI version offers another write-capable tool.
+        # Without "plugins", every call starts a git sync of the curated plugin
+        # repository into the fresh CODEX_HOME, which stalled whole runs.
         cmd = ["codex", "exec", "--skip-git-repo-check", "--ephemeral",
                "--ignore-user-config", "--strict-config",
                "--disable", "shell_tool", "--disable", "unified_exec",
                "--disable", "apps", "--disable", "multi_agent",
-               "--disable", "remote_plugin", "-c", 'web_search="disabled"',
+               "--disable", "remote_plugin", "--disable", "plugins",
+               "-c", 'web_search="disabled"',
                "-C", str(workdir), "--sandbox", "read-only", "-m", model, "-o",
                str(workdir / "_agent_reply.txt"), prompt]
     rc, out, err = baseline_run.run_capture(cmd, workdir, timeout)
