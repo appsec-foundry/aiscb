@@ -134,7 +134,7 @@ class CWEvalRunnerTests(unittest.TestCase):
         source.mkdir()
         auth = source / "auth.json"
         auth.write_text("test credential placeholder")
-        (source / "AGENTS.md").write_text("baseline-id: aiscb-0.1.19")
+        (source / "AGENTS.md").write_text("baseline-id: aiscb-0.1.18")
         (source / "config.toml").write_text("test setting")
         with patch.dict(os.environ, {"CODEX_HOME": str(source)}):
             with runner.isolated_codex_home("codex"):

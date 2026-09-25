@@ -5,7 +5,7 @@
 The local run `tests/results/cweval/run-2zotqs2n/report.md` (0.1.18,
 three samples per arm) exposes unsafe YAML loading, header and log injection,
 invalid URL path segments, and unintended credential fields in responses.
-The current 0.1.19 modules do not spell out these mechanisms.
+The modules before this change do not spell out these mechanisms.
 
 ## Goal
 
