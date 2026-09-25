@@ -3,7 +3,7 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
-## [0.1.19](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.19) (2026-09-24)
+## [0.1.18](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.18) (2026-09-25)
 
 - Split the web, login and cryptography rules into three modules, so a task
   loads only what it needs. Login rules bring cryptography and data handling
@@ -11,20 +11,19 @@ shows its publication date. Later installer updates are listed separately.
 - Shortened the core and removed rules that were stated twice.
 - A confirmed decision stays confirmed: the assistant asks again only when the
   action, exposure or scope changes. Routine secure work no longer mentions aiscb.
+- Added rules for data-only deserialization, explicit response fields, log
+  injection, header values, and outbound URL paths.
 - Loading modules takes less context.
 - Added Kiro to the installer.
-- Updates now take their files from the signed release, not from the repository.
-
-**Updating:** Run the [Quick start](README.md#quick-start) once. Installations
-from 0.1.18 and earlier cannot install this release through `--update`.
-
-## [0.1.18](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.18) (2026-09-20)
-
 - appsec-advisor can now update existing aiscb installations through the
   signed installer.
 - Added an upgrade command for organization rules. It prepares a separate
   draft and keeps custom rules. Organization packages may now consist of
   always-on rules only.
+- Updates now take their files from the signed release, not from the repository.
+
+**Updating:** Run the [Quick start](README.md#quick-start) once. Installations
+from 0.1.17 and earlier cannot install this release through `--update`.
 
 ## [0.1.17](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.17) (2026-09-19)
 

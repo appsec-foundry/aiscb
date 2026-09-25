@@ -11,7 +11,7 @@
 
 Install aiscb to give your AI coding assistant a consistent set of security rules. A core stays active throughout the session; additional modules load when needed. Organizations can add their own rules through an overlay.
 
-Current baseline: `aiscb-0.1.19`.
+Current baseline: `aiscb-0.1.18`.
 
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
@@ -49,7 +49,7 @@ Without that integration, update a user-level installation from a terminal, outs
 python3 ~/.aiscb/install.py --update
 ```
 
-The command verifies the signed release, then opens guided setup to choose the installation scope. The new baseline applies to new sessions. Older complete installations may keep the updater at `~/.local/share/aiscb/install.py`. If the command is unavailable or refuses the update, run the current [Quick start](#quick-start). Updaters from 0.1.18 and earlier refuse newer releases because they compare a repository file with the signed release; run Quick start once to move past them.
+The command verifies the signed release, then opens guided setup to choose the installation scope. The new baseline applies to new sessions. Older complete installations may keep the updater at `~/.local/share/aiscb/install.py`. If the command is unavailable or refuses the update, run the current [Quick start](#quick-start). Updaters from 0.1.17 and earlier refuse newer releases because they compare a repository file with the signed release; run Quick start once to move past them.
 
 ## Why this exists
 
@@ -246,7 +246,7 @@ Support varies between CLI, IDE, cloud agent, review, and completion features. C
 
 ### Verify it loaded
 
-Start a fresh session after installing 0.1.19. Ask `aiscb?`; the answer should include `aiscb-0.1.19`, its source, installation mode, available modules, loaded modules, and any overlays. In a fresh modular session, no module bodies should be loaded. Catalog entries are availability information, not loaded modules. Status must not read files.
+Start a fresh session after installing 0.1.18. Ask `aiscb?`; the answer should include `aiscb-0.1.18`, its source, installation mode, available modules, loaded modules, and any overlays. In a fresh modular session, no module bodies should be loaded. Catalog entries are availability information, not loaded modules. Status must not read files.
 
 The answer reports what the assistant sees in context; it does not prove that all rules are followed. Check the client's loaded instructions too, as described in the [verification guide](docs/agent-integration-verification.md).
 
@@ -274,7 +274,7 @@ The [LLM and agentic alignment review](docs/owasp-llm-agentic-review.md) compare
 
 ## Development
 
-Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under `baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.19/` is generated from those sources with `make build-full-baseline`. See [Structure and context budget](#structure-and-context-budget) for current token measurements.
+Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under `baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.18/` is generated from those sources with `make build-full-baseline`. See [Structure and context budget](#structure-and-context-budget) for current token measurements.
 
 The provisional budgets are roughly 1,500 tokens for the core and 4,100 for the complete baseline. The expanded rules currently exceed them by 94 and 1,443 tokens respectively; these are targets, not enforced limits. Adapter discovery and overlay text add to the actual session context.
 

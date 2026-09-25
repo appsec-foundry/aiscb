@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "baseline_id": "aiscb-0.1.19",
+  "baseline_id": "aiscb-0.1.18",
   "core": {
     "file": "aiscb-core.md",
     "rules": [
@@ -22,13 +22,13 @@
       "aiscb-REPORT-001"
     ],
     "size": 8019,
-    "sha256": "4f7ef6e81a495611b0624a8dcefc915d685ef1f5f57845c38c31b34e46b2a03f"
+    "sha256": "42bbb4af7554c3cedf3e16c4ab4f8694a4d01b8d4e32c4976cd765737ce8adc3"
   },
   "modules": [
     {
       "id": "aiscb:web",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-web.md",
       "trigger": "HTTP endpoints, browser content, transport security, cookies, CORS, CSRF, or webhooks",
       "paths": [],
@@ -43,7 +43,7 @@
     {
       "id": "aiscb:authentication",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-authentication.md",
       "trigger": "Login, registration, account recovery and verification, sessions, session cookies, authentication tokens, passwords, OAuth or OIDC",
       "paths": [],
@@ -62,7 +62,7 @@
     {
       "id": "aiscb:cryptography",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-cryptography.md",
       "trigger": "Encryption, hashing, signatures, random generation, secret comparison, password hashing, signed tokens, or webhooks",
       "paths": [],
@@ -79,7 +79,7 @@
     {
       "id": "aiscb:data-handling",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-data-handling.md",
       "trigger": "Request parsing, database access, files, archives, templates, process execution, deserialization, search, pagination, uploads, response serialization, error responses, logging, or external destinations; not merely reading or editing source or documentation, but changes to their parsing or processing, handling untrusted files, process execution and external destinations remain in scope",
       "paths": [],
@@ -98,7 +98,7 @@
     {
       "id": "aiscb:secrets-initialization",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-secrets-initialization.md",
       "trigger": "Credentials, passwords, tokens, keys, signing, secret rotation, first-start setup, seed data, demo accounts, or prototype initialization",
       "paths": [],
@@ -113,7 +113,7 @@
     {
       "id": "aiscb:supply-chain",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-supply-chain.md",
       "trigger": "Adding, updating, executing, locking, or deploying packages, CI actions, container images, scripts, build tools, installers, or external downloads",
       "paths": [],
@@ -127,7 +127,7 @@
     {
       "id": "aiscb:deployment-environments",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-deployment-environments.md",
       "trigger": "Network exposure, TLS termination, proxies, containers, CI/CD permissions, production configuration, startup requirements, or activation, exposure and production separation of debug features, development servers, mocks and fixtures; not isolated test-data edits alone",
       "paths": [],
@@ -143,7 +143,7 @@
     {
       "id": "aiscb:llm-applications",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-llm-applications.md",
       "trigger": "Designing or changing LLM features in the system being built: prompts, retrieval, memory, model output, agents, tool calls, generated code, or model-selected resources; not merely the coding assistant's own prompts, tool use, or code generation",
       "paths": [],
@@ -157,7 +157,7 @@
     {
       "id": "aiscb:llm-agents",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-llm-agents.md",
       "trigger": "Designing or changing model-directed tool execution, autonomous workflows, action permissions or approvals, delegation, or multi-agent orchestration in the system being built; not merely the coding assistant's own tools",
       "paths": [],
@@ -176,7 +176,7 @@
     {
       "id": "aiscb:llm-retrieval-memory",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-llm-retrieval-memory.md",
       "trigger": "Designing or changing retrieval or persistent memory in an LLM application: selecting documents for model answers, RAG, vector stores, context caches, or creating, replacing and deleting model/agent memories; not ordinary database queries or the coding assistant's own context",
       "paths": [],
@@ -194,7 +194,7 @@
     {
       "id": "aiscb:mcp-clients-servers",
       "publisher": "aiscb",
-      "version": "0.1.19",
+      "version": "0.1.18",
       "file": "modules/aiscb-mcp-clients-servers.md",
       "trigger": "Building or changing MCP clients, servers, proxies, transports, discovery, or server installation/configuration; not merely using an existing MCP tool",
       "paths": [],

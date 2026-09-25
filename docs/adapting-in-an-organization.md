@@ -163,7 +163,7 @@ behavior in every delivery:
 ```markdown
 # Acme Secure Coding Overlay
 
-`baseline-id: acme-sec-1.0.0`. Extends aiscb (`aiscb-0.1.19`). On `aiscb?`,
+`baseline-id: acme-sec-1.0.0`. Extends aiscb (`aiscb-0.1.18`). On `aiscb?`,
 report both IDs and their sources. Identify injected content as gateway-supplied;
 do not claim to have read a local file for it.
 
