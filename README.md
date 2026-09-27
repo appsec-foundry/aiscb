@@ -20,6 +20,12 @@ The [Quick start](#quick-start) installs this modular setup. See [Modular instal
 > **Scope and limits**
 >
 > aiscb guides how assistants design, write, test, and review code. Assistants can miss or ignore instructions. Keep code review, security tests, scanners, and CI checks in place. Enforce mandatory controls through permissions and other checks outside the model. Broader data-protection policies are out of scope.
+>
+> - **Prompt attenuation:** Used here descriptively for less reliable instruction following as context grows; [LIFBench](https://arxiv.org/abs/2411.07037) evaluates instruction following in long contexts. aiscb keeps its core compact and loads additional modules when needed, limiting context overhead without guaranteeing compliance.
+> - **Lost in the middle:** Models may use information less reliably when it appears in the middle of a long context ([Liu et al.](https://arxiv.org/abs/2307.03172)). Placement depends on the client; the research does not establish a universal token threshold or placement rule that guarantees security instructions are followed.
+> - **Over-refusal:** Assistants may interpret security rules too broadly and unnecessarily refuse legitimate work, a failure mode studied by [XSTest](https://arxiv.org/abs/2308.01263). aiscb instructs them to complete legitimate parts of a request and offer safe alternatives where needed, but this does not eliminate mistaken refusals.
+>
+> Evaluate both missed safeguards and unnecessary refusals in the models, clients, and workflows you use. These studies describe model limitations; they do not measure aiscb's effectiveness.
 
 ## Quick start
 
@@ -156,7 +162,7 @@ The assistant always reads the [core](baseline/aiscb-core.md): secure design and
 
 Counts cover rule text only; the catalog, loading instructions, and overlays add context. `authentication` loads `cryptography` and `data-handling`; `cryptography` loads `secrets-initialization`; `llm-agents` and `llm-retrieval-memory` also load `llm-applications`; `mcp-clients-servers` also loads `data-handling`. Shared dependencies load once.
 
-The core takes about 0.8% of a 200,000-token context window, or 0.16% of a 1-million-token window. It is part of the instruction prefix and occupies the context once per session; prompts and tool calls do not add further copies. Every model request still sends the full context, core included. The prefix stays unchanged, so clients with prompt caching read it from the cache at a fraction of the normal input price. Whether and how long a cache holds depends on the client and provider. Loading it only when a task looks security-related would drop it from the tasks that need it most; [Why the core stays loaded](docs/why-the-core-stays-loaded.md) walks through the alternatives. If you do not want the baseline in every session, install it per project rather than per user.
+The core takes about 0.8% of a 200,000-token context window, or 0.16% of a 1-million-token window. It is intended to remain available throughout the session; its placement, retention after compaction, and inclusion in subsequent requests depend on the client. Where supported, prompt caching can reduce the input cost of unchanged instruction text; eligibility, retention, and pricing depend on the client and provider. Loading it only when a task looks security-related would drop it from the tasks that need it most; [Why the core stays loaded](docs/why-the-core-stays-loaded.md) walks through the alternatives. If you do not want the baseline in every session, install it per project rather than per user.
 
 ## What changes in practice
 
