@@ -18,10 +18,23 @@ Complete mode avoids that runtime command but still needs client loading tests.
 
 ## Install
 
+Choose project scope for selected projects or user scope for use across projects.
+A project installation does not disable an existing user installation.
+Run these commands from the reviewed baseline checkout:
+
 ```bash
 python3 scripts/install.py claude codex copilot kiro --into /path/to/project
 python3 scripts/install.py claude codex copilot kiro --user
 ```
+
+Set `--into` to the existing project root you intend to configure. It uses that
+exact directory; omitting it uses the current directory without searching for a
+Git root. Guided setup also defaults to the current directory when asking for
+the project path. Check this choice when working in a monorepo or subdirectory.
+
+Generated modular instructions contain an absolute loader path. Rerun setup at
+each checkout location, including teammates' checkouts, additional worktrees,
+and moved projects; do not commit these instructions as a portable team setup.
 
 Supported entry points are `AGENTS.md` for Codex and Kiro, `CLAUDE.md` for
 Claude Code, and `.github/copilot-instructions.md` for Copilot. Specify one or
@@ -30,6 +43,7 @@ The installer embeds core, optional overlay, discovery, and a named loader
 command directly into a managed block. Existing unrelated instructions are
 preserved; existing baseline integrations and changed managed blocks cause a
 refusal rather than a second baseline or an overwrite.
+Keep your own project instructions outside the managed block.
 
 Project setup also checks known user and ancestor instruction locations for
 inherited complete policy and refuses the conflict before writing. Close sessions
@@ -51,8 +65,8 @@ the default VS Code personal instruction file when its CLI home differs.
 User snapshots and their record live under `~/.aiscb/`. Use `--status --user` or
 `--uninstall --user` for this scope. The installed updater is `~/.aiscb/install.py`.
 
-Start a fresh session from the project root. Confirm `aiscb?`, then exercise
-a task requiring modules. Selecting `aiscb:llm-agents` must return both
+Start a fresh session from the project root. [Verify it loaded](../README.md#verify-it-loaded)
+with `aiscb?`, then exercise a task requiring modules. Selecting `aiscb:llm-agents` must return both
 `aiscb:llm-applications` and `aiscb:llm-agents` before affected work. The loader
 verifies the pinned snapshot, rejects unknown IDs and invalid dependencies,
 and emits nothing on failure. It cannot establish that the assistant invokes
@@ -138,10 +152,6 @@ rerunning the installer from the previous reviewed checkout or with the previous
 authenticated organization package, using the desired format. Retained snapshots
 alone are not an automatic rollback command. Do not edit the installation record.
 
-The loader command contains an absolute project path. Do not commit a generated
-entry point as a portable installation for other checkout locations: rerun setup
-at each target location. Repository-wide portable adapters remain rollout work.
-
 ### New-module acceptance scenarios
 
 | Work | Required selection beyond core |
@@ -178,9 +188,12 @@ python3 scripts/install.py --status --offline --into /path/to/project
 python3 scripts/install.py --uninstall --into /path/to/project
 ```
 
-Status verifies stored content and managed blocks. Uninstall removes only
-unchanged managed blocks and their installation record; user text and snapshots
-remain. Snapshot cleanup is a separate explicit operation after sessions end.
+Use `--into` for both commands to select the project independently of the current
+directory. Status verifies stored content and managed blocks, not client loading
+or module selection. Modular uninstall removes unchanged managed blocks and
+their installation record immediately, without a preview or confirmation;
+user text and snapshots remain. Snapshot cleanup is a separate explicit operation
+after sessions end.
 Modified managed blocks are not silently deleted. An interrupted installation
 can leave a snapshot without activation; inspect status and entry points before
 retrying. The installer does not promise a transaction across several tools.

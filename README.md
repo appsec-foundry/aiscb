@@ -41,7 +41,7 @@ echo '7be9bf4753bb3a95c151788b5f6a9b091dcb5a02289f496e3204eddb7fc5f78b  aiscb-se
 bash aiscb-setup.sh
 ```
 
-Choose your user account or a project directory, then the tools you use. The installer preserves unrelated instructions and can migrate an existing complete installation after verifying it. Restart the assistant after installation.
+Choose a project directory to use the baseline in selected projects, or your user account to use it across projects, then the tools you use. A project installation does not disable an existing user installation. The installer preserves unrelated instructions and can migrate an existing complete installation after verifying it. Restart the assistant and [verify it loaded](#verify-it-loaded).
 
 Requires Bash, `curl`, `sha256sum`, and Python 3.10+. Modular loading requires permission to execute the supplied Python loader. Claude Code users can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
 
@@ -187,14 +187,14 @@ From a reviewed checkout, install its version with:
 make setup ARGS=--offline
 ```
 
-Choose a user installation or a project. Inside Git, the project is the nearest repository root; otherwise it is the current directory. Existing instructions are preserved. Replacing an edited baseline requires confirmation and creates a backup. Restart the assistant after installation.
+Choose a user installation or a project. For a project, enter the intended project root explicitly; the default is the current directory, even inside a Git subdirectory. Existing unrelated instructions are preserved. Modular setup refuses changed managed blocks; keep your own project instructions outside them. Restart the assistant and [verify it loaded](#verify-it-loaded).
 
 Other commands:
 
 ```bash
-make status ARGS=--offline    # show installation status
-make uninstall               # preview and remove the project installation
-make help                    # list available commands
+make status ARGS="--offline --into /path/to/project" # verify project installation files
+make uninstall ARGS="--into /path/to/project"        # remove the project installation
+make help                                          # list available commands
 ```
 
 Modular setup uses the reviewed local sources without fetching replacements. Signed release updates remain a separate `--update` operation.
@@ -211,7 +211,9 @@ python3 scripts/install.py claude codex copilot kiro --into /path/to/project
 python3 scripts/install.py claude codex copilot kiro --user
 ```
 
-Name only the tools you use, or omit the names for all four. Codex and Kiro share the project `AGENTS.md`; for your user account, Kiro reads `~/.kiro/steering/AGENTS.md`. The assistant must be allowed to run the supplied Python 3.10+ loader. The installer preserves unrelated instructions. Restart the assistant after installation.
+Use an existing project root for `--into`; the installer uses that exact directory. Generated modular instructions contain an absolute loader path. They are local to that checkout location: rerun setup for each teammate's checkout, additional worktree, or moved project. Do not commit them as a portable team installation.
+
+Name only the tools you use, or omit the names for all four. Codex and Kiro share the project `AGENTS.md`; for your user account, Kiro reads `~/.kiro/steering/AGENTS.md`. The assistant must be allowed to run the supplied Python 3.10+ loader. The installer preserves unrelated instructions. Restart the assistant and [verify it loaded](#verify-it-loaded); file status alone does not prove client loading or module selection.
 
 Modular loading needs verification in the clients you use before rollout; installer tests do not establish that a model selects the right modules. If command execution is unavailable, use `--complete`, provided the client's instruction limit can hold the entire baseline. Only the core, module discovery and loader instructions enter the initial context; module bodies stay on disk until selected. `--modular` remains an explicit spelling of the default.
 
