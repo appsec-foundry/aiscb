@@ -159,8 +159,9 @@ the three-digit email-login planning prompt. It offers Claude's native
 tool call and question. A separate run removes that tool to check text fallback.
 The other runs simulate silence, timeout, an unsubmitted preselection, and
 explicit acceptance. The host never authorizes another tool.
-A sixth case checks a secure automated, persistent-secret design: routine
-implementation needs neither baseline attribution nor security confirmation,
+A sixth case checks a secure automated, persistent-secret design:
+baseline-caused measures need brief attribution and their security benefit,
+without unnecessary security confirmation,
 and the Security note stays reserved for qualifying residual risks.
 Three browser HTTP Basic cases use the risk explicitly named in
 `aiscb-AUTH-001`: text fallback, an unanswered dialog, and an accepted choice.
