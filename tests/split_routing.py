@@ -53,7 +53,7 @@ def main():
             if name == 'web':
                 trace = harness.capture(harness.command(base, harness.MODEL, str(uuid.uuid4()), 1,
                                         harness.runner.PROBE_PROMPT, True), work, out/'preflight.jsonl', 90)
-                if not trace['complete'] or set(harness.runner.id_family('aiscb-0.1.18').findall(trace['reply'])) != {'aiscb-0.1.18'}:
+                if not trace['complete'] or set(harness.runner.id_family('aiscb-0.1.19').findall(trace['reply'])) != {'aiscb-0.1.19'}:
                     raise SystemExit('Preflight failed; no tasks started.')
             config['turn'] = 1; harness.dump(base/'config.json', config)
             prompt = task+' Write a concise implementation plan to plan.md. This is a synthetic existing-project planning fixture; do not implement or run application code, install packages or read secret values.'

@@ -65,7 +65,7 @@ Current `o200k_base` measurements are:
 
 | Artifact | Bytes | Tokens |
 | --- | ---: | ---: |
-| Always-on core | 7,901 | 1,567 |
+| Always-on core | 7,958 | 1,581 |
 | `aiscb:web` | 1,945 | 415 |
 | `aiscb:authentication` | 2,688 | 529 |
 | `aiscb:cryptography` | 1,058 | 226 |
@@ -77,10 +77,10 @@ Current `o200k_base` measurements are:
 | `aiscb:data-handling` | 2,706 | 518 |
 | `aiscb:llm-retrieval-memory` | 1,666 | 324 |
 | `aiscb:mcp-clients-servers` | 2,236 | 413 |
-| Complete eager artifact | 28,228 | 5,516 |
+| Complete eager artifact | 28,285 | 5,530 |
 
-The core exceeds its provisional 1,500-token target by 67 tokens; complete
-output exceeds its 4,100-token target by 1,416. Further reduction
+The core exceeds its provisional 1,500-token target by 81 tokens; complete
+output exceeds its 4,100-token target by 1,430. Further reduction
 should be evaluated against lost always-on behavior, not treated as an
 automatic goal. In particular, do not shorten the Security-note contract merely
 to improve the headline number.

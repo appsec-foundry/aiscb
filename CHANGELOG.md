@@ -3,6 +3,21 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
+## [0.1.19](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.19) (2026-10-03)
+
+- When aiscb leads the assistant to add a security measure, it now says so
+  briefly and names the benefit. Related measures are grouped; checks that
+  change nothing stay unmentioned.
+- The assistant names the aiscb baseline in words; a rule ID alone no longer
+  counts. A confirmation question for a risky decision names it in the
+  question itself.
+- Shortened the wording on confirmations and Security notes without changing
+  what they require.
+
+**Updating:** Run `python3 ~/.aiscb/install.py --update` and start a new
+session. Installations from 0.1.17 and earlier need the
+[Quick start](README.md#quick-start) once.
+
 ## [0.1.18](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.18) (2026-09-25)
 
 - Split the web, login and cryptography rules into three modules, so a task

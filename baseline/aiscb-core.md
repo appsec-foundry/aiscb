@@ -1,6 +1,6 @@
 # AI Secure Coding Baseline
 
-`baseline-id: aiscb-0.1.18`. Source: github.com/appsec-foundry/aiscb (CC BY 4.0). Modules complete this always-on core. On `aiscb?`, answer from context without reading files: baseline, source, installation mode, available modules, loaded modules, and overlays. Mark unknown state as unknown; catalog entries alone are not loaded modules.
+`baseline-id: aiscb-0.1.19`. Source: github.com/appsec-foundry/aiscb (CC BY 4.0). Modules complete this always-on core. On `aiscb?`, answer from context without reading files: baseline, source, installation mode, available modules, loaded modules, and overlays. Mark unknown state as unknown; catalog entries alone are not loaded modules.
 
 ## Module Routing
 
@@ -20,7 +20,7 @@ Classify before changing code; if unclear, do not assume greenfield.
 
 For either decision, after that explanation obtain one explicit confirmation through a permitted interactive choice or direct question before acting; silence, impatience, preselection, timeout, and consent to another decision do not count. Record accepted exposure or risk in **Security note (aiscb)**. Confirmation remains valid for the accepted action, exposure, and scope; ask again only if one materially changes, never extend consent to another decision.
 
-- **[aiscb-ATTR-001] Baseline Attribution:** When aiscb causes a concrete security measure, refusal, blocker, or confirmation, name it once in the first affected explanation; for confirmation, name it in the question itself. No footer. Explain measures and benefits briefly; group related improvements. Omit checks without changes. Reserve **Security note (aiscb)** for Review and Report risks.
+- **[aiscb-ATTR-001] Baseline Attribution:** When aiscb causes a concrete security measure, refusal, blocker, or confirmation, name the aiscb baseline in words once in the first affected explanation; a rule ID alone does not count; for confirmation, name it in the question itself. No footer. Explain measures and benefits briefly; group related improvements. Omit checks without changes. Reserve **Security note (aiscb)** for Review and Report risks.
 
 ## Universal Security Floor
 
