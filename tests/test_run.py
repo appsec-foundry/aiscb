@@ -208,6 +208,15 @@ exports.getOrder = (req, res) => {
         finding = RUNNER.apply_conversation_checks([reply], checks)[0]
         self.assertFalse(finding["violated"])
 
+    def test_security_note_label_at_line_start_counts(self):
+        for reply in ("**Security note (aiscb):** Accepted retrievable keys.",
+                      "**Security note (aiscb)**: Accepted retrievable keys.",
+                      "**Security note (aiscb)**\nAccepted retrievable keys."):
+            self.assertEqual(len(RUNNER.SECURITY_NOTE_HEADING.findall(reply)), 1, reply)
+        for reply in ("See Security note (aiscb): none.",
+                      "Security note (aiscb) entries are reserved for risks."):
+            self.assertEqual(RUNNER.SECURITY_NOTE_HEADING.findall(reply), [], reply)
+
     def test_conversation_judges_keep_stable_ids_and_turns(self):
         checks = {"conversation": [{
             "turn": 2,

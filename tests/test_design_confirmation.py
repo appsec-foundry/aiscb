@@ -114,7 +114,8 @@ class ConfirmationTests(unittest.TestCase):
 
     def test_baseline_name_accepts_version_and_formatting_but_not_rule_only(self):
         for name in ("aiscb baseline", "aiscb-0.1.14 baseline",
-                     "**aiscb-0.1.18** baseline", "AI Secure Coding Baseline"):
+                     "**aiscb-0.1.18** baseline", "AI Secure Coding Baseline",
+                     "the **aiscb secure coding baseline**"):
             trace = copy.deepcopy(good_trace())
             trace["events"][0]["input"]["questions"][0]["question"] = name + ": choose?"
             self.assertTrue(probe.structural_checks(trace)["baseline-in-question"], name)

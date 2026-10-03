@@ -231,7 +231,7 @@ def names_baseline(text: str) -> bool:
     # Accept the versioned name and Markdown emphasis, not just one spelling.
     # A rule citation alone still does not identify the baseline by name.
     return bool(re.search(
-        r"\b(?:aiscb(?:-\d+\.\d+\.\d+)?|AI Secure Coding)[\s*`_]+baseline\b",
+        r"\b(?:aiscb(?:-\d+\.\d+\.\d+)?(?:\s+secure\s+coding)?|AI Secure Coding)[\s*`_]+baseline\b",
         text, re.I))
 
 
