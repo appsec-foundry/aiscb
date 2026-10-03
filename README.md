@@ -1,4 +1,4 @@
-# AI Secure Coding Baseline
+# AI Secure Coding Baseline (aiscb)
 
 [![GitHub Release](https://img.shields.io/github/v/release/appsec-foundry/aiscb)](https://github.com/appsec-foundry/aiscb/releases/latest)
 [![check](https://github.com/appsec-foundry/aiscb/actions/workflows/check.yml/badge.svg)](https://github.com/appsec-foundry/aiscb/actions/workflows/check.yml)
