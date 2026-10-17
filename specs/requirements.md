@@ -190,7 +190,10 @@ aiscb or organization module triggers.
 
 **Requirement:** Select all matching namespaced modules in one semantic pass
 before affected design or code changes, using only the bounded catalog and
-loader supplied by the adapter. Recheck on scope changes, final diff, resume,
+loader supplied by the adapter. Match the task and affected interfaces, including
+indirect effects; application-wide technology presence alone is not a match.
+Paths add matches, and uncertainty within that scope requires loading.
+Recheck on scope changes, final diff, resume,
 or context loss. Missing, invalid, incompatible, or conflicting required
 content stops only affected work. Initial context contains core, the adapter's
 discovery and loader instructions, and supplied always-on overlays; module
@@ -204,8 +207,13 @@ policy is neither guessed nor silently omitted.
 
 **Model cases:** None.
 
-**Evidence and gaps:** None. The existing organization test exercises a similar
-routing contract, but no current main-suite model case declares this rule.
+**Evidence and gaps:** None. The routing harness exercises semantic matches, HTTP/MCP
+matches and dependencies, scope changes, context loss, missing policy, and an
+isolated process change that must not load web merely because HTTP code exists
+elsewhere. Deterministic tests verify its scoring, including excess web loads
+and missing or late required loads; they do not prove model selection behavior.
+The new process-only scenario has not been run against a model. No current
+main-suite model case declares this rule.
 
 ## aiscb-OM-001 — Existing application
 

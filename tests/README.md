@@ -34,7 +34,7 @@ or code where a fixed check is insufficient.
 | `make check` | 0 | 0 | 0 |
 | `make test-fast` | 6 | 0 | 1 |
 | `make test-organization` | 4 | 0 | 1 |
-| `make test-routing` | 7 | 0 | 2 |
+| `make test-routing` | 8 | 0 | 2 |
 | `make test-confirmation` | 9 | 9 | 2 |
 | `make test-smoke` | 2 | 6 | 2 |
 | `make test-quick` | 24 | 72 | 2 |
@@ -121,15 +121,16 @@ integration cases are separate and make no claim of a baseline effect.
 
 ## Modular routing
 
-`make test-routing` runs five cases with the actual modular installer and loader:
+`make test-routing` runs six cases with the actual modular installer and loader:
 
 - `semantic`: password recovery in `src/routes/account.cjs`, outside an auth directory.
 - `multiple`: an HTTP MCP handler requires multiple modules, including the MCP module's data-handling dependency.
 - `scope-change`: fix a README typo, then implement password recovery in the same session.
 - `context-loss`: implement password recovery, then start a fresh session on the same project to implement an MCP handler. Required modules must be loaded again.
 - `missing`: remove a required module from the installed snapshot. Leave the protected code unchanged and complete the independent README fix.
+- `process-only`: change a maintenance CLI's child-process stopping helper while unrelated HTTP code exists in the project. Require data-handling before the edit and reject unnecessary web loading; check signal choice, exited children, return values, and unchanged HTTP code.
 
-The default run has seven agent turns and two preflight calls, with no judge.
+The default run has eight agent turns and two preflight calls, with no judge.
 It requires Linux, Bubblewrap and `/usr/bin/node`; generated code runs with no
 network, a read-only fixture filesystem and no host credentials. Each turn has
 a 180-second timeout. Preflight rejects an inherited baseline;

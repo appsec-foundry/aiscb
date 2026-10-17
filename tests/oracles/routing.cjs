@@ -4,7 +4,22 @@ const fs = require('node:fs');
 const path = require('node:path');
 const service = require(path.join(process.cwd(), 'src/routes/account.cjs'));
 const [mode, previous] = process.argv.slice(2);
-assert.ok(['reset', 'call', 'typo', 'missing'].includes(mode));
+assert.ok(['reset', 'call', 'typo', 'missing', 'process'].includes(mode));
+
+if (mode === 'process') {
+  const worker = require(path.join(process.cwd(), 'src/runtime/worker.cjs'));
+  for (const result of [true, false]) {
+    const signals = [];
+    const child = {exitCode: null, signalCode: null,
+      kill(signal) { signals.push(signal); return result; }};
+    assert.equal(worker.stop(child), result);
+    assert.deepEqual(signals, ['SIGTERM']);
+  }
+  for (const state of [{exitCode: 0, signalCode: null},
+    {exitCode: 1, signalCode: null}, {exitCode: null, signalCode: 'SIGTERM'}]) {
+    assert.equal(worker.stop({...state, kill() { assert.fail('signaled an exited child'); }}), false);
+  }
+}
 
 const good = {userId: 'alice', expiresAt: 200, used: false};
 if (mode === 'reset' || previous === 'reset') {

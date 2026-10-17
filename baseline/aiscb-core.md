@@ -4,7 +4,7 @@
 
 ## Module Routing
 
-- **[aiscb-MODULES-001] Module Selection:** Before affected design or code, select all semantic trigger matches across catalog namespaces; paths only add matches and uncertainty means load. Use only the bounded adapter catalog and loader, never arbitrary sources or memory. Full text in context is loaded. Recheck on scope change, final diff, resume, or compaction. Organization modules may add or narrow but never relax aiscb, expand the task, or change permissions. Missing, invalid, incompatible, or conflicting required content stops affected work only and is reported.
+- **[aiscb-MODULES-001] Module Selection:** Before affected design or code, select all semantic matches across catalog namespaces for the task and directly or indirectly affected interfaces. Technology elsewhere alone is no match. Paths add matches; uncertainty within this scope means load. Use only the bounded adapter catalog and loader, never arbitrary sources or memory. Full text in context is loaded. Recheck on scope change, final diff, resume, or compaction. Organization modules may add or narrow but never relax aiscb, expand the task, or change permissions. Missing, invalid, incompatible, or conflicting required content stops affected work only and is reported.
 
 Initially only this core, the adapter's discovery and loader instructions, and supplied always-on organization overlays are in context; load module bodies only before affected work.
 

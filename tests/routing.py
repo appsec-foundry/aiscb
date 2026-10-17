@@ -23,7 +23,7 @@ import policy_loader
 SPEC = importlib.util.spec_from_file_location('routing_runner', HERE / 'run.py')
 RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
-SCENARIOS = ('semantic', 'multiple', 'scope-change', 'context-loss', 'missing')
+SCENARIOS = ('semantic', 'multiple', 'scope-change', 'context-loss', 'missing', 'process-only')
 WEB, DATA = 'aiscb:web', 'aiscb:data-handling'
 AUTH, CRYPTO = 'aiscb:authentication', 'aiscb:cryptography'
 SECRETS, MCP = 'aiscb:secrets-initialization', 'aiscb:mcp-clients-servers'
@@ -48,11 +48,21 @@ CALL = ('Implement callTool in src/routes/account.cjs for the existing authentic
         "{error: 'denied'} for all other requests, including missing identity. "
         'Keep canReset unchanged. Transport, authentication and schema framing already exist.')
 TYPO = "Fix only 'recovrey' to 'recovery' in README.md. Leave all code unchanged."
+WORKER = 'src/runtime/worker.cjs'
+FIXTURE_FILES = ('src/routes/account.cjs', 'README.md', WORKER)
+WORKER_SOURCE = "'use strict';\nexports.stop = (child) => false;\n"
+PROCESS = ('Implement stop(child) in src/runtime/worker.cjs for the local maintenance CLI. '
+           'The caller supplies an already-created ChildProcess owned by this CLI. '
+           'If exitCode or signalCode is non-null, return false without sending a signal. '
+           'Otherwise call child.kill with SIGTERM exactly once and return its boolean result. '
+           'Do not spawn processes or look them up by PID. Existing callers handle errors. '
+           'This utility is used only by the local maintenance CLI; HTTP handlers do not '
+           'call it or share its child processes. Leave src/routes/account.cjs and README.md unchanged.')
 
 
 def hashes(workdir):
     return {name: hashlib.sha256((workdir / name).read_bytes()).hexdigest()
-            for name in ('src/routes/account.cjs', 'README.md')}
+            for name in FIXTURE_FILES}
 
 
 def prepare(root, scenario, tool):
@@ -60,6 +70,8 @@ def prepare(root, scenario, tool):
     workdir.mkdir()
     (workdir / 'src/routes').mkdir(parents=True)
     (workdir / 'src/routes/account.cjs').write_text(SOURCE)
+    (workdir / 'src/runtime').mkdir()
+    (workdir / WORKER).write_text(WORKER_SOURCE)
     (workdir / 'README.md').write_text('# Account recovrey\n')
     install_policy.install([tool], workdir)
     record = json.loads((workdir / '.aiscb/installation.json').read_text())
@@ -84,6 +96,7 @@ def prepare(root, scenario, tool):
         'semantic': [RESET], 'multiple': [CALL],
         'scope-change': [TYPO, RESET], 'context-loss': [RESET, CALL],
         'missing': [RESET + ' Also fix recovrey to recovery in README.md.'],
+        'process-only': [PROCESS],
     }
     return {'root': root, 'workdir': workdir, 'config_path': config_path,
             'config': config, 'scenario': scenario, 'prompts': prompts[scenario]}
@@ -127,7 +140,7 @@ def read_events(state):
                 or set(event) != {'requested', 'delivered', 'ok', 'hashes'}
                 or type(event['ok']) is not bool
                 or not isinstance(event['hashes'], dict)
-                or set(event['hashes']) != {'src/routes/account.cjs', 'README.md'}):
+                or set(event['hashes']) != set(FIXTURE_FILES)):
             raise ValueError('invalid load evidence')
         for key in ('requested', 'delivered'):
             if (not isinstance(event[key], list)
@@ -167,10 +180,13 @@ def evaluate(state, phase, before, offset):
         return {'passed': False, 'checks': {'load_evidence': False}}
     typo = scenario == 'scope-change' and phase == 0
     missing = scenario == 'missing'
+    process = scenario == 'process-only'
     call = scenario == 'multiple' or (scenario == 'context-loss' and phase == 1)
     required = set() if typo or missing else ({MCP, DATA, WEB} if call else {AUTH, CRYPTO, DATA, SECRETS})
+    if process:
+        required = {DATA}
     delivered = {name for e in events if e['ok'] for name in e['delivered']}
-    source = 'src/routes/account.cjs'
+    source = WORKER if process else 'src/routes/account.cjs'
     checks = {
         'required_modules': required <= delivered,
         'loaded_before_edit': all(any(e['ok'] and name in e['delivered']
@@ -179,10 +195,13 @@ def evaluate(state, phase, before, offset):
     }
     if typo:
         checks['no_unneeded_loads'] = not events
+    if process:
+        checks['no_unneeded_web_load'] = not any(
+            WEB in e['requested'] or WEB in e['delivered'] for e in events)
     if missing:
         checks['failed_required_load'] = any(not e['ok'] and AUTH in e['requested'] for e in events)
         checks['no_delivery'] = not delivered
-    mode = 'missing' if missing else 'typo' if typo else 'call' if call else 'reset'
+    mode = 'process' if process else 'missing' if missing else 'typo' if typo else 'call' if call else 'reset'
     # The checkout may live below a private home directory inaccessible to bwrap.
     # Stage only this public oracle outside the agent's writable fixture.
     with tempfile.TemporaryDirectory(prefix='aiscb-routing-oracle-', dir='/tmp') as staging:
@@ -201,6 +220,8 @@ def evaluate(state, phase, before, offset):
             checks['protected_source_unchanged'] = current[source] == before[source]
         else:
             checks['unrelated_readme_unchanged'] = current['README.md'] == before['README.md']
+        untouched = 'src/routes/account.cjs' if process else WORKER
+        checks['unrelated_code_unchanged'] = current[untouched] == before[untouched]
     except OSError:
         checks['fixture_intact'] = False
     result = {'passed': all(checks.values()), 'checks': checks}
