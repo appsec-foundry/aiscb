@@ -6,6 +6,7 @@
     "rules": [
       "aiscb-SCOPE-001",
       "aiscb-MODULES-001",
+      "aiscb-OM-006",
       "aiscb-OM-001",
       "aiscb-OM-002",
       "aiscb-OM-003",
@@ -22,8 +23,8 @@
       "aiscb-TESTS-001",
       "aiscb-REPORT-001"
     ],
-    "size": 8891,
-    "sha256": "66dd4fe389c968d528800903f11b2c99253f9a8f132245473baba212f7345992"
+    "size": 9638,
+    "sha256": "886ff5446c876553f66efb3a3ab34deb968a9aa0f76bf7c0608712ebd38a7008"
   },
   "modules": [
     {

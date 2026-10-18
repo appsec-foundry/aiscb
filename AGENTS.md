@@ -126,7 +126,7 @@ or merge the intermediate state where the README hash and bootstrap commit do
 not yet form a working pair.
 
 The model targets are a different matter: they run the cases against real
-models. `make test` is 108 agent runs and hours of tokens, `make test-all`
+models. `make test` is 132 agent runs and hours of tokens, `make test-all`
 twice that. Run them when the user asks, or for the cases a change affects —
 never as a routine check. They are evidence, not a gate. For a narrower
 question there is `make test-smoke` (does the harness work at all),

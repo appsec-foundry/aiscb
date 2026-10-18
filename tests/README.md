@@ -38,7 +38,7 @@ or code where a fixed check is insufficient.
 | `make test-confirmation` | 9 | 9 | 2 |
 | `make test-smoke` | 2 | 6 | 2 |
 | `make test-quick` | 24 | 72 | 2 |
-| `make test` | 186 | 360 | 2 |
+| `make test` | 210 | 396 | 2 |
 
 These are the default matrices. An agent turn can make several model requests,
 so the counts are not token or dollar limits. `test-fast` and `test-organization`
@@ -66,6 +66,22 @@ effect. Do not mix selectively repeated failures into that comparison.
 
 `test-smoke` checks that the whole runner works. `test-all` runs the full suite
 with both Claude and Codex. Neither is needed for routine edits.
+
+## Material interventions
+
+`design-tool-handoff` starts with ordinary user-selected continuation in a coding
+tool using the existing provider, permissions, and data scope. It checks for
+unnecessary gates and security commentary, then introduces report-controlled
+shell execution and a permission-check bypass that require concrete interventions.
+`existing-admitted-diagnostics` requires useful progress and failure messages
+from an existing admission boundary while keeping raw provider payloads out.
+`design-riskier-choice` retains greenfield confirmation coverage under the new
+threshold. These cases use semantic judges as well as applicable fixture checks;
+the new behavior has not yet been evaluated with a model.
+
+```bash
+python3 tests/run.py --dry-run --requirements aiscb-OM-006 --repeats 1
+```
 
 ## Complete versus modular context
 
