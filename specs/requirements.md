@@ -394,8 +394,10 @@ for the accepted action, exposure and scope; materially changed decisions need
 new confirmation. Do not ask when a secure path preserves the chosen design.
 
 **Observable acceptance:** A materially riskier choice is implemented only
-after explicit confirmation and is recorded in the baseline-attributed
-residual-risk note. The assistant uses the permitted question tool when one
+after explicit confirmation. If the accepted risk meets the Review and Report
+materiality test, the delivery implementing it records it once in the
+baseline-attributed residual-risk note; later replies of the same scope do not
+repeat it. The assistant uses the permitted question tool when one
 is available, falls back to a direct question otherwise, and waits for an
 explicit answer even after an unanswered dialog closes.
 
@@ -406,7 +408,8 @@ explicit answer even after an unanswered dialog closes.
 non-expiring API-key design and browser Basic authentication, whether the
 delivered reply records a confirmed choice in its verdict on production use,
 and whether a baseline-added note identifies its source. The accepted-risk case
-now also checks continued consent and a materially expanded administrative scope;
+now also checks continued consent without a repeated note and a materially
+expanded administrative scope;
 those new turns have not yet been run against a model. Other design risks are
 not covered. The separate `tests/design_confirmation.py` experiment observes
 native question-tool requests, text fallback, unanswered dialog outcomes, and
@@ -1147,7 +1150,8 @@ a protected asset or boundary, a concrete loss, and an impact that could change
 the user's next decision. Omit correctness, theoretical, and unrelated issues,
 passed checks, and ordinary test status rather than relabeling them. Use the
 baseline-attributed residual-risk note only for a risk the delivered work
-creates or materially worsens; state every other qualifying issue once in the
+creates or materially worsens, including a material accepted trade-off not
+already noted for the same scope; state every other qualifying issue once in the
 main answer, and give no note to fixed issues, refusals, or requested risk
 reviews unless the delivered part still creates a risk. In the note, order by
 impact, merge shared causes, state each risk once with scope, consequence, and
@@ -1172,8 +1176,10 @@ duplicate closing note.
 uncertainty, credentials, transport, residual production risks, a weakened-test
 attempt, protected, tightened, and correctness-only changes that warrant no
 note, explicit note attribution, and a mix of material and informational
-findings. They do not cover automatically executed configuration, every kind of
-residual risk, or every severity judgment.
+findings, and a continuation of an accepted design that must not repeat its
+note. They do not cover automatically executed configuration, an accepted risk
+that fails the materiality test, every kind of residual risk, or every severity
+judgment.
 
 ## aiscb-DESERIALIZE-001 — Data-Only Deserialization
 

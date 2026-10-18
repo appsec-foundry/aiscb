@@ -145,7 +145,7 @@ The assistant always reads the [core](baseline/aiscb-core.md): secure design and
 
 | Component | Covers | Bytes | Tokens (OpenAI `o200k_base`)[^tokens] |
 | --- | --- | ---: | ---: |
-| aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review, including when a Security note is required | 9,638 | 1,860 |
+| aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review, including when a Security note is required | 9,798 | 1,891 |
 | `aiscb:web` | Protect browser content, transport and cross-site boundaries | 1,945 | 415 |
 | `aiscb:authentication` | Protect login, account flows, sessions and authentication mechanisms | 2,688 | 529 |
 | `aiscb:cryptography` | Use sound cryptography and verify signed webhooks | 1,058 | 226 |
@@ -157,7 +157,7 @@ The assistant always reads the [core](baseline/aiscb-core.md): secure design and
 | `aiscb:data-handling` | Parse untrusted data, protect logs and responses, restrict outbound requests and resource use | 2,795 | 532 |
 | `aiscb:llm-retrieval-memory` | Check access before retrieval and control what enters persistent memory | 1,666 | 324 |
 | `aiscb:mcp-clients-servers` | Authorize MCP requests and control local server starts and credentials | 2,236 | 413 |
-| Complete baseline | The core and every module in one file | 30,054 | 5,823 |
+| Complete baseline | The core and every module in one file | 30,214 | 5,854 |
 
 [^tokens]: Measured with OpenAI's `o200k_base`, which GPT-4o, GPT-4.1, and GPT-5 models use. Other tokenizers count the same text differently. Unmeasured estimates: Claude up to 4.6 about 15–30% more tokens; Claude with the newer tokenizer introduced in Opus 4.7 about 15–75% more. The text itself does not change.
 
@@ -286,7 +286,7 @@ The [LLM and agentic alignment review](docs/owasp-llm-agentic-review.md) compare
 
 Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under `baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.20/` is generated from those sources with `make build-full-baseline`. See [Structure and context budget](#structure-and-context-budget) for current token measurements.
 
-The provisional budgets are roughly 1,500 tokens for the core and 4,100 for the complete baseline. The expanded rules currently exceed them by 360 and 1,723 tokens respectively; these are targets, not enforced limits. Adapter discovery and overlay text add to the actual session context.
+The provisional budgets are roughly 1,500 tokens for the core and 4,100 for the complete baseline. The expanded rules currently exceed them by 391 and 1,754 tokens respectively; these are targets, not enforced limits. Adapter discovery and overlay text add to the actual session context.
 
 [`specs/requirements.md`](specs/requirements.md) maps rule groups to tests. Behavior changes follow the workflow in [`specs/README.md`](specs/README.md); editorial and repository-only changes need no change specification.
 
