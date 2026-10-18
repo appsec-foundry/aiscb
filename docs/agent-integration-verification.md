@@ -124,6 +124,26 @@ MCP-only and RAG tasks, multi-module selection, missing
 loader, corrupted source, new session after update, and preserved user policy.
 Record exact client versions, execution permissions and instruction-size limits.
 
+### Release 0.1.20 (2026-10-18)
+
+The signed bundle was downloaded from the public `aiscb-bundle-0.1.20-1`
+release. Its signature, exact sizes and hashes matched the staged bundle.
+Changed manifests and installers were refused. Installing the downloaded
+installer for all four clients preserved existing project instructions;
+module loading included authentication dependencies and refused unknown or
+corrupted modules.
+
+Fresh CLI loading was verified with Claude Code 2.1.302, Codex CLI 0.163.0
+and Copilot CLI 1.0.83. All twelve combinations passed: project/user scope,
+launched from the project root/subdirectory. Captured API requests contained
+the exact 0.1.20 core and module catalog, without module bodies. The probe used
+the downloaded installer, isolated homes, a loopback API fixture and artificial
+credentials; it made no real model calls or changes to actual user settings.
+
+This verifies release installation and initial instruction delivery on those
+CLI versions. Semantic module selection, IDE surfaces and Kiro CLI loading
+were not retested for this release.
+
 ### Kiro project installation (2026-09-24)
 
 Tested with Kiro CLI 2.24.0 on Linux and no global Kiro steering. A project

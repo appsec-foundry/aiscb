@@ -13,8 +13,6 @@ Install aiscb to give your AI coding assistant a consistent set of security rule
 
 Current baseline: `aiscb-0.1.20`.
 
-Release preparation: the Quick start still installs `aiscb-0.1.19`.
-
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
 The [Quick start](#quick-start) installs this modular setup. See [Modular installation](#modular-installation) for project setup, migration and the option to load all rules at once.
@@ -38,8 +36,8 @@ Use the guided installer to install or update aiscb. The complete command verifi
 curl --proto '=https' \
   --fail --silent --show-error \
   --output aiscb-setup.sh \
-  https://raw.githubusercontent.com/appsec-foundry/aiscb/d03441fd9cabaa1d19965da32615c1f556b3007d/setup.sh &&
-echo '74ea030560e8a189241b387f205858a9e225d86120b054c6d2481999633eafc4  aiscb-setup.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/aiscb/5917ae20351287bdd93e701fd95b8f2251e10cb2/setup.sh &&
+echo 'ad9c089bb5efa6a7a0423cf0c67ecd4a67d7a2cbf5f1a35173836c908aa901ea  aiscb-setup.sh' |
   sha256sum --check &&
 bash aiscb-setup.sh
 ```
@@ -206,7 +204,7 @@ See the [integration guide](docs/agent-integration-verification.md) for client s
 
 ### Modular installation
 
-Modular loading is the default. The current Quick start release covers Claude Code, Codex, and Copilot; Kiro needs the next release or this checkout. Run:
+Modular loading is the default. The Quick start covers Claude Code, Codex, Copilot, and Kiro. Run:
 
 ```bash
 python3 scripts/install.py claude codex copilot kiro --into /path/to/project
