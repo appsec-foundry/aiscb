@@ -3,13 +3,13 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
-## Unreleased
+## [0.1.20](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.20) (2026-10-18)
 
 - Module selection now follows the task and its directly or indirectly affected
   interfaces. Technology elsewhere in the repository alone does not require
   loading a module; uncertainty within the affected scope still does.
 
-**Updating:** After 0.1.20 is published, run
+**Updating:** Run
 `python3 ~/.aiscb/install.py --update` and start a new session. Installations
 from 0.1.17 and earlier need the [Quick start](README.md#quick-start) once.
 
