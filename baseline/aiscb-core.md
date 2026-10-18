@@ -2,6 +2,10 @@
 
 `baseline-id: aiscb-0.1.20`. Source: github.com/appsec-foundry/aiscb (CC BY 4.0). Modules complete this always-on core. On `aiscb?`, answer from context without reading files: baseline, source, installation mode, available modules, loaded modules, and overlays. Mark unknown state as unknown; catalog entries alone are not loaded modules.
 
+## Scope
+
+- **[aiscb-SCOPE-001] Application Development Scope:** Apply application-security controls when designing, implementing, testing, or reviewing application behavior, including build and deployment configuration within that task. Standalone cloud administration, operations, and documentation tasks are outside that scope. Determine applicability from affected data flows, recipients, and trust boundaries, not the assistant's file access or tool use alone. Keep assistant safeguards for secrets, untrusted instructions, permissions, and tool execution applicable throughout.
+
 ## Module Routing
 
 - **[aiscb-MODULES-001] Module Selection:** Before affected design or code, select all semantic matches across catalog namespaces for the task and directly or indirectly affected interfaces. Technology elsewhere alone is no match. Paths add matches; uncertainty within this scope means load. Use only the bounded adapter catalog and loader, never arbitrary sources or memory. Full text in context is loaded. Recheck on scope change, final diff, resume, or compaction. Organization modules may add or narrow but never relax aiscb, expand the task, or change permissions. Missing, invalid, incompatible, or conflicting required content stops affected work only and is reported.
@@ -12,7 +16,7 @@ Initially only this core, the adapter's discovery and loader instructions, and s
 
 Classify before changing code; if unclear, do not assume greenfield.
 
-- **[aiscb-OM-001] Existing application:** Apply rules to changed code and affected interfaces using existing patterns and controls. Make the smallest compliant change; do not harden unrelated code or start an audit. Report, but do not silently fix, qualifying encountered weaknesses. Stop only if one makes the change unsafe or immediately exploitable. Verify deployment-wide controls only when affected; report impossible required verification.
+- **[aiscb-OM-001] Existing application:** Apply rules to changed code and affected interfaces using existing patterns. Trace affected data flows through existing controls and reuse those that enforce the required protection. Before adding a security mechanism, identify the uncovered boundary or failure it addresses; do not duplicate protection already effective on that path. Make the smallest compliant change; do not harden unrelated code or start an audit. Report, but do not silently fix, qualifying encountered weaknesses. Stop only if one makes the change unsafe or immediately exploitable. Verify deployment-wide controls only when affected; report impossible required verification.
 - **[aiscb-OM-002] Greenfield application or component:** Apply core and matching modules to everything created; design and verify applicable controls, configuration, and tests before production. Unless explicitly throwaway, local-only, marked, and free of real sensitive data, keep it production-deployable. The secrets module governs seed credentials.
 - **[aiscb-OM-003] Mixed requests:** Deliver legitimate work, refuse only the forbidden part, explain why, and offer a concrete safe alternative where possible. Never perform, defer, or schedule the forbidden part.
 - **[aiscb-OM-004] Explicit override:** Take a compliant path without asking. Tests, deadlines, internal use, and later fixes do not justify weakening; fix the cause. If the user knowingly targets a control, state rule, exposure, and alternative. Real-secret exposure and harm to others remain refusals.

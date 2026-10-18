@@ -30,7 +30,7 @@ VERSION_HOOK_DIR = ".aiscb"
 VERSION_HOOK_NAME = "show-baseline-version.py"
 INSTALLER_NAME = "install.py"
 SESSION_LOADER_NAME = "session-loader.md"
-SESSION_PARTS = 4
+SESSION_PARTS = 5
 SESSION_PART_CHARS = 7100
 PREVIOUS_DATA_DIR_NAME = "ai-secure-coding-baseline"
 INSTALLER_SOURCE = Path(__file__).resolve()
@@ -66,6 +66,7 @@ KNOWN_HOOK_DIGESTS = (
     "2b4c6d1f85b76294169d1b958bc2b0a98da6952b6b9768c99823cb2d7582cec5",
     "238dcc65b98b93f404310caacf16e163f1ea0387debcd77b47446e4160f3ed5a",
     "45fcef85aedc66f2d5e06157b11fb9294ae5e7506581c5448d9a02ffa33ebe46",
+    "14721199a7ae1054da1f2bb12f269c6f369f0155a7eb7e4caaf8178c4e258151",
 )
 COPILOT_VERSION_HOOK_NAME = "aiscb-baseline-version.json"
 PREVIOUS_COPILOT_VERSION_HOOK_NAME = "aisec-baseline-version.json"
@@ -1066,7 +1067,13 @@ def _is_moved_version_hook(existing: object, entry: dict[str, object]) -> bool:
     """An entry this installer wrote for a helper that has since moved."""
     # Session hooks carry part numbers and a validation command. Comparing only
     # their shape would discard those arguments and accept customized commands.
-    if "--session-context" in json.dumps(entry) or "--session-check" in json.dumps(entry):
+    if "--session-context" in json.dumps(entry):
+        # The previous release emitted exactly the first four current handlers.
+        # Compare complete commands and settings, never a path-normalized shape.
+        handlers = entry.get("hooks", [])
+        previous = {**entry, "hooks": handlers[:4]}
+        return existing == entry or (len(handlers) == SESSION_PARTS and existing == previous)
+    if "--session-check" in json.dumps(entry):
         return existing == entry
     return (
         VERSION_HOOK_NAME in json.dumps(existing, ensure_ascii=False)
@@ -1123,21 +1130,22 @@ def _powershell_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def _session_loader(source: Path, helper: Path) -> bytes:
+def _session_loader(source: Path, helper: Path, *, parts: int = SESSION_PARTS) -> bytes:
     project = helper.parent != source.parent
     location = BASELINE if project else str(source)
     script = f"{VERSION_HOOK_DIR}/{VERSION_HOOK_NAME}" if project else str(helper)
     command = f"python3 {shlex.quote(script)} --session-context --part"
+    commands = "\n".join(f"{command} {part}" for part in range(parts))
     return (
         "# AI Secure Coding Baseline session loader\n\n"
         "This installation uses a conditional loader. Before working, check for "
-        f"all {SESSION_PARTS} `aiscb-session-part` markers or an "
+        f"all {parts} `aiscb-session-part` markers or an "
         "`aiscb-session-disabled` marker for this installation in your context. "
         f"Its baseline source is `{location}` (relative to the project root "
         "for a project installation). Apply the supplied baseline parts when active.\n\n"
         "If the markers are missing, the startup hook did not load. Run each of "
-        f"the following commands from the project root, for parts 0 through {SESSION_PARTS - 1}:\n\n"
-        f"```sh\n{command} 0\n{command} 1\n{command} 2\n{command} 3\n```\n\n"
+        f"the following commands from the project root, for parts 0 through {parts - 1}:\n\n"
+        f"```sh\n{commands}\n```\n\n"
         "Use `py -3` instead of `python3` on Windows. Follow the returned "
         "`additionalContext`; if any result has `continue: false`, a command "
         "fails, or the output is incomplete, stop and report the loader failure. "
@@ -1145,6 +1153,26 @@ def _session_loader(source: Path, helper: Path) -> bytes:
         "to this installation; keep all other instructions. Never alter "
         "AISCB_DISABLE yourself to bypass the loader.\n"
     ).encode()
+
+
+def _managed_session_loader(content: bytes, source: Path, helper: Path) -> bool:
+    return any(content == _session_loader(source, helper, parts=parts)
+               for parts in (4, SESSION_PARTS))
+
+
+def _write_session_loader(loader: Path, source: Path, helper: Path) -> None:
+    content = _session_loader(source, helper)
+    if loader.is_symlink():
+        raise ValueError("loader is a symlink")
+    if loader.exists():
+        current = read_limited(loader, MAX_INSTRUCTION_BYTES)
+        if not _managed_session_loader(current, source, helper):
+            raise ValueError("loader contains different content")
+        if current != content:
+            _atomic_replace(loader, content)
+    else:
+        loader.parent.mkdir(parents=True, exist_ok=True)
+        _write_new(loader, content)
 
 
 def _session_link(target: Path, source: Path) -> bool:
@@ -1157,8 +1185,8 @@ def _session_link(target: Path, source: Path) -> bool:
         if loader.is_symlink() or not loader.is_file():
             return False
         try:
-            return read_limited(loader, MAX_INSTRUCTION_BYTES) == _session_loader(
-                source, directory / VERSION_HOOK_NAME
+            return _managed_session_loader(
+                read_limited(loader, MAX_INSTRUCTION_BYTES), source, directory / VERSION_HOOK_NAME
             )
         except (OSError, ValueError):
             return False
@@ -1237,7 +1265,6 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
     targets = user_targets(home) if home is not None else project_targets(root)
     helper = version_hook_path(root, home)
     loader = helper.parent / SESSION_LOADER_NAME
-    loader_content = _session_loader(source, helper)
     plans = []
     try:
         if any(ord(char) < 32 or char == "`" for char in str(source) + str(helper)):
@@ -1252,7 +1279,8 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
             baseline = bundled_baseline()
         if len(baseline.content.decode("utf-8")) > SESSION_PARTS * SESSION_PART_CHARS:
             raise ValueError("baseline exceeds session context capacity")
-        if loader.is_symlink() or (loader.exists() and read_limited(loader, MAX_INSTRUCTION_BYTES) != loader_content):
+        if loader.is_symlink() or (loader.exists() and not _managed_session_loader(
+                read_limited(loader, MAX_INSTRUCTION_BYTES), source, helper)):
             raise ValueError("loader contains different content")
         for tool in tools:
             target = targets[tool][0][1]
@@ -1277,7 +1305,7 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
             entry = _session_hook(tool, helper, home is None)
             kept = []
             for item in entries:
-                if _is_moved_version_hook(item, legacy) or item == entry:
+                if _is_moved_version_hook(item, legacy) or _is_moved_version_hook(item, entry):
                     continue
                 if VERSION_HOOK_NAME in json.dumps(item):
                     raise ValueError("a baseline hook was customized")
@@ -1314,11 +1342,15 @@ def install_session_switch(tools: list[str], root: Path, home: Path | None) -> l
         return report
     if home is not None and _place_installer(home, report) is None:
         return report
+    try:
+        # Require all parts before replacing a helper that may emit more of them.
+        _write_session_loader(loader, source, helper)
+    except (OSError, ValueError):
+        report.append("blocked session switch: cannot update the managed loader")
+        return report
     if _place_version_hook(root, home, report) is None:
         return report
     try:
-        if not loader.exists():
-            _write_new(loader, loader_content)
         for tool, target, path, config, existed, import_plan in plans:
             _write_hook_config(path, config, existed)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -1406,8 +1438,8 @@ def install_static_loading(tools: list[str], root: Path, home: Path | None) -> l
             session = _session_hook(tool, helper, project)
             session_check = _session_check_hook(tool, helper, project)
             legacy = (_claude_version_hook if tool == "claude" else _codex_version_hook)(helper, project)
-            notice = any(item == session or _is_moved_version_hook(item, legacy) for item in starts)
-            kept = [item for item in starts if item != session and not _is_moved_version_hook(item, legacy)]
+            notice = any(_is_moved_version_hook(item, session) or _is_moved_version_hook(item, legacy) for item in starts)
+            kept = [item for item in starts if not _is_moved_version_hook(item, session) and not _is_moved_version_hook(item, legacy)]
             kept_checks = [item for item in checks if item != session_check]
             if any(VERSION_HOOK_NAME in json.dumps(item) for item in kept + kept_checks):
                 raise ValueError("a baseline hook was customized")
@@ -1457,7 +1489,7 @@ def install_static_loading(tools: list[str], root: Path, home: Path | None) -> l
         if (
             loader.is_file() and not loader.is_symlink()
             and not any(_session_link(targets[tool][0][1], source) for tool in ("claude", "codex"))
-            and read_limited(loader, MAX_INSTRUCTION_BYTES) == _session_loader(source, helper)
+            and _managed_session_loader(read_limited(loader, MAX_INSTRUCTION_BYTES), source, helper)
         ):
             loader.unlink()
             report.append(f"removed {loader}")
@@ -1590,12 +1622,19 @@ def install_version_hooks(
     tools: list[str], root: Path, home: Path | None
 ) -> list[str]:
     report: list[str] = []
-    helper = _place_version_hook(root, home, report)
-    if helper is None:
-        return report
     project = home is None
     source = user_source(home) if home is not None else root / BASELINE
     targets = user_targets(home) if home is not None else project_targets(root)
+    helper = version_hook_path(root, home)
+    if any(tool in {"claude", "codex"} and _session_link(targets[tool][0][1], source)
+           for tool in tools):
+        try:
+            _write_session_loader(helper.parent / SESSION_LOADER_NAME, source, helper)
+        except (OSError, ValueError):
+            report.append("blocked session switch: cannot update the managed loader")
+            return report
+    if _place_version_hook(root, home, report) is None:
+        return report
     for tool in tools:
         if tool in {"claude", "codex"} and _session_link(targets[tool][0][1], source):
             _install_merged_version_hook(
@@ -2553,7 +2592,7 @@ def remove_installation(installation: Installation, report: list[str]) -> bool:
     helper = version_hook_path(root, home)
     loader = helper.parent / SESSION_LOADER_NAME
     if loader.is_file() and not loader.is_symlink():
-        if read_limited(loader, MAX_INSTRUCTION_BYTES) == _session_loader(installation.source, helper):
+        if _managed_session_loader(read_limited(loader, MAX_INSTRUCTION_BYTES), installation.source, helper):
             loader.unlink()
             report.append(f"removed {loader}")
     _remove_version_hooks(root, home, report)

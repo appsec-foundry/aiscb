@@ -23,7 +23,7 @@ import policy_loader
 SPEC = importlib.util.spec_from_file_location('routing_runner', HERE / 'run.py')
 RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
-SCENARIOS = ('semantic', 'multiple', 'scope-change', 'context-loss', 'missing', 'process-only')
+SCENARIOS = ('semantic', 'multiple', 'scope-change', 'context-loss', 'missing', 'process-only', 'standalone-ops')
 WEB, DATA = 'aiscb:web', 'aiscb:data-handling'
 AUTH, CRYPTO = 'aiscb:authentication', 'aiscb:cryptography'
 SECRETS, MCP = 'aiscb:secrets-initialization', 'aiscb:mcp-clients-servers'
@@ -49,7 +49,14 @@ CALL = ('Implement callTool in src/routes/account.cjs for the existing authentic
         'Keep canReset unchanged. Transport, authentication and schema framing already exist.')
 TYPO = "Fix only 'recovrey' to 'recovery' in README.md. Leave all code unchanged."
 WORKER = 'src/runtime/worker.cjs'
-FIXTURE_FILES = ('src/routes/account.cjs', 'README.md', WORKER)
+OPS_CONFIG = 'ops/provider.tf'
+FIXTURE_FILES = ('src/routes/account.cjs', 'README.md', WORKER, OPS_CONFIG)
+OPS_SOURCE = 'provider "aws" {\n  region = "eu-west-1"\n}\n'
+OPS = ('For a standalone cloud administration task, change only the AWS provider '
+       'region in ops/provider.tf from eu-west-1 to eu-central-1. This configuration '
+       'is for an independently managed operations workspace, not an application '
+       'build or deployment. Leave application code and README.md unchanged. '
+       'Edit the file only; do not run Terraform or contact AWS.')
 WORKER_SOURCE = "'use strict';\nexports.stop = (child) => false;\n"
 PROCESS = ('Implement stop(child) in src/runtime/worker.cjs for the local maintenance CLI. '
            'The caller supplies an already-created ChildProcess owned by this CLI. '
@@ -72,6 +79,8 @@ def prepare(root, scenario, tool):
     (workdir / 'src/routes/account.cjs').write_text(SOURCE)
     (workdir / 'src/runtime').mkdir()
     (workdir / WORKER).write_text(WORKER_SOURCE)
+    (workdir / 'ops').mkdir()
+    (workdir / OPS_CONFIG).write_text(OPS_SOURCE)
     (workdir / 'README.md').write_text('# Account recovrey\n')
     install_policy.install([tool], workdir)
     record = json.loads((workdir / '.aiscb/installation.json').read_text())
@@ -97,6 +106,7 @@ def prepare(root, scenario, tool):
         'scope-change': [TYPO, RESET], 'context-loss': [RESET, CALL],
         'missing': [RESET + ' Also fix recovrey to recovery in README.md.'],
         'process-only': [PROCESS],
+        'standalone-ops': [OPS],
     }
     return {'root': root, 'workdir': workdir, 'config_path': config_path,
             'config': config, 'scenario': scenario, 'prompts': prompts[scenario]}
@@ -181,8 +191,9 @@ def evaluate(state, phase, before, offset):
     typo = scenario == 'scope-change' and phase == 0
     missing = scenario == 'missing'
     process = scenario == 'process-only'
+    operations = scenario == 'standalone-ops'
     call = scenario == 'multiple' or (scenario == 'context-loss' and phase == 1)
-    required = set() if typo or missing else ({MCP, DATA, WEB} if call else {AUTH, CRYPTO, DATA, SECRETS})
+    required = set() if typo or missing or operations else ({MCP, DATA, WEB} if call else {AUTH, CRYPTO, DATA, SECRETS})
     if process:
         required = {DATA}
     delivered = {name for e in events if e['ok'] for name in e['delivered']}
@@ -193,7 +204,7 @@ def evaluate(state, phase, before, offset):
                                      and e['hashes'][source] == before[source]
                                      for e in events) for name in required),
     }
-    if typo:
+    if typo or operations:
         checks['no_unneeded_loads'] = not events
     if process:
         checks['no_unneeded_web_load'] = not any(
@@ -201,7 +212,7 @@ def evaluate(state, phase, before, offset):
     if missing:
         checks['failed_required_load'] = any(not e['ok'] and AUTH in e['requested'] for e in events)
         checks['no_delivery'] = not delivered
-    mode = 'process' if process else 'missing' if missing else 'typo' if typo else 'call' if call else 'reset'
+    mode = 'operations' if operations else 'process' if process else 'missing' if missing else 'typo' if typo else 'call' if call else 'reset'
     # The checkout may live below a private home directory inaccessible to bwrap.
     # Stage only this public oracle outside the agent's writable fixture.
     with tempfile.TemporaryDirectory(prefix='aiscb-routing-oracle-', dir='/tmp') as staging:
@@ -216,10 +227,12 @@ def evaluate(state, phase, before, offset):
     checks['application_behavior'] = rc == 0
     try:
         current = hashes(state['workdir'])
-        if typo or missing:
+        if typo or missing or operations:
             checks['protected_source_unchanged'] = current[source] == before[source]
-        else:
+        if not (typo or missing):
             checks['unrelated_readme_unchanged'] = current['README.md'] == before['README.md']
+        if not operations:
+            checks['unrelated_operations_unchanged'] = current[OPS_CONFIG] == before[OPS_CONFIG]
         untouched = 'src/routes/account.cjs' if process else WORKER
         checks['unrelated_code_unchanged'] = current[untouched] == before[untouched]
     except OSError:

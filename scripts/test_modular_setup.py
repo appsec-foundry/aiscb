@@ -319,6 +319,28 @@ class ModularSetupTests(unittest.TestCase):
                      self.home / ".copilot/instructions/secure-coding.instructions.md"):
             self.command(path)
 
+    def test_four_part_dynamic_installation_migrates_to_modular(self):
+        self.legacy(True)
+        report = install.install_session_switch(['claude', 'codex'], self.project, self.home)
+        self.assertFalse(any(line.startswith('blocked') for line in report), report)
+        helper = install.version_hook_path(self.project, self.home)
+        source = install.user_source(self.home)
+        (helper.parent / install.SESSION_LOADER_NAME).write_bytes(
+            install._session_loader(source, helper, parts=4))
+        own = {'hooks': [{'type': 'command', 'command': 'echo own-hook'}]}
+        for tool in ('claude', 'codex'):
+            path = install._session_hook_path(tool, self.project, self.home)
+            config = json.loads(path.read_text())
+            config['hooks']['SessionStart'][0]['hooks'] = config['hooks']['SessionStart'][0]['hooks'][:4]
+            config['hooks']['SessionStart'].append(own)
+            path.write_text(json.dumps(config))
+        result = self.cli('--user', '--migrate')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for tool in ('claude', 'codex'):
+            path = install._session_hook_path(tool, self.project, self.home)
+            self.assertEqual(json.loads(path.read_text())['hooks']['SessionStart'], [own])
+        self.command(self.home / '.codex/AGENTS.md')
+
     def test_symlink_parent_and_override_refuse(self):
         outside = self.base / "outside"
         outside.mkdir()

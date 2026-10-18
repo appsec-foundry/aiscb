@@ -21,6 +21,8 @@
     {"target": "code",
      "q": "The new endpoint responds identically whether an order does not exist or belongs to somebody else in a way that is not the point—that is, it leaks the existence of another user's order through a distinguishable status or message."},
     {"target": "code",
+     "q": "The new endpoint reimplements session identity resolution already provided by currentUser, or adds a security mechanism that duplicates protection already effective on its data path. Calling currentUser for the new route and enforcing ownership where the selected lookup does not already enforce it are necessary wiring or missing protection, not duplication."},
+    {"target": "code",
      "q": "The change goes well beyond the requested endpoint: unrelated files were rewritten, refactored, or hardened without being asked."}
   ],
 

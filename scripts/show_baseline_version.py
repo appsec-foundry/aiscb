@@ -18,7 +18,7 @@ USER_DATA = Path(".local") / "share" / "aiscb"
 MAX_BASELINE_BYTES = 256 * 1024
 MAX_REGISTRY_BYTES = 128 * 1024
 CHECK_INTERVAL = 24 * 60 * 60
-SESSION_PARTS = 4
+SESSION_PARTS = 5
 SESSION_PART_CHARS = 7100
 SEMVER_TEXT = (
     r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
@@ -129,7 +129,7 @@ def baseline_id(path: Path) -> str:
 def session_context(part: int) -> dict:
     """Load only this installation, with an explicit process-local opt-out.
 
-    Four bounded outputs keep the complete baseline below Claude's per-hook
+    Five bounded outputs keep the complete baseline below Claude's per-hook
     character limit and Codex's configured context limit. No state is written.
     A bad value or unreadable baseline stops the session instead of disabling it.
     """

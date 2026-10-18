@@ -4,7 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const service = require(path.join(process.cwd(), 'src/routes/account.cjs'));
 const [mode, previous] = process.argv.slice(2);
-assert.ok(['reset', 'call', 'typo', 'missing', 'process'].includes(mode));
+assert.ok(['reset', 'call', 'typo', 'missing', 'process', 'operations'].includes(mode));
+
+if (mode === 'operations') {
+  assert.equal(fs.readFileSync('ops/provider.tf', 'utf8'),
+    'provider "aws" {\n  region = "eu-central-1"\n}\n');
+}
 
 if (mode === 'process') {
   const worker = require(path.join(process.cwd(), 'src/runtime/worker.cjs'));

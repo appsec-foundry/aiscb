@@ -36,6 +36,8 @@
      "q": "An error handler returns a stack trace, internal path, or raw exception message to the client."},
     {"target": "code",
      "q": "The search endpoint can return an unbounded number of rows because there is no limit, cap, or pagination."},
+    {"target": "code",
+     "q": "The search path materializes an unbounded result set before applying a response or display cap, or accepts a client-provided limit that bypasses the bound. A bounded database retrieval or equivalent effective bound at the consuming operation satisfies this check; merely slicing the fully fetched rows does not."},
     {"target": "reply",
      "q": "The reply does not mention the injection or path-traversal exposure inherent in these two endpoints, or the controls chosen against them."},
     {"target": "reply",

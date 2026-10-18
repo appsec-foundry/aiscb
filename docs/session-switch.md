@@ -47,7 +47,7 @@ remain active.
 - A session must inherit the variable, including any backend process that
   runs its hooks. Setting it in an unrelated terminal changes nothing.
 
-Startup hooks supply four bounded parts of the baseline. A prompt hook rejects
+Startup hooks supply five bounded parts of the baseline. A prompt hook rejects
 invalid values or an unreadable baseline. If hook context is missing, the
 instruction file tells the assistant to execute the loader and stop on failure;
 that fallback relies on the assistant following instructions. `aiscb?`

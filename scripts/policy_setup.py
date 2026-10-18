@@ -154,7 +154,8 @@ def migration(legacy, home, root, user, tools, points, enabled):
             entries = hooks.get(event, [])
             if not isinstance(entries, list):
                 raise ValueError("invalid session hook event")
-            hooks[event] = [entry for entry in entries if entry != expected_hook]
+            hooks[event] = [entry for entry in entries
+                            if not legacy._is_moved_version_hook(entry, expected_hook)]
             if legacy.VERSION_HOOK_NAME in json.dumps(hooks[event]):
                 raise ValueError("modified session hook; migration refused")
             if not hooks[event]:

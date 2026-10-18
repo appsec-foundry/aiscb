@@ -4,6 +4,7 @@
   "core": {
     "file": "aiscb-core.md",
     "rules": [
+      "aiscb-SCOPE-001",
       "aiscb-MODULES-001",
       "aiscb-OM-001",
       "aiscb-OM-002",
@@ -21,8 +22,8 @@
       "aiscb-TESTS-001",
       "aiscb-REPORT-001"
     ],
-    "size": 8060,
-    "sha256": "8adba567b907f8756c76da50af056bf1eadd232a60726646c1d5e7102bf05806"
+    "size": 8891,
+    "sha256": "66dd4fe389c968d528800903f11b2c99253f9a8f132245473baba212f7345992"
   },
   "modules": [
     {
@@ -92,8 +93,8 @@
         "aiscb-FILES-001",
         "aiscb-EGRESS-001"
       ],
-      "size": 2706,
-      "sha256": "0cddc83bc873a90246d3c71a3bb69df0c0f6eef0f067260303b6d51988c482b2"
+      "size": 2795,
+      "sha256": "b9e68e5ba82fac5bf69f18b47c4f7b122d7ec42ea030a8da3cde1ab3df303621"
     },
     {
       "id": "aiscb:secrets-initialization",

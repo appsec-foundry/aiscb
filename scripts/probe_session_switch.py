@@ -121,7 +121,8 @@ def probe(tool, user, server):
                 source.unlink()
             result = subprocess.run(argv, cwd=cwd, env=env, capture_output=True, timeout=35)
             request = json.dumps(server.requests)
-            complete = all(json.dumps(baseline[i * 7000:(i + 1) * 7000])[1:-1] in request for i in range(4))
+            complete = all(json.dumps(baseline[i * install.SESSION_PART_CHARS:(i + 1) * install.SESSION_PART_CHARS])[1:-1]
+                           in request for i in range(install.SESSION_PARTS))
             other = all(marker in request for marker in ("OTHER_USER_MARKER", "OTHER_PROJECT_MARKER", "SEPARATE_OVERLAY_MARKER"))
             if value in {"invalid", "missing"}:
                 ok = not server.requests

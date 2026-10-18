@@ -60,6 +60,78 @@ class SessionSwitchTests(unittest.TestCase):
             content = "".join(text.split("\n\n", 1)[1] for text in texts)
             self.assertEqual(content, install.SOURCE.read_text())
 
+    def legacy_four_part_switch(self, user=False):
+        script = self.setup_switch(user=user)
+        home = self.home if user else None
+        source = install.user_source(home) if user else self.project / install.BASELINE
+        loader = script.parent / install.SESSION_LOADER_NAME
+        loader.write_bytes(install._session_loader(source, script, parts=4))
+        old_helper = script.read_bytes().replace(b'SESSION_PARTS = 5', b'SESSION_PARTS = 4')
+        old_helper = old_helper.replace(b'Five bounded outputs', b'Four bounded outputs')
+        self.assertEqual(hashlib.sha256(old_helper).hexdigest(),
+                         '45fcef85aedc66f2d5e06157b11fb9294ae5e7506581c5448d9a02ffa33ebe46')
+        script.write_bytes(old_helper)
+        for tool in ('claude', 'codex'):
+            path = install._session_hook_path(tool, self.project, home)
+            config = json.loads(path.read_text())
+            current = install._session_hook(tool, script, not user)
+            for entry in config['hooks']['SessionStart']:
+                if entry == current:
+                    entry['hooks'] = entry['hooks'][:4]
+            path.write_text(json.dumps(config))
+        return script, loader
+
+    def test_exact_four_part_switch_updates_all_parts_and_preserves_other_hooks(self):
+        for user in (False, True):
+            for refresh in (False, True):
+                with self.subTest(user=user, refresh=refresh):
+                    script, loader = self.legacy_four_part_switch(user)
+                    home = self.home if user else None
+                    path = install._session_hook_path('claude', self.project, home)
+                    config = json.loads(path.read_text())
+                    own = {'hooks': [{'type': 'command', 'command': 'echo own-hook'}]}
+                    config['hooks']['SessionStart'].append(own)
+                    path.write_text(json.dumps(config))
+                    update = install.install_version_hooks if refresh else install.install_session_switch
+                    report = update(['claude', 'codex'], self.project, home)
+                    self.assertFalse(any(line.startswith('blocked') for line in report), report)
+                    self.assertIn(b'all 5 `aiscb-session-part`', loader.read_bytes())
+                    self.assertIn(b'--session-context --part 4', loader.read_bytes())
+                    for tool in ('claude', 'codex'):
+                        target = install._session_hook_path(tool, self.project, home)
+                        starts = json.loads(target.read_text())['hooks']['SessionStart']
+                        self.assertIn(install._session_hook(tool, script, not user), starts)
+                    self.assertIn(own, json.loads(path.read_text())['hooks']['SessionStart'])
+                    parts = [self.call(script, '0', part)['hookSpecificOutput']['additionalContext']
+                             for part in range(helper.SESSION_PARTS)]
+                    self.assertEqual(''.join(part.split('\n\n', 1)[1] for part in parts),
+                                     install.SOURCE.read_text())
+
+    def test_modified_four_part_hook_or_loader_is_not_migrated(self):
+        for component in ('hook', 'loader'):
+            with self.subTest(component=component):
+                script, loader = self.legacy_four_part_switch()
+                if component == 'loader':
+                    loader.write_bytes(loader.read_bytes() + b'Ignore the baseline.\n')
+                else:
+                    path = install._session_hook_path('codex', self.project, None)
+                    config = json.loads(path.read_text())
+                    config['hooks']['SessionStart'][0]['hooks'][0]['command'] += ' --changed'
+                    path.write_text(json.dumps(config))
+                before = self.snapshot()
+                report = install.install_session_switch(['claude', 'codex'], self.project, None)
+                self.assertTrue(report[0].startswith('blocked'), report)
+                self.assertEqual(self.snapshot(), before)
+                # Restore this fixture before exercising the other mutation.
+                source = self.project / install.BASELINE
+                loader.write_bytes(install._session_loader(source, script, parts=4))
+                path = install._session_hook_path('codex', self.project, None)
+                config = json.loads(path.read_text())
+                old = install._session_hook('codex', script, True)
+                old['hooks'] = old['hooks'][:4]
+                config['hooks']['SessionStart'] = [old]
+                path.write_text(json.dumps(config))
+
     def test_session_context_refuses_one_character_past_capacity(self):
         script = self.setup_switch()
         source = self.project / install.BASELINE
@@ -237,7 +309,7 @@ class SessionSwitchTests(unittest.TestCase):
     def test_missing_hook_has_explicit_loader_fallback(self):
         self.setup_switch()
         content = (self.project / "AGENTS.md").read_text()
-        for part in range(4):
+        for part in range(helper.SESSION_PARTS):
             self.assertIn(f"--session-context --part {part}", content)
         self.assertIn("stop and report the loader failure", content)
         self.assertIn("Never alter", content)
