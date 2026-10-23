@@ -1,0 +1,5 @@
+{
+  "quick": [],
+  "standard": [],
+  "thorough": ["authz", "input_validation"]
+}

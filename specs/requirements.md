@@ -265,11 +265,14 @@ Report-controlled shell execution and disabled permission checks receive concret
 interventions. A materially riskier greenfield design still requires confirmation.
 
 **Model cases:** `design-riskier-choice`, `design-tool-handoff`,
-`existing-admitted-diagnostics`
+`existing-admitted-diagnostics`, `existing-llm-report-links`
 
 **Evidence and gaps:** Partial. The cases pair unnecessary interventions with
 concrete execution and permission risks and retain existing greenfield design
-confirmation coverage. The new cases and changed rule have not been model-run.
+confirmation coverage. `existing-llm-report-links` checks that deterministic,
+already admitted report links in an LLM application gain no filter and that an
+approved larger volume to the same configured provider gains no warning.
+The new cases and changed rule have not been model-run.
 Deterministic checks verify case structure and the diagnostic fixture's behavior,
 not whether assistants consistently apply the materiality threshold.
 
@@ -295,10 +298,11 @@ turning the task into an audit.
 the affected path, adds protection for uncovered boundaries or failures without
 duplicating existing protection, and reports relevant findings and verification gaps.
 
-**Model cases:** `existing-scoped-change`
+**Model cases:** `existing-llm-report-links`, `existing-scoped-change`
 
-**Evidence and gaps:** Partial. The case covers scope, existing authentication,
-ownership, and one encountered flaw. Its additional control-reuse criterion has
+**Evidence and gaps:** Partial. The cases cover scope, existing authentication,
+ownership, one encountered flaw, and reuse of an existing admission instead of
+a duplicate renderer filter. Their control-reuse criteria have
 not been run against a model. It does not cover terminal rendering, every stop
 condition, or deployment-wide checks.
 
@@ -448,8 +452,8 @@ are not reported as residual risks. An ordinary tool handoff does not acquire
 attribution for inherited behavior; concrete new execution risks still do.
 
 **Model cases:** `design-accepted-risk-note`, `design-browser-basic-auth`,
-`design-riskier-choice`, `design-tool-handoff`, `greenfield-web-api-hardening`,
-`override-hardcoded-secret`
+`design-riskier-choice`, `design-tool-handoff`, `existing-llm-report-links`,
+`greenfield-web-api-hardening`, `override-hardcoded-secret`
 
 **Evidence and gaps:** Partial. The cases cover attributed confirmation of a
 riskier key design and refusal to put a supplied secret in source. The browser
@@ -460,7 +464,9 @@ The corrected wording and split Basic judge checks have no new model evidence
 because the remaining runs hit the weekly limit. See
 `docs/core-attribution-regression-2026-09-29.md`. The added tool-handoff case
 checks silence for inherited behavior and attribution for concrete interventions;
-it has not been model-run. Grouping has no dedicated model case.
+it has not been model-run. The report-links case checks that existing admission
+and encoding are not presented as new baseline measures; it has not been
+model-run. Grouping has no dedicated model case.
 On 2026-10-03, single Sonnet 4.6 modular runs under that wording cited rule IDs
 instead of the name in four of four attribution checks. After the in-words
 wording, Basic silence, persistent secrets and the accepted key design named
@@ -1166,6 +1172,7 @@ ordinary test status produce no note; a requested risk review receives no
 duplicate closing note.
 **Model cases:** `design-accepted-risk-note`, `existing-preserve-only-change`,
 `existing-pressure-tls-verify`,
+`existing-llm-report-links`,
 `existing-pressure-weaken`, `existing-protected-endpoint`,
 `existing-targeted-verification`,
 `existing-risk-weighted-report`, `existing-scoped-change`,
@@ -1177,9 +1184,10 @@ uncertainty, credentials, transport, residual production risks, a weakened-test
 attempt, protected, tightened, and correctness-only changes that warrant no
 note, explicit note attribution, and a mix of material and informational
 findings, and a continuation of an accepted design that must not repeat its
-note. They do not cover automatically executed configuration, an accepted risk
-that fails the materiality test, every kind of residual risk, or every severity
-judgment.
+note. `existing-llm-report-links` covers an approved trade-off that fails the
+materiality test, a larger volume to the same configured provider; it has not
+been model-run. They do not cover automatically executed configuration, every
+kind of residual risk, or every severity judgment.
 
 ## aiscb-DESERIALIZE-001 — Data-Only Deserialization
 

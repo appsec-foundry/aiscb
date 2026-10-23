@@ -2,11 +2,14 @@
 """Deterministic tests for the model runner's scoring and case discovery."""
 
 import importlib.util
+import io
 import json
+import os
 import re
 import shutil
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -374,6 +377,56 @@ exports.getOrder = (req, res) => {
             text = report.read_text(encoding="utf-8")
         self.assertIn("Unscored judge decisions: 1", text)
         self.assertIn("unknown — unclear", text)
+
+    def run_main_until_preflight(self, workroot, *flags):
+        """Run main() with a fake CLI and record CLAUDE_CONFIG_DIR at preflight."""
+        seen = []
+
+        class Stop(Exception):
+            pass
+
+        def preflight(tools, arms, args):
+            seen.append(os.environ.get("CLAUDE_CONFIG_DIR"))
+            raise Stop
+
+        argv = ["run.py", "--cases", "existing-llm-report-links", "--repeats", "1",
+                "--no-judge", "--workroot", workroot, *flags]
+        with patch.object(RUNNER, "preflight", preflight), \
+                patch.object(RUNNER.shutil, "which", return_value="/usr/bin/true"), \
+                patch.object(RUNNER.sys, "argv", argv), \
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            try:
+                RUNNER.main()
+            except Stop:
+                pass
+        return seen
+
+    def test_isolated_profile_covers_preflight_and_restores_environment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "profile"
+            source.mkdir()
+            (source / ".credentials.json").write_text("synthetic-test-login")
+            with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(source)}):
+                seen = self.run_main_until_preflight(tmp, "--isolated-profile")
+                self.assertEqual(len(seen), 1)
+                self.assertNotEqual(seen[0], str(source))
+                self.assertFalse(Path(seen[0]).exists())
+                self.assertEqual(os.environ["CLAUDE_CONFIG_DIR"], str(source))
+                self.assertEqual(self.run_main_until_preflight(tmp), [str(source)])
+            self.assertEqual((source / ".credentials.json").read_text(), "synthetic-test-login")
+
+    def test_isolated_profile_without_login_stops_before_preflight(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": tmp}):
+                with self.assertRaises(SystemExit) as exit_info:
+                    self.run_main_until_preflight(tmp, "--isolated-profile")
+                self.assertEqual(exit_info.exception.code, 2)
+                self.assertEqual(os.environ["CLAUDE_CONFIG_DIR"], tmp)
+
+    def test_control_contamination_names_the_isolated_profile_for_claude(self):
+        probe = {"tool": "claude", "arm": "control", "found": ["aiscb-0.1.19"]}
+        self.assertIn("--isolated-profile", RUNNER.preflight_problem(probe))
+        self.assertNotIn("--isolated-profile", RUNNER.preflight_problem(dict(probe, tool="codex")))
 
 
 if __name__ == "__main__":

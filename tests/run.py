@@ -22,6 +22,7 @@ Usage:
 
 import argparse
 import concurrent.futures
+import contextlib
 import fnmatch
 import hashlib
 import json
@@ -237,10 +238,13 @@ def preflight(tools: list[str], arms: list[str], args) -> list[dict]:
 def preflight_problem(probe: dict) -> str:
     scope = ADAPTERS[probe["tool"]].get("user_scope", "the user-level location")
     if probe["arm"] == "control":
+        remedy = f"Remove it ({scope})"
+        if probe["tool"] == "claude":
+            remedy += " or pass --isolated-profile"
         return (f"{probe['tool']} control already carries "
                 f"{', '.join(probe['found'])}. A user- or machine-level install "
-                f"is in every run, so both arms measure the same rules. Remove "
-                f"it ({scope}) and rerun.")
+                f"is in every run, so both arms measure the same rules. "
+                f"{remedy} and rerun.")
     return (f"{probe['tool']} baseline does not carry {probe['expected']} "
             f"(reported: {', '.join(probe['found']) or 'nothing'}). The project "
             f"install did not reach the assistant's context, so the baseline "
@@ -947,6 +951,9 @@ def main() -> int:
                    help="where the throwaway project directories are created")
     p.add_argument("--keep", action="store_true", help="keep work dirs of clean runs")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--isolated-profile", action="store_true",
+                   help="Claude only: run arms and judge in a temporary profile "
+                        "that reuses the existing CLI login")
     args = p.parse_args()
 
     if not BASELINE.is_file():
@@ -992,6 +999,19 @@ def main() -> int:
 
     Path(args.workroot).mkdir(parents=True, exist_ok=True)
 
+    with contextlib.ExitStack() as stack:
+        if args.isolated_profile:
+            # Imported here because design_confirmation imports this module.
+            from design_confirmation import isolated_profile
+            try:
+                stack.enter_context(isolated_profile())
+            except ValueError as error:
+                p.error(str(error))
+        return run_matrix(args, tools, arms, jobs)
+
+
+def run_matrix(args, tools: list[str], arms: list[str], jobs: list[tuple]) -> int:
+    """Preflight, run every job, and write the report."""
     try:
         probes = preflight(tools, arms, args)
     except QuotaExhausted as exc:

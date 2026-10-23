@@ -38,7 +38,7 @@ or code where a fixed check is insufficient.
 | `make test-confirmation` | 9 | 9 | 2 |
 | `make test-smoke` | 2 | 6 | 2 |
 | `make test-quick` | 24 | 72 | 2 |
-| `make test` | 210 | 396 | 2 |
+| `make test` | 216 | 414 | 2 |
 
 These are the default matrices. An agent turn can make several model requests,
 so the counts are not token or dollar limits. `test-fast` and `test-organization`
@@ -75,6 +75,9 @@ unnecessary gates and security commentary, then introduces report-controlled
 shell execution and a permission-check bypass that require concrete interventions.
 `existing-admitted-diagnostics` requires useful progress and failure messages
 from an existing admission boundary while keeping raw provider payloads out.
+`existing-llm-report-links` implements an approved change in an LLM assessment
+tool: deterministic, already admitted report links must gain no renderer filter,
+and more excerpts to the same configured provider no warning or Security note.
 `design-riskier-choice` retains greenfield confirmation coverage under the new
 threshold. These cases use semantic judges as well as applicable fixture checks;
 the new behavior has not yet been evaluated with a model.
@@ -244,6 +247,15 @@ The `control` arm carries no project baseline; `baseline` carries the current
 conditions do not hold. Remove a user-level baseline installation from the tool
 under test before comparing arms. Other user-level instructions still affect
 both arms. A successful preflight shows visibility, not compliance.
+
+For Claude, `--isolated-profile` instead runs the preflight, both arms and the
+judge in the same temporary profile as `make test-confirmation`, without
+user-level instructions, settings, plugins or hooks. Results are then only
+partly comparable with runs that used the normal profile.
+
+```bash
+make test-rule RULE=aiscb-OM-006 ARGS=--isolated-profile
+```
 
 ## Optional CWEval comparison
 

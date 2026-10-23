@@ -126,11 +126,12 @@ or merge the intermediate state where the README hash and bootstrap commit do
 not yet form a working pair.
 
 The model targets are a different matter: they run the cases against real
-models. `make test` is 132 agent runs and hours of tokens, `make test-all`
+models. `make test` is 138 agent runs and hours of tokens, `make test-all`
 twice that. Run them when the user asks, or for the cases a change affects —
 never as a routine check. They are evidence, not a gate. For a narrower
 question there is `make test-smoke` (does the harness work at all),
 `make test-quick`, and `make test-rule RULE=<id>` for the cases covering one
 rule group. They refuse to start unless the control arm carries no baseline
 and the baseline arm carries this one, which requires the baseline not to be
-installed at user level for the tool under test.
+installed at user level for the tool under test, or `--isolated-profile` for
+Claude.
