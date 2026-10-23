@@ -177,7 +177,7 @@ The assistant is instructed to:
 - Test affected controls, including failure and abuse cases, and review the diff.
 - Report concrete remaining risks; use **Security note (aiscb)** for risks the delivered work creates or worsens.
 
-Read the [core](baseline/aiscb-core.md) and [modules](baseline/modules/) for the rules, or the [requirements catalog](specs/requirements.md) for applicability and test coverage.
+Read the [core](baseline/aiscb-core.md) and [modules](baseline/modules/) for the rules, or the [requirements catalog](specs/requirements.md) for a plain-language summary, applicability, and test coverage.
 
 ## Using it
 

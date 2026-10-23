@@ -6,8 +6,9 @@ normative product. `make build-full-baseline` generates complete output under
 loading. Nothing under `specs/` is
 normative; it only records what the baseline contains and how it changes.
 
-- `requirements.md`: a readable catalog of the current rule groups, acceptance
-  criteria, model evidence, and known gaps.
+- `requirements.md`: a plain-language summary of what the baseline asks of an
+  assistant, followed by a readable catalog of the current rule groups,
+  acceptance criteria, model evidence, and known gaps.
 - `changes/<name>/`: a change being worked on.
 - `archive/<date>-<name>/`: a change that is finished.
 
@@ -72,9 +73,13 @@ Test cases name the IDs they exercise in their `checks.json`. A rule group
 without a case is not automatically a gap, and not automatically fine. Add a
 case relationship only when the case really observes that behavior.
 
-`requirements.md` explains each group in plain language. The baseline remains
-normative; catalog summaries and acceptance criteria must not add behavior. Each
-entry identifies its model cases and says which parts they do not cover.
+`requirements.md` explains each group in plain language. Its opening summary
+groups the baseline by what users notice and cites the rule groups behind each
+statement. The baseline remains normative; summaries and acceptance criteria
+must not add behavior. Each entry identifies its model cases and rule-specific
+deterministic checks, starts its evidence with a fixed status, and says which
+parts the cases do not cover. Run observations that need more than a sentence
+belong in `docs/model-run-history.md`.
 
 ## What is enforced
 
@@ -89,7 +94,10 @@ It fails on:
   Claude imports;
 - a case naming an ID the baseline does not define;
 - a missing, duplicate, unknown, or incomplete catalog entry, or one whose name,
-  section, source, evidence level, or case list no longer matches;
+  section, baseline order, source, evidence status, or case list no longer
+  matches, or whose deterministic check names a missing file;
+- a summary statement that cites no rule group or an unknown one, or a rule
+  group the summary does not cite;
 - a change directory with missing or incomplete proposal, requirement, or task
   content, including an invalid archive date or unfinished archived task;
 - malformed case metadata, an unknown key, a pattern that does not compile, or

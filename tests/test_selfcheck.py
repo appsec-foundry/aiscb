@@ -32,25 +32,34 @@ BASELINE = """\
 CATALOG = """\
 # Secure coding requirements catalog
 
-## aiscb-DEMO-001 — First rule
+## What the baseline asks of the assistant
 
-**Section:** Non-negotiable
+### Demo work
+
+- **The safe thing happens, twice.** The assistant does the safe thing and
+  repeats it. (`aiscb-DEMO-001`, `aiscb-DEMO-002`)
+
+## Non-negotiable
+
+### aiscb-DEMO-001 — First rule
+
 **Normative source:** `baseline/aiscb-core.md`, rule group `aiscb-DEMO-001`.
 **Applies when:** The demo runs.
 **Requirement:** Do the safe thing.
 **Observable acceptance:** The result is safe.
 **Model cases:** `demo-case`
+**Deterministic checks:** None.
 **Evidence and gaps:** Partial. One demo case covers it.
 
-## aiscb-DEMO-002 — Second rule
+### aiscb-DEMO-002 — Second rule
 
-**Section:** Non-negotiable
 **Normative source:** `baseline/aiscb-core.md`, rule group `aiscb-DEMO-002`.
 **Applies when:** The demo runs again.
 **Requirement:** Repeat the safe action.
 **Observable acceptance:** The result is safe again.
 **Model cases:** None.
-**Evidence and gaps:** None. No model case declares it.
+**Deterministic checks:** `tests/run.py`
+**Evidence and gaps:** No model case.
 """
 
 CHECKS = """\
@@ -782,22 +791,31 @@ def catalog_guard(expected: str | None, catalog: str | None, label: str,
 
 
 ENTRY = """\
-## aiscb-DEMO-001 — First rule
+## Non-negotiable
 
-**Section:** Non-negotiable
+### aiscb-DEMO-001 — First rule
+
 **Normative source:** `baseline/aiscb-core.md`, rule group `aiscb-DEMO-001`.
 **Applies when:** The demo runs.
 **Requirement:** Do the safe thing.
 **Observable acceptance:** The result is safe.
 **Model cases:** None.
-**Evidence and gaps:** None. No model case declares it.
+**Deterministic checks:** None.
+**Evidence and gaps:** No model case.
 """
+
+SECOND_ENTRY = (ENTRY.replace("## Non-negotiable\n\n", "")
+                .replace("aiscb-DEMO-001 — First rule", "aiscb-DEMO-002 — Second rule")
+                .replace("rule group `aiscb-DEMO-001`", "rule group `aiscb-DEMO-002`"))
+TWO_GROUPS = {"aiscb-DEMO-001": ("First rule", "Non-negotiable"),
+              "aiscb-DEMO-002": ("Second rule", "Non-negotiable")}
 
 catalog_guard("requirements catalog missing at", None,
               "catalog_entries reports a missing catalog")
-catalog_guard("malformed requirement heading", "## Not a requirement\n",
+catalog_guard("malformed requirement heading",
+              "## Non-negotiable\n\n### aiscb-DEMO-1 First rule\n",
               "catalog_entries reports a malformed heading")
-catalog_guard("repeats field", ENTRY + "**Section:** Non-negotiable\n",
+catalog_guard("repeats field", ENTRY + "**Model cases:** None.\n",
               "catalog_entries reports a repeated field")
 catalog_guard("lists 'aiscb-DEMO-001' twice", ENTRY + ENTRY,
               "check_requirement_catalog reports a duplicate entry")
@@ -811,9 +829,31 @@ catalog_guard("unknown field", ENTRY + "**Extra:** value\n",
               "check_requirement_catalog reports an unknown field")
 catalog_guard("is missing 'Requirement'", ENTRY.replace("**Requirement:**", "**Rule:**"),
               "check_requirement_catalog reports a missing field")
-catalog_guard("baseline has it in", ENTRY.replace("**Section:** Non-negotiable",
-                                                  "**Section:** Apply"),
+catalog_guard("baseline has it in", ENTRY.replace("## Non-negotiable", "## Apply"),
               "check_requirement_catalog reports a wrong section")
+catalog_guard("where the baseline order expects aiscb-DEMO-001",
+              "## Non-negotiable\n\n" + SECOND_ENTRY + "\n" + ENTRY.replace("## Non-negotiable\n\n", ""),
+              "check_requirement_catalog reports entries out of baseline order",
+              groups=TWO_GROUPS)
+catalog_guard(None, ENTRY + "\n" + SECOND_ENTRY,
+              "check_requirement_catalog on entries in baseline order",
+              groups=TWO_GROUPS)
+catalog_guard("does not exist",
+              ENTRY.replace("**Deterministic checks:** None.",
+                            "**Deterministic checks:** `tests/missing.py`"),
+              "check_requirement_catalog reports a missing deterministic check")
+catalog_guard("must be 'None.' or name test files",
+              ENTRY.replace("**Deterministic checks:** None.",
+                            "**Deterministic checks:** Some tests."),
+              "check_requirement_catalog reports deterministic checks without paths")
+catalog_guard(None,
+              ENTRY.replace("**Deterministic checks:** None.",
+                            "**Deterministic checks:** `specs/requirements.md`"),
+              "check_requirement_catalog on an existing deterministic check")
+catalog_guard("must start with 'No model case.'",
+              ENTRY.replace("**Evidence and gaps:** No model case.",
+                            "**Evidence and gaps:** Partial. Nothing runs it."),
+              "check_requirement_catalog reports evidence claimed without a case")
 catalog_guard("does not name its baseline rule group",
               ENTRY.replace("`baseline/aiscb-core.md`, rule group `aiscb-DEMO-001`.",
                             "somewhere else."),
@@ -825,11 +865,48 @@ catalog_guard("must start with 'Partial.'",
               ENTRY.replace("**Model cases:** None.", "**Model cases:** `a-case`"),
               "check_requirement_catalog reports the wrong evidence level",
               case_coverage={"aiscb-DEMO-001": ["a-case"]})
+catalog_guard(None,
+              ENTRY.replace("**Model cases:** None.", "**Model cases:** `a-case`")
+                   .replace("No model case.", "Not yet model-run. The case is new."),
+              "check_requirement_catalog on a declared case not yet model-run",
+              case_coverage={"aiscb-DEMO-001": ["a-case"]})
 catalog_guard("catalog does not list 'aiscb-DEMO-002'", ENTRY,
               "check_requirement_catalog reports an unlisted rule group",
-              groups={"aiscb-DEMO-001": ("First rule", "Non-negotiable"),
-                      "aiscb-DEMO-002": ("Second rule", "Non-negotiable")})
+              groups=TWO_GROUPS)
 catalog_guard(None, ENTRY, "check_requirement_catalog on a matching catalog")
+
+
+def summary_guard(expected: str | None, summary: str, label: str) -> None:
+    def run(root: Path) -> str:
+        index = written(root, "specs/requirements.md",
+                        "# Catalog\n\n" + summary + "\n" + ENTRY)
+        with paths(INDEX=index):
+            selfcheck.check_catalog_summary(TWO_GROUPS)
+        return label
+    guard(expected, run)
+
+
+SUMMARY = """\
+## What the baseline asks of the assistant
+
+### Demo work
+
+- **Safe twice.** The assistant does the safe thing
+  and repeats it. (`aiscb-DEMO-001`, `aiscb-DEMO-002`)
+"""
+
+summary_guard("has no statements under", "",
+              "check_catalog_summary reports a missing summary")
+summary_guard("cites no rule group",
+              SUMMARY + "- **Uncited.** A statement without its source.\n",
+              "check_catalog_summary reports a statement without a rule group")
+summary_guard("catalog summary cites 'aiscb-GONE-001'",
+              SUMMARY.replace("`aiscb-DEMO-002`)", "`aiscb-DEMO-002`, `aiscb-GONE-001`)"),
+              "check_catalog_summary reports an unknown rule group")
+summary_guard("catalog summary does not cite 'aiscb-DEMO-002'",
+              SUMMARY.replace(", `aiscb-DEMO-002`", ""),
+              "check_catalog_summary reports an uncited rule group")
+summary_guard(None, SUMMARY, "check_catalog_summary on a complete summary")
 
 
 def directories_guard(expected: str | None, build_it, label: str) -> None:

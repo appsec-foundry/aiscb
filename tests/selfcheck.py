@@ -28,12 +28,15 @@ AGENTS_BASELINE_REFERENCE = "[`baseline/aiscb-core.md`](baseline/aiscb-core.md)"
 AGENTS_BASELINE_MARKER = "GENERATED SECURE CODING BASELINE"
 REQUIREMENT_ID = re.compile(r"aiscb-[A-Z][A-Z0-9]*-\d{3}")
 GROUP_BULLET = re.compile(r"- \*\*\[(aiscb-[^\]]+)\] (.+?):\*\*")
-CATALOG_HEADING = re.compile(r"## (aiscb-[A-Z0-9-]+) — (.+)")
+CATALOG_HEADING = re.compile(r"### (aiscb-[A-Z0-9-]+) — (.+)")
 CATALOG_FIELD = re.compile(r"\*\*([^*]+):\*\*\s*(.*)")
 CATALOG_FIELDS = (
-    "Section", "Normative source", "Applies when", "Requirement",
-    "Observable acceptance", "Model cases", "Evidence and gaps",
+    "Normative source", "Applies when", "Requirement", "Observable acceptance",
+    "Model cases", "Deterministic checks", "Evidence and gaps",
 )
+CATALOG_SUMMARY = "What the baseline asks of the assistant"
+EVIDENCE_WITHOUT_CASES = "No model case."
+EVIDENCE_WITH_CASES = ("Partial.", "Not yet model-run.")
 CHANGE_REQUIREMENT = re.compile(r"([A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-\d{3}) (.+)")
 NUMERIC_IDENTIFIER = r"(?:0|[1-9][0-9]*)"
 PRERELEASE_IDENTIFIER = (
@@ -158,13 +161,18 @@ def check_agent_instructions() -> None:
             problems.append(f"CLAUDE.md must import {expected[1:]} exactly once")
 
 
-def catalog_entries() -> list[tuple[str, str, dict[str, str]]]:
-    """Parse readable catalog entries without turning Markdown into a DSL."""
+def catalog_entries() -> list[tuple[str, str, str, dict[str, str]]]:
+    """Parse readable catalog entries without turning Markdown into a DSL.
+
+    Each entry is a level-three heading; the level-two heading above it names
+    its baseline section.
+    """
     if not INDEX.is_file():
         problems.append(f"requirements catalog missing at {INDEX}")
         return []
 
-    entries: list[tuple[str, str, dict[str, str]]] = []
+    entries: list[tuple[str, str, str, dict[str, str]]] = []
+    section = ""
     current: tuple[str, str] | None = None
     fields: dict[str, list[str]] = {}
     active_field: str | None = None
@@ -172,7 +180,7 @@ def catalog_entries() -> list[tuple[str, str, dict[str, str]]]:
     def finish() -> None:
         nonlocal current, fields, active_field
         if current:
-            entries.append((current[0], current[1],
+            entries.append((current[0], current[1], section,
                             {name: " ".join(lines).strip()
                              for name, lines in fields.items()}))
         current, fields, active_field = None, {}, None
@@ -180,11 +188,16 @@ def catalog_entries() -> list[tuple[str, str, dict[str, str]]]:
     for line in INDEX.read_text(encoding="utf-8").splitlines():
         if line.startswith("## "):
             finish()
-            heading = CATALOG_HEADING.fullmatch(line)
-            if not heading:
-                problems.append(f"catalog has malformed requirement heading {line!r}")
-                continue
-            current = heading.groups()
+            section = line[3:].strip()
+            continue
+        if line.startswith("### "):
+            finish()
+            if line.startswith("### aiscb-"):
+                heading = CATALOG_HEADING.fullmatch(line)
+                if not heading:
+                    problems.append(f"catalog has malformed requirement heading {line!r}")
+                    continue
+                current = heading.groups()
             continue
         if not current:
             continue
@@ -205,7 +218,8 @@ def check_requirement_catalog(groups: dict[str, tuple[str, str]]) -> None:
     """Keep the readable catalog complete and tied to its real sources."""
 
     listed: set[str] = set()
-    for requirement_id, name, fields in catalog_entries():
+    ordered: list[str] = []
+    for requirement_id, name, section, fields in catalog_entries():
         if requirement_id in listed:
             problems.append(f"catalog lists {requirement_id!r} twice")
             continue
@@ -213,6 +227,7 @@ def check_requirement_catalog(groups: dict[str, tuple[str, str]]) -> None:
         if requirement_id not in groups:
             problems.append(f"catalog lists {requirement_id!r}, which the baseline does not define")
             continue
+        ordered.append(requirement_id)
         expected_name, expected_section = groups[requirement_id]
         if name != expected_name:
             problems.append(f"catalog calls {requirement_id} {name!r}, baseline calls it {expected_name!r}")
@@ -224,8 +239,7 @@ def check_requirement_catalog(groups: dict[str, tuple[str, str]]) -> None:
             if not fields.get(field):
                 problems.append(f"catalog entry {requirement_id} is missing {field!r}")
 
-        section = fields.get("Section", "")
-        if section and section != expected_section:
+        if section != expected_section:
             problems.append(f"catalog puts {requirement_id} in {section!r}, "
                             f"baseline has it in {expected_section!r}")
         source = fields.get("Normative source", "")
@@ -243,14 +257,62 @@ def check_requirement_catalog(groups: dict[str, tuple[str, str]]) -> None:
         if stated_cases != expected_cases:
             problems.append(f"catalog cases for {requirement_id} are not what the cases declare: "
                             f"expected {expected_cases or 'none'}")
+        checks = fields.get("Deterministic checks", "")
+        check_paths = re.findall(r"`([^`]+)`", checks)
+        if checks and checks != "None." and not check_paths:
+            problems.append(f"catalog deterministic checks for {requirement_id} must be "
+                            f"'None.' or name test files")
+        for check_path in check_paths:
+            if not (INDEX.parent.parent / check_path).is_file():
+                problems.append(f"catalog deterministic check {check_path!r} for "
+                                f"{requirement_id} does not exist")
         evidence = fields.get("Evidence and gaps", "")
-        expected_level = "Partial." if expected_cases else "None."
-        if evidence and not evidence.startswith(expected_level):
+        expected_levels = EVIDENCE_WITH_CASES if expected_cases else (EVIDENCE_WITHOUT_CASES,)
+        if evidence and not evidence.startswith(expected_levels):
             problems.append(f"catalog evidence for {requirement_id} must start with "
-                            f"{expected_level!r}")
+                            f"{' or '.join(repr(level) for level in expected_levels)}")
 
     for requirement_id in sorted(set(groups) - listed):
         problems.append(f"catalog does not list {requirement_id!r}")
+    baseline_order = [requirement_id for requirement_id in groups if requirement_id in listed]
+    for found, expected in zip(ordered, baseline_order):
+        if found != expected:
+            problems.append(f"catalog lists {found} where the baseline order expects {expected}")
+            break
+
+
+def check_catalog_summary(groups: dict[str, tuple[str, str]]) -> None:
+    """Every summary statement cites real rule groups, and every group is cited."""
+    if not INDEX.is_file():
+        return
+    bullets: list[str] = []
+    in_summary = False
+    for line in INDEX.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            in_summary = line[3:].strip() == CATALOG_SUMMARY
+            continue
+        if not in_summary:
+            continue
+        if line.startswith("- "):
+            bullets.append(line)
+        elif bullets and line.startswith(" ") and line.strip():
+            bullets[-1] += " " + line.strip()
+    if not bullets:
+        problems.append(f"catalog has no statements under {CATALOG_SUMMARY!r}")
+        return
+
+    cited: set[str] = set()
+    for bullet in bullets:
+        ids = re.findall(r"`(aiscb-[A-Z0-9-]+)`", bullet)
+        if not ids:
+            problems.append(f"catalog summary statement cites no rule group: {bullet[:60]!r}")
+        for requirement_id in ids:
+            if requirement_id not in groups:
+                problems.append(f"catalog summary cites {requirement_id!r}, "
+                                f"which the baseline does not define")
+            cited.add(requirement_id)
+    for requirement_id in sorted(set(groups) - cited):
+        problems.append(f"catalog summary does not cite {requirement_id!r}")
 
 
 def markdown_sections(path: Path) -> list[tuple[str, str]]:
@@ -632,6 +694,7 @@ def main() -> int:
     for d in dirs:
         check_case(d, baseline_ids)
     check_requirement_catalog(groups)
+    check_catalog_summary(groups)
     check_change_directories()
 
     for n in notes:
