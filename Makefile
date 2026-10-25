@@ -2,7 +2,7 @@
 # so the expensive targets run the free self-check before spending anything.
 
 .DEFAULT_GOAL := check
-.PHONY: check check-changed check-release build-release build-full-baseline coverage setup update status sign-bundle install uninstall install-claude \
+.PHONY: check check-changed check-release build-release build-full-baseline coverage setup update status sign-bundle install install-dev uninstall install-claude \
         install-codex install-copilot dry-run test-smoke test-quick test-rule test-confirmation \
         test test-all test-fast test-organization test-cweval test-cweval-full test-context clean-results help
 
@@ -86,6 +86,11 @@ uninstall:
 ##             ARGS=--user installs for this machine instead of the project
 install:
 	python3 scripts/install.py $(ARGS)
+
+## install-dev refresh your user installation from this working tree after check;
+##             keeps its tools and mode; ARGS=--dry-run previews
+install-dev: check
+	python3 scripts/install.py --refresh-installed --user $(ARGS)
 
 ## install-claude, install-codex, install-copilot  one tool only
 install-claude install-codex install-copilot:

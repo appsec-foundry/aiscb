@@ -196,10 +196,13 @@ Other commands:
 ```bash
 make status ARGS="--offline --into /path/to/project" # verify project installation files
 make uninstall ARGS="--into /path/to/project"        # remove the project installation
+make install-dev                                   # refresh your user installation from this working tree
 make help                                          # list available commands
 ```
 
 Modular setup uses the reviewed local sources without fetching replacements. Signed release updates remain a separate `--update` operation.
+
+`make install-dev` tests unreleased changes in your existing user installation and keeps its tools and mode. The build carries the checkout's baseline ID, so `--update` reports that version as current even if its published bytes differ; after the release, run `make install-dev` again from the release commit.
 
 See the [integration guide](docs/agent-integration-verification.md) for client setup, including Visual Studio personal instructions.
 
