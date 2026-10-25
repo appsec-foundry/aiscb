@@ -142,6 +142,80 @@ class ModularSetupTests(unittest.TestCase):
                     self.assertEqual(self.cli("--uninstall", *scope).returncode, 0)
                     carrier.unlink()
 
+    def test_development_refresh_marks_the_build_until_a_regular_install(self):
+        settings = self.home / ".claude/settings.json"
+        settings.parent.mkdir(parents=True)
+        unrelated = {"matcher": "startup", "hooks": [{"type": "command", "command": "true"}]}
+        settings.write_text(json.dumps({"hooks": {"SessionStart": [unrelated]}}))
+        self.assertEqual(self.cli("claude", "--user").returncode, 0)
+        _, points = policy_setup.layout(install, self.home, self.project, True)
+        carrier = Path(points["claude"])
+        marker = self.home / install_policy.DEVELOPMENT
+        result = self.cli("--refresh-installed", "--user", "--development", "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("(development build ", result.stdout)
+        self.assertFalse(marker.exists())
+
+        result = self.cli("--refresh-installed", "--user", "--development")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.command(carrier)
+        self.assertRegex(carrier.read_text(), r"Release: aiscb-[0-9.]+ \(development build "
+                         r"(?:[0-9a-f]{7,40}|unknown)(?: with uncommitted changes)?; "
+                         r"not a published release\)\.")
+        record = json.loads((self.home / ".aiscb/installation.json").read_text())
+        self.assertEqual(json.loads(marker.read_text())["digest"], record["digest"])
+        self.assertTrue(install.development_build(self.home))
+        hooks = json.loads(settings.read_text())["hooks"]["SessionStart"]
+        self.assertEqual(hooks[0], unrelated)
+        self.assertEqual(len(hooks), 2)
+        helper = hooks[1]["hooks"][0]["args"][0]
+        self.assertEqual(Path(helper), self.home / ".aiscb" / install.VERSION_HOOK_NAME)
+        banner = subprocess.run([sys.executable, helper], env=self.env, capture_output=True,
+                                text=True, timeout=10)
+        self.assertRegex(banner.stdout, r"active: aiscb-[0-9.]+ \(development build ")
+        self.assertEqual(self.cli("--status", "--user").returncode, 0)
+
+        result = self.cli("--refresh-installed", "--user")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("development build", carrier.read_text())
+        self.assertFalse(marker.exists())
+        self.assertFalse(install.development_build(self.home))
+        banner = subprocess.run([sys.executable, helper], env=self.env, capture_output=True,
+                                text=True, timeout=10)
+        self.assertNotIn("development build", banner.stdout)
+        self.assertEqual(self.cli("--uninstall", "--user").returncode, 0)
+        self.assertEqual(json.loads(settings.read_text()), {"hooks": {"SessionStart": [unrelated]}})
+
+    def test_development_requires_a_modular_user_refresh_from_a_checkout(self):
+        from types import SimpleNamespace
+
+        for args in (("--development",), ("--development", "--user"),
+                     ("--refresh-installed", "--development")):
+            result = self.cli(*args)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--development requires", result.stderr)
+        self.legacy(True)
+        result = self.cli("--refresh-installed", "--user", "--development")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("modular installation", result.stderr)
+        released = SimpleNamespace(EMBEDDED_POLICY="{}", REPO=install.REPO)
+        unversioned = SimpleNamespace(EMBEDDED_POLICY=None, REPO=self.project)
+        for legacy in (released, unversioned):
+            with self.assertRaisesRegex(ValueError, "repository checkout"):
+                policy_setup.development_source(legacy)
+        (self.project / ".git").mkdir()
+        self.assertEqual(policy_setup.development_source(unversioned),
+                         {"commit": "unknown", "modified": True})
+
+    def test_development_label_rejects_unsafe_values(self):
+        for development in ({"commit": "47f3b23`", "modified": True},
+                            {"commit": "47F3B23", "modified": True},
+                            {"commit": "47f3b23", "modified": "yes"},
+                            {"commit": "47f3b23", "modified": True, "extra": 1}):
+            with self.subTest(development=development), self.assertRaises(ValueError):
+                install_policy.release_label("aiscb-0.1.20", development)
+        self.assertEqual(install_policy.release_label("aiscb-0.1.20", None), "aiscb-0.1.20")
+
     def test_refresh_refuses_missing_modified_or_expanded_installation(self):
         self.assertNotEqual(self.cli("--refresh-installed").returncode, 0)
         self.assertEqual(self.cli("claude", "--into", str(self.project)).returncode, 0)

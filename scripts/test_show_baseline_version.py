@@ -559,6 +559,50 @@ def check_provider_refusals(failures: list[str]) -> None:
             failures.append("symlinked settings were followed")
 
 
+def check_development_build(failures: list[str]) -> None:
+    """Only a marker for this installation names a development build."""
+    digest = "a" * 64
+    marker = {"digest": digest, "commit": "47f3b23", "modified": True}
+
+    def layout(value: object, section: object = None) -> dict[str, object]:
+        files = {**BESIDE,
+                 "scripts/installation.json": json.dumps(
+                     {"digest": digest, "modular": True, "entries": {}}),
+                 "scripts/development.json":
+                     value if isinstance(value, (str, tuple)) else json.dumps(value),
+                 "elsewhere.json": json.dumps(marker)}
+        if section is not None:
+            files[REGISTRY_FILE] = json.dumps(
+                {"schema": 1, "projects": {}, "user": None, "update_check": section})
+        return files
+
+    code, out, _ = call(layout(marker))
+    if code != 0 or f"active: {VALID_ID} (development build 47f3b23+changes)" not in out:
+        failures.append(f"a development build must be named: {out[:160]!r}")
+    _code, out, _ = call(layout({**marker, "modified": False}))
+    if f"active: {VALID_ID} (development build 47f3b23) " not in out:
+        failures.append(f"a clean development build has no change mark: {out[:160]!r}")
+    for label, value in (
+        ("another installation's digest", {**marker, "digest": "b" * 64}),
+        ("an unknown field", {**marker, "extra": 1}),
+        ("a commit that is not a hash", {**marker, "commit": "47f3b23; rm -rf /"}),
+        ("a modified flag that is not boolean", {**marker, "modified": "yes"}),
+        ("invalid JSON", "not json"),
+        ("a symlinked marker", ("symlink", "elsewhere.json")),
+    ):
+        code, out, _ = call(layout(value))
+        if code != 0 or "development build" in out:
+            failures.append(f"{label}: must be ignored, got {code} {out[:160]!r}")
+
+    checked = 1_789_027_200
+    _code, out, _ = call(layout(marker, {"latest": VALID_ID, "checked": checked}))
+    if "release 0.1.20 published" not in out or "#update" not in out:
+        failures.append(f"the published release must replace a development build: {out[:200]!r}")
+    _code, out, _ = call(layout(marker, {"latest": "aiscb-0.1.9", "checked": checked}))
+    if "no newer release known" not in out:
+        failures.append(f"an older release must not be offered: {out[:200]!r}")
+
+
 def main() -> int:
     failures: list[str] = []
     check_session_context(failures)
@@ -567,6 +611,7 @@ def main() -> int:
     check_success(failures)
     check_failures(failures)
     check_update_note(failures)
+    check_development_build(failures)
     check_cache_age(failures)
     check_background_refresh(failures)
     check_arguments(failures)

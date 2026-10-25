@@ -3595,7 +3595,8 @@ with tempfile.TemporaryDirectory() as tmp:
     def trusted_verify(manifest: bytes, signature_bytes: bytes) -> None:
         install.verify_manifest_signature(manifest, signature_bytes, trusted)
 
-    def run_update(release, tree, verify=trusted_verify, current=bundled, assets=None):
+    def run_update(release, tree, verify=trusted_verify, current=bundled, assets=None,
+                   development=False):
         calls: list[str] = []
         lines: list[str] = []
         runs: list[tuple[list[str], dict[str, bytes], Path]] = []
@@ -3629,6 +3630,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 fetch_json=release_tree_fetcher(release, tag, tree, calls),
                 verify=verify,
                 run=fake_run,
+                development=development,
             )
         return code, calls, lines, runs
 
@@ -3667,10 +3669,41 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a release that is not newer changes nothing and fetches no file",
           code == 0 and not runs and calls == [install.LATEST_RELEASE_URL]
           and any("is current" in line for line in lines), str(lines))
+    code, calls, lines, runs = run_update(stable, good_tree, current=install.parse_baseline(
+        newer_baseline, "installed"), development=True)
+    check("a development build is replaced by the signed release of its version",
+          code == 0 and len(runs) == 1 and runs[0][1] == newer_files, str(lines))
     code, calls, lines, runs = run_update(
         {**stable, "tag_name": "aiscb-0.0.1"}, good_tree)
     check("an older release is never applied",
           code == 0 and not runs and calls == [install.LATEST_RELEASE_URL])
+    code, calls, lines, runs = run_update(
+        {**stable, "tag_name": "aiscb-0.0.1"}, good_tree, development=True)
+    check("a development build is never downgraded",
+          code == 0 and not runs and calls == [install.LATEST_RELEASE_URL])
+
+    marker_home = sandbox / "development-home"
+    (marker_home / ".aiscb").mkdir(parents=True)
+    record_digest = "c" * 64
+    (marker_home / ".aiscb/installation.json").write_text(json.dumps(
+        {"digest": record_digest, "modular": True, "entries": {}}))
+    marker = {"digest": record_digest, "commit": "47f3b23", "modified": False}
+    for label, value, expected in (
+        ("a marker for this installation", marker, True),
+        ("a marker for another installation", {**marker, "digest": "d" * 64}, False),
+        ("a marker with an unknown field", {**marker, "extra": 1}, False),
+        ("a marker with an unsafe commit", {**marker, "commit": "x y"}, False),
+        ("a marker that is not JSON", None, False),
+    ):
+        (marker_home / ".aiscb/development.json").write_text(
+            "not json" if value is None else json.dumps(value))
+        check(f"development_build accepts only {label}" if expected
+              else f"development_build ignores {label}",
+              install.development_build(marker_home) is expected)
+    (marker_home / ".aiscb/development.json").unlink()
+    (marker_home / ".aiscb/development.json").symlink_to(marker_home / ".aiscb/installation.json")
+    check("development_build ignores a symlinked marker",
+          install.development_build(marker_home) is False)
     code, calls, lines, runs = run_update({**stable, "prerelease": True}, good_tree)
     check("a prerelease is not an update", code == 1 and not runs and len(calls) == 1)
 

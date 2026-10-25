@@ -2,10 +2,36 @@
 
 import json
 import shlex
+import subprocess
 from pathlib import Path
 
 import install_policy as policy
 import policy_loader as loader
+
+
+def development_source(legacy):
+    """Name the checkout commit a development build comes from, without a shell."""
+    if legacy.EMBEDDED_POLICY is not None or not (legacy.REPO / ".git").exists():
+        raise ValueError("--development requires a repository checkout")
+
+    def git(*args):
+        try:
+            return subprocess.run(["git", "-C", str(legacy.REPO), *args], capture_output=True,
+                                  text=True, timeout=5, check=True).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    commit = git("rev-parse", "--short", "HEAD")
+    # An unreadable status counts as changed rather than claiming a clean commit.
+    return {"commit": commit if commit and policy.COMMIT.fullmatch(commit) else "unknown",
+            "modified": git("status", "--porcelain") != ""}
+
+
+def startup_notice(legacy, home):
+    """The Claude startup hook that shows the installed baseline and build."""
+    helper = loader.safe_path(home, ".aiscb") / legacy.VERSION_HOOK_NAME
+    return (legacy.tool_config_root("claude", home) / "settings.json",
+            "SessionStart", legacy._claude_version_hook(helper, False))
 
 
 def layout(legacy, home, root, user):
@@ -197,12 +223,17 @@ def user_updater(legacy, home):
 def run(legacy, args, *, home=None, input_fn=input, output=print):
     home = (home or Path.home()).resolve()
     root = (args.into or Path.cwd()).resolve()
+    development = None
     if getattr(args, "refresh_installed", False):
         if args.user and args.into:
             raise ValueError("--user and --into cannot be combined")
         storage, points = layout(legacy, home, root, args.user)
         if not (storage / ".aiscb/installation.json").exists():
+            if getattr(args, "development", False):
+                raise ValueError("--development requires a modular installation")
             return refresh_complete(legacy, args, home, root, output)
+        if getattr(args, "development", False):
+            development = development_source(legacy)
         policy.status(storage, points)
         record = policy.installation_record(storage, points)
         package, contents, _ = loader.load_package(
@@ -221,7 +252,8 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
         if getattr(args, "dry_run", False):
             if args.user:
                 user_updater(legacy, home)
-            output(f"Would refresh {current.baseline_id} to {available.baseline_id} "
+            target = policy.release_label(available.baseline_id, development)
+            output(f"Would refresh {current.baseline_id} to {target} "
                    f"for {', '.join(args.tools)} in {storage}; mode preserved.")
             return 0
     if args.interactive:
@@ -249,6 +281,11 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
         return 0
     if args.uninstall:
         output(policy.uninstall(storage, points))
+        if args.user:
+            report = []
+            legacy._remove_merged_version_hook(*startup_notice(legacy, home), report)
+            for line in report:
+                output(f"Startup notice: {line}")
         return 0
     if not args.user and not args.complete:
         conflicts = inherited_conflicts(legacy, home, root, tools)
@@ -294,7 +331,8 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
                 prepared[target] = legacy.VSCODE_INSTRUCTIONS_HEADER
     for message in policy.install(tools, storage, modular=not args.complete,
                                   bundle=args.organization, expected=args.organization_sha256,
-                                  entry_points=points, prepared=prepared):
+                                  entry_points=points, prepared=prepared,
+                                  development=development):
         output(message)
     if migrated:
         output("Migrated managed instructions; the old complete source remains on disk, "
@@ -305,6 +343,11 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
         destination = loader.safe_path(home, ".aiscb")
         for path, content in updater_edits.items():
             policy.atomic(path, content)
+        if development is not None and "claude" in tools:
+            report = []
+            legacy._install_merged_version_hook(*startup_notice(legacy, home), report)
+            for line in report:
+                output(f"Startup notice: {line}")
         command = shlex.join(["python3", str(destination / "install.py"), "--update"])
         output(f"Signed update entry point: {command}")
     return 0

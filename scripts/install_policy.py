@@ -18,6 +18,8 @@ ENTRY_POINTS = {"claude": "CLAUDE.md", "codex": "AGENTS.md",
                 "copilot": ".github/copilot-instructions.md", "kiro": "AGENTS.md"}
 START = "<!-- aiscb managed policy -->"
 END = "<!-- /aiscb managed policy -->"
+DEVELOPMENT = ".aiscb/development.json"
+COMMIT = re.compile(r"[0-9a-f]{7,40}|unknown")
 
 
 def entry_path(root, name):
@@ -150,16 +152,32 @@ def atomic(path, raw):
             os.unlink(name)
 
 
+def release_label(release, development):
+    """Name the release, marking a build installed from a checkout as unpublished."""
+    if development is None:
+        return release
+    if (not isinstance(development, dict) or set(development) != {"commit", "modified"}
+            or not isinstance(development["commit"], str)
+            or not COMMIT.fullmatch(development["commit"])
+            or type(development["modified"]) is not bool):
+        raise ValueError("invalid development build")
+    changes = " with uncommitted changes" if development["modified"] else ""
+    return f"{release} (development build {development['commit']}{changes}; not a published release)"
+
+
 def install(tools, root, *, modular=True, bundle=None, expected=None,
-            entry_points=None, prepared=None):
+            entry_points=None, prepared=None, development=None):
     entry_points = entry_points or ENTRY_POINTS
     prepared = prepared or {}
     if root == Path(root.anchor) or not root.is_dir():
         raise ValueError("target must be an existing non-root project directory")
     if any(character in str(root) for character in "`\n\r"):
         raise ValueError("project path cannot contain Markdown delimiters or line breaks")
+    if development is not None and bundle:
+        raise ValueError("organization bundles cannot be development builds")
     data = organization(bundle, expected) if bundle else official()
     release, core, overlay, modules, files = data
+    label = release_label(release, development)
     files["policy_loader.py"] = (ROOT / "scripts/policy_loader.py").read_bytes()
     package = {"schema": 1, "release": release, "core": core, "overlay": overlay,
                "modules": modules, "files": {name: {"size": len(raw), "sha256": loader.digest(raw)}
@@ -189,7 +207,7 @@ def install(tools, root, *, modular=True, bundle=None, expected=None,
         if modular:
             command = shlex.join(["python3", str(destination / "policy_loader.py"), "--digest", fingerprint])
             initial += ("\n## Installed module adapter\n\n"
-                        f"Installation mode: modular. Source: {destination}. Release: {release}.\n"
+                        f"Installation mode: modular. Source: {destination}. Release: {label}.\n"
                         "The catalog below lists available modules, not loaded bodies.\n"
                         f"Load selected IDs with `{command} MODULE_ID [MODULE_ID ...]`.\n"
                         "The loader verifies full bodies and includes dependencies and blueprint values. "
@@ -253,7 +271,14 @@ def install(tools, root, *, modular=True, bundle=None, expected=None,
             atomic(path, content)
         atomic(record_path, (json.dumps({"digest": fingerprint, "modular": modular,
                                         "entries": records}, indent=2) + "\n").encode())
-    messages = [f"Installed {release} for {', '.join(tools)} ({'modular' if modular else 'complete'}).",
+        # A separate file keeps the record readable by installers without this marker.
+        marker = loader.safe_path(root, DEVELOPMENT)
+        if development is not None:
+            atomic(marker, (json.dumps({"digest": fingerprint, **development},
+                                       indent=2) + "\n").encode())
+        elif marker.exists() or marker.is_symlink():
+            marker.unlink()
+    messages = [f"Installed {label} for {', '.join(tools)} ({'modular' if modular else 'complete'}).",
                 "Start new sessions; retained release snapshots keep existing loader references stable."]
     if "copilot" in tools:
         messages.append("Copilot: verify the exact CLI/IDE/cloud surface and instruction limits; "
@@ -289,4 +314,7 @@ def uninstall(root, entry_points=None):
         start, end = text.index(START), text.index(END) + len(END)
         atomic(path, (text[:start] + text[end:]).encode())
     (root / ".aiscb/installation.json").unlink()
+    marker = loader.safe_path(root, DEVELOPMENT)
+    if marker.exists() or marker.is_symlink():
+        marker.unlink()
     return "Removed managed instruction blocks; release snapshots retained in .aiscb/releases."

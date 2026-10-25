@@ -202,7 +202,7 @@ make help                                          # list available commands
 
 Modular setup uses the reviewed local sources without fetching replacements. Signed release updates remain a separate `--update` operation.
 
-`make install-dev` tests unreleased changes in your existing user installation and keeps its tools and mode. The build carries the checkout's baseline ID, so `--update` reports that version as current even if its published bytes differ; after the release, run `make install-dev` again from the release commit.
+`make install-dev` tests unreleased changes in your existing user installation and keeps its tools and mode. It marks the build as unpublished with its commit, in the installed instructions and in a Claude Code session-start notice. Once that version is published, the notice points to it and `--update` replaces the build with the signed release. A regular install removes the mark; `make uninstall ARGS=--user` also removes the notice.
 
 See the [integration guide](docs/agent-integration-verification.md) for client setup, including Visual Studio personal instructions.
 

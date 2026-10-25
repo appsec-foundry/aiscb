@@ -30,6 +30,8 @@ BASELINE_ID_RE = re.compile(
     re.MULTILINE,
 )
 RELEASE_RE = re.compile(rf"(?P<name>[a-z][a-z0-9-]*)-(?P<version>{SEMVER_TEXT})")
+DIGEST_RE = re.compile(r"[0-9a-f]{64}")
+COMMIT_RE = re.compile(r"[0-9a-f]{7,40}|unknown")
 
 
 def read_provider_json(path: Path) -> dict:
@@ -126,6 +128,23 @@ def baseline_id(path: Path) -> str:
     return matches[0].group("id")
 
 
+def development_label(helper_dir: Path) -> str | None:
+    """Name a development build recorded for this modular installation, if any."""
+    try:
+        marker = read_provider_json(helper_dir / "development.json")
+        record = read_provider_json(helper_dir / "installation.json")
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+        return None
+    commit, modified = marker.get("commit"), marker.get("modified")
+    if (set(marker) != {"digest", "commit", "modified"}
+            or not isinstance(marker["digest"], str) or not DIGEST_RE.fullmatch(marker["digest"])
+            or marker["digest"] != record.get("digest")
+            or not isinstance(commit, str) or not COMMIT_RE.fullmatch(commit)
+            or type(modified) is not bool):
+        return None
+    return f"development build {commit}{'+changes' if modified else ''}"
+
+
 def session_context(part: int) -> dict:
     """Load only this installation, with an explicit process-local opt-out.
 
@@ -216,7 +235,8 @@ def refresh_in_background(checked: object, installer: Path) -> None:
     )
 
 
-def update_note(installed: str, helper_dir: Path, home: Path, *, claude: bool = False) -> str:
+def update_note(installed: str, helper_dir: Path, home: Path, *, claude: bool = False,
+                development: bool = False) -> str:
     """Describe the cached release check without claiming a check that never ran.
 
     A newer-release note is a pointer, never a command: it lands in an agent's
@@ -253,6 +273,11 @@ def update_note(installed: str, helper_dir: Path, home: Path, *, claude: bool = 
     if published[1] > current[1]:
         return (
             f"update {latest[len(published[0]) + 1:]} available{date}{stale}: "
+            f"{update_guide(home, Path.cwd(), claude=claude)}"
+        )
+    if development and published[1] == current[1]:
+        return (
+            f"release {latest[len(published[0]) + 1:]} published{date}{stale}: "
             f"{update_guide(home, Path.cwd(), claude=claude)}"
         )
     if checked_on:
@@ -309,10 +334,15 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, UnicodeDecodeError, ValueError):
         print("Could not read the installed AI Secure Coding Baseline ID.", file=sys.stderr)
         return 1
+    helper_dir = Path(__file__).resolve().parent
+    development = development_label(helper_dir)
     message = f"AI Secure Coding Baseline active: {installed}"
+    if development:
+        message += f" ({development})"
     try:
-        note = update_note(installed, Path(__file__).resolve().parent, Path.home(),
-                           claude=bool(os.environ.get("CLAUDE_PROJECT_DIR")))
+        note = update_note(installed, helper_dir, Path.home(),
+                           claude=bool(os.environ.get("CLAUDE_PROJECT_DIR")),
+                           development=development is not None)
     except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
         note = "update status not checked"
     if note:

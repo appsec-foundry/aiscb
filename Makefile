@@ -88,9 +88,10 @@ install:
 	python3 scripts/install.py $(ARGS)
 
 ## install-dev refresh your user installation from this working tree after
-##             rebuilding source hashes; keeps its tools and mode; ARGS=--dry-run previews
+##             rebuilding source hashes; keeps its tools and mode, marks the build
+##             as unpublished, shows it at Claude session start; ARGS=--dry-run previews
 install-dev: build-full-baseline
-	python3 scripts/install.py --refresh-installed --user $(ARGS)
+	python3 scripts/install.py --refresh-installed --user --development $(ARGS)
 
 ## install-claude, install-codex, install-copilot  one tool only
 install-claude install-codex install-copilot:

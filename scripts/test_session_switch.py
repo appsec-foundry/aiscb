@@ -15,6 +15,10 @@ from unittest.mock import patch
 import install
 import show_baseline_version as helper
 
+# The four-part helper an earlier release shipped, pinned so helper changes keep it.
+FOUR_PART_HELPER = (Path(__file__).resolve().parent.parent
+                    / "tests/fixtures/four-part-helper/show-baseline-version.py")
+
 
 class SessionSwitchTests(unittest.TestCase):
     def setUp(self):
@@ -66,8 +70,7 @@ class SessionSwitchTests(unittest.TestCase):
         source = install.user_source(home) if user else self.project / install.BASELINE
         loader = script.parent / install.SESSION_LOADER_NAME
         loader.write_bytes(install._session_loader(source, script, parts=4))
-        old_helper = script.read_bytes().replace(b'SESSION_PARTS = 5', b'SESSION_PARTS = 4')
-        old_helper = old_helper.replace(b'Five bounded outputs', b'Four bounded outputs')
+        old_helper = FOUR_PART_HELPER.read_bytes()
         self.assertEqual(hashlib.sha256(old_helper).hexdigest(),
                          '45fcef85aedc66f2d5e06157b11fb9294ae5e7506581c5448d9a02ffa33ebe46')
         script.write_bytes(old_helper)
