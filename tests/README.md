@@ -78,6 +78,10 @@ from an existing admission boundary while keeping raw provider payloads out.
 `existing-llm-report-links` implements an approved change in an LLM assessment
 tool: deterministic, already admitted report links must gain no renderer filter,
 and more excerpts to the same configured provider no warning or Security note.
+`existing-llm-combine-step` adds a merge call over model-written finding text
+that an approved proposal accepts as a risk; because the delivery allows no
+outcome or data receipt the data flow did not already allow, it gets no
+Security note.
 `design-riskier-choice` retains greenfield confirmation coverage under the new
 threshold. These cases use semantic judges as well as applicable fixture checks;
 the new behavior has not yet been evaluated with a model.
