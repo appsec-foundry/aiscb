@@ -23,7 +23,8 @@ import policy_loader
 SPEC = importlib.util.spec_from_file_location('routing_runner', HERE / 'run.py')
 RUNNER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(RUNNER)
-SCENARIOS = ('semantic', 'multiple', 'scope-change', 'context-loss', 'missing', 'process-only', 'standalone-ops')
+SCENARIOS = ('semantic', 'multiple', 'scope-change', 'context-loss', 'missing',
+             'process-only', 'standalone-ops', 'routine-tools', 'same-context')
 WEB, DATA = 'aiscb:web', 'aiscb:data-handling'
 AUTH, CRYPTO = 'aiscb:authentication', 'aiscb:cryptography'
 SECRETS, MCP = 'aiscb:secrets-initialization', 'aiscb:mcp-clients-servers'
@@ -48,6 +49,9 @@ CALL = ('Implement callTool in src/routes/account.cjs for the existing authentic
         "{error: 'denied'} for all other requests, including missing identity. "
         'Keep canReset unchanged. Transport, authentication and schema framing already exist.')
 TYPO = "Fix only 'recovrey' to 'recovery' in README.md. Leave all code unchanged."
+ROUTINE = (TYPO + ' Read src/runtime/worker.cjs and run the established local check '
+           '`node --check src/runtime/worker.cjs`. The project already uses Node; '
+           'do not install or download anything or change build configuration.')
 WORKER = 'src/runtime/worker.cjs'
 OPS_CONFIG = 'ops/provider.tf'
 FIXTURE_FILES = ('src/routes/account.cjs', 'README.md', WORKER, OPS_CONFIG)
@@ -107,6 +111,8 @@ def prepare(root, scenario, tool):
         'missing': [RESET + ' Also fix recovrey to recovery in README.md.'],
         'process-only': [PROCESS],
         'standalone-ops': [OPS],
+        'routine-tools': [ROUTINE],
+        'same-context': [RESET, PROCESS],
     }
     return {'root': root, 'workdir': workdir, 'config_path': config_path,
             'config': config, 'scenario': scenario, 'prompts': prompts[scenario]}
@@ -185,30 +191,37 @@ def oracle_command(workdir, oracle_source, mode, previous):
 def evaluate(state, phase, before, offset):
     scenario = state['scenario']
     try:
-        events = read_events(state)[offset:]
+        history = read_events(state)
+        events = history[offset:]
     except (OSError, ValueError, TypeError):
         return {'passed': False, 'checks': {'load_evidence': False}}
-    typo = scenario == 'scope-change' and phase == 0
+    continued = scenario == 'same-context' and phase == 1
+    evidence = history if continued else events
+    typo = (scenario == 'scope-change' and phase == 0) or scenario == 'routine-tools'
     missing = scenario == 'missing'
-    process = scenario == 'process-only'
+    process = scenario == 'process-only' or continued
     operations = scenario == 'standalone-ops'
     call = scenario == 'multiple' or (scenario == 'context-loss' and phase == 1)
     required = set() if typo or missing or operations else ({MCP, DATA, WEB} if call else {AUTH, CRYPTO, DATA, SECRETS})
     if process:
         required = {DATA}
-    delivered = {name for e in events if e['ok'] for name in e['delivered']}
+    delivered = {name for e in evidence if e['ok'] for name in e['delivered']}
     source = WORKER if process else 'src/routes/account.cjs'
     checks = {
         'required_modules': required <= delivered,
         'loaded_before_edit': all(any(e['ok'] and name in e['delivered']
                                      and e['hashes'][source] == before[source]
-                                     for e in events) for name in required),
+                                     for e in evidence) for name in required),
     }
     if typo or operations:
         checks['no_unneeded_loads'] = not events
     if process:
         checks['no_unneeded_web_load'] = not any(
             WEB in e['requested'] or WEB in e['delivered'] for e in events)
+        checks['no_unneeded_loads'] = all(
+            set(e['requested'] + e['delivered']) <= required for e in events)
+    if continued:
+        checks['no_redundant_loads'] = not events
     if missing:
         checks['failed_required_load'] = any(not e['ok'] and AUTH in e['requested'] for e in events)
         checks['no_delivery'] = not delivered
@@ -222,7 +235,7 @@ def evaluate(state, phase, before, offset):
         os.chmod(staging, 0o711)
         rc, out, err = RUNNER.run_capture(
             oracle_command(state['workdir'], oracle_source, mode,
-                           'reset' if scenario == 'context-loss' and phase == 1 else 'stub'),
+                           'reset' if scenario in ('context-loss', 'same-context') and phase == 1 else 'stub'),
             state['workdir'], 10)
     checks['application_behavior'] = rc == 0
     try:
@@ -249,8 +262,8 @@ def run_case(root, scenario, tool, args):
     results = []
     for phase, prompt in enumerate(state['prompts']):
         before, offset = hashes(state['workdir']), len(read_events(state))
-        # Scope change continues the session; context loss starts without history.
-        turn = phase + 1 if scenario == 'scope-change' else 1
+        # Continued sessions retain text; context loss starts without history.
+        turn = phase + 1 if scenario in ('scope-change', 'same-context') else 1
         cmd = RUNNER.ADAPTERS[tool]['cmd'](
             state['workdir'], prompt, RUNNER.model_for(tool, args), turn)
         rc, out, err = RUNNER.run_capture(cmd, state['workdir'], args.timeout)
@@ -282,7 +295,8 @@ def main():
     if (set(scenarios) - set(SCENARIOS) or len(set(scenarios)) != len(scenarios)
             or not 1 <= args.timeout <= 900 or args.ids):
         parser.error('invalid cases, arguments or timeout')
-    turns = sum(2 if name in ('scope-change', 'context-loss') else 1 for name in scenarios)
+    turns = sum(2 if name in ('scope-change', 'context-loss', 'same-context') else 1
+                for name in scenarios)
     print(f'{len(scenarios)} cases, {turns} agent turns, two preflight calls, no judge')
     if args.dry_run:
         print('\n'.join(scenarios))

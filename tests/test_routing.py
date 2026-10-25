@@ -53,12 +53,12 @@ class RoutingTests(unittest.TestCase):
             path = state['workdir'] / ROUTING.OPS_CONFIG
             path.write_text(path.read_text().replace('eu-west-1', 'eu-central-1'))
             return
-        if scenario == 'process-only':
+        if scenario == 'process-only' or (scenario == 'same-context' and phase == 1):
             path = state['workdir'] / ROUTING.WORKER
             path.write_text(path.read_text().replace('(child) => false', STOP_IMPL))
             return
         path = state['workdir'] / 'src/routes/account.cjs'
-        if scenario == 'missing' or (scenario == 'scope-change' and phase == 0):
+        if scenario in ('missing', 'routine-tools') or (scenario == 'scope-change' and phase == 0):
             (state['workdir'] / 'README.md').write_text('# Account recovery\n')
             return
         call = scenario == 'multiple' or (scenario == 'context-loss' and phase == 1)
@@ -70,7 +70,7 @@ class RoutingTests(unittest.TestCase):
         path.write_text(source)
 
     def ids(self, scenario, phase):
-        if scenario == 'standalone-ops':
+        if scenario in ('standalone-ops', 'routine-tools') or (scenario == 'same-context' and phase == 1):
             return []
         if scenario == 'process-only':
             return [ROUTING.DATA]
@@ -161,6 +161,60 @@ class RoutingTests(unittest.TestCase):
         self.assertTrue(result['checks']['application_behavior'], result.get('oracle_error'))
         self.assertTrue(result['checks']['required_modules'])
         self.assertFalse(result['checks']['no_unneeded_web_load'])
+        self.assertFalse(result['passed'])
+
+    def test_process_rejects_speculative_agent_and_supply_chain_loads(self):
+        for module in ('aiscb:llm-agents', 'aiscb:supply-chain'):
+            with self.subTest(module=module):
+                state = self.prepare('process-only')
+                before = ROUTING.hashes(state['workdir'])
+                self.load(state, [ROUTING.DATA, module])
+                self.implement(state)
+                result = ROUTING.evaluate(state, 0, before, 0)
+                self.assertTrue(result['checks']['application_behavior'], result.get('oracle_error'))
+                self.assertTrue(result['checks']['required_modules'])
+                self.assertFalse(result['checks']['no_unneeded_loads'])
+                self.assertFalse(result['passed'])
+
+    def test_routine_tools_rejects_modules_despite_correct_requested_edit(self):
+        for module in (ROUTING.DATA, 'aiscb:supply-chain', 'aiscb:llm-agents'):
+            with self.subTest(module=module):
+                state = self.prepare('routine-tools')
+                before = ROUTING.hashes(state['workdir'])
+                self.load(state, [module])
+                self.implement(state)
+                result = ROUTING.evaluate(state, 0, before, 0)
+                self.assertTrue(result['checks']['application_behavior'], result.get('oracle_error'))
+                self.assertFalse(result['checks']['no_unneeded_loads'])
+                self.assertFalse(result['passed'])
+
+    def test_same_context_reuses_full_text_but_rejects_redundant_or_unrelated_loads(self):
+        for module in (None, ROUTING.DATA, 'aiscb:llm-agents'):
+            with self.subTest(module=module):
+                state = self.prepare('same-context')
+                self.load(state, self.ids('same-context', 0))
+                self.implement(state)
+                before = ROUTING.hashes(state['workdir'])
+                offset = len(ROUTING.read_events(state))
+                if module:
+                    self.load(state, [module])
+                self.implement(state, 1)
+                result = ROUTING.evaluate(state, 1, before, offset)
+                self.assertTrue(result['checks']['required_modules'])
+                self.assertTrue(result['checks']['loaded_before_edit'])
+                self.assertTrue(result['checks']['application_behavior'], result.get('oracle_error'))
+                self.assertEqual(result['checks']['no_redundant_loads'], module is None)
+                self.assertEqual(result['passed'], module is None)
+
+    def test_same_context_cannot_reuse_text_never_delivered(self):
+        state = self.prepare('same-context')
+        self.implement(state)
+        before = ROUTING.hashes(state['workdir'])
+        self.implement(state, 1)
+        result = ROUTING.evaluate(state, 1, before, 0)
+        self.assertTrue(result['checks']['application_behavior'], result.get('oracle_error'))
+        self.assertFalse(result['checks']['required_modules'])
+        self.assertFalse(result['checks']['loaded_before_edit'])
         self.assertFalse(result['passed'])
 
     def test_standalone_operations_rejects_application_module_loading(self):
@@ -297,7 +351,8 @@ class RoutingTests(unittest.TestCase):
 
     def test_scope_continues_but_context_loss_starts_fresh(self):
         args = types.SimpleNamespace(model=None, timeout=10)
-        for scenario, expected in [('scope-change', [1, 2]), ('context-loss', [1, 1])]:
+        for scenario, expected in [('scope-change', [1, 2]), ('context-loss', [1, 1]),
+                                   ('same-context', [1, 2])]:
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as tmp:
                 adapter = ROUTING.RUNNER.ADAPTERS['claude']
                 with patch.dict(adapter, {'cmd': lambda work, prompt, model, turn: [str(turn)]}):
@@ -313,7 +368,7 @@ class RoutingTests(unittest.TestCase):
                 out = io.StringIO()
                 with contextlib.redirect_stdout(out):
                     self.assertEqual(ROUTING.main(), 0)
-                self.assertIn('9 agent turns', out.getvalue())
+                self.assertIn('12 agent turns', out.getvalue())
 
     def test_oracle_cannot_read_host_files_or_write_fixture(self):
         state = self.prepare()

@@ -34,7 +34,7 @@ or code where a fixed check is insufficient.
 | `make check` | 0 | 0 | 0 |
 | `make test-fast` | 6 | 0 | 1 |
 | `make test-organization` | 4 | 0 | 1 |
-| `make test-routing` | 9 | 0 | 2 |
+| `make test-routing` | 12 | 0 | 2 |
 | `make test-confirmation` | 9 | 9 | 2 |
 | `make test-smoke` | 2 | 6 | 2 |
 | `make test-quick` | 24 | 72 | 2 |
@@ -144,18 +144,19 @@ integration cases are separate and make no claim of a baseline effect.
 
 ## Modular routing
 
-`make test-routing` runs seven cases with the actual modular installer and loader:
+`make test-routing` runs nine cases with the actual modular installer and loader:
 
 - `semantic`: password recovery in `src/routes/account.cjs`, outside an auth directory.
 - `multiple`: an HTTP MCP handler requires multiple modules, including the MCP module's data-handling dependency.
 - `scope-change`: fix a README typo, then implement password recovery in the same session.
 - `context-loss`: implement password recovery, then start a fresh session on the same project to implement an MCP handler. Required modules must be loaded again.
 - `missing`: remove a required module from the installed snapshot. Leave the protected code unchanged and complete the independent README fix.
-- `process-only`: change a maintenance CLI's child-process stopping helper while unrelated HTTP code exists in the project. Require data-handling before the edit and reject unnecessary web loading; check signal choice, exited children, return values, and unchanged HTTP code.
-
+- `process-only`: change a maintenance CLI's child-process stopping helper while unrelated HTTP code exists in the project. Require data-handling before the edit and reject unrelated modules, including web, llm-agents and supply-chain; check signal choice, exited children, return values, and unchanged HTTP code.
 - `standalone-ops`: change an AWS provider region in a standalone Terraform operations workspace. Reject application-module loading and changes to application code; do not contact AWS or run Terraform.
+- `routine-tools`: fix a README typo with a source read and an established local Node syntax check requested. Reject module loading and unrelated code changes.
+- `same-context`: implement password recovery, then change the process helper in the same session. Reuse the previously loaded data-handling text and reject redundant or unrelated loads; preserve the password-recovery behavior.
 
-The default run has nine agent turns and two preflight calls, with no judge.
+The default run has twelve agent turns and two preflight calls, with no judge.
 It requires Linux, Bubblewrap and `/usr/bin/node`; generated code runs with no
 network, a read-only fixture filesystem and no host credentials. Each turn has
 a 180-second timeout. Preflight rejects an inherited baseline;
@@ -163,6 +164,11 @@ the tasks then receive only the installed core and catalog initially. A recordin
 wrapper delegates to the real policy loader and records delivered modules and
 source hashes. Checks require loading before the affected edit and exercise
 successful, malformed, unauthorized, cross-user and cross-tenant behavior.
+The routine-tools checks observe the requested edit and module loads, not
+whether the assistant actually runs the requested syntax check. Same-context
+reuse is credited only within that continued session; fresh-session context
+loss still requires delivery again. Deterministic tests verify this scoring,
+not actual model selection; the new scenarios have not been model-run.
 
 ```bash
 python3 tests/routing.py --dry-run

@@ -29,7 +29,9 @@ support them.
   features, including interfaces the change affects indirectly, the assistant
   loads the matching modules through the installed loader. If required rules
   are missing or invalid, it stops the affected work and says so. Ask `aiscb?`
-  to see which modules are loaded. (`aiscb-MODULES-001`)
+  to see which modules are loaded. Routine reads and established test or loader
+  calls alone do not trigger modules; full text still in context is reused.
+  (`aiscb-MODULES-001`)
 
 ### Changing existing code
 
@@ -283,11 +285,16 @@ aiscb or organization module triggers.
 
 **Requirement:** Select all matching namespaced modules in one semantic pass
 before affected design or code changes, using only the bounded catalog and
-loader supplied by the adapter. Match the task and affected interfaces, including
-indirect effects; application-wide technology presence alone is not a match.
-Paths add matches, and uncertainty within that scope requires loading.
-Recheck on scope changes, final diff, resume,
-or context loss. Missing, invalid, incompatible, or conflicting required
+loader supplied by the adapter. Tie each semantic match to a concrete planned
+change or affected interface, including indirect effects; technology presence
+and speculative connections alone are not matches. Paths add matches. Load on
+uncertainty about a concretely affected feature. Routine source reads and
+unchanged established test, build or loader calls alone do not trigger modules;
+new or changed external dependencies and execution of unestablished external
+code still require supply-chain. Recheck on scope changes, final diff, resume
+or compaction, reusing full text still in context and reloading missing required
+text. Apply only relevant rules; loading alone does not justify added measures.
+Missing, invalid, incompatible, or conflicting required
 content stops only affected work. Initial context contains core, the adapter's
 discovery and loader instructions, and supplied always-on overlays; module
 bodies load only before affected work.
@@ -296,7 +303,8 @@ modules and reports unknown state without reading files.
 
 **Observable acceptance:** Relevant modules are loaded completely before their
 requirements are needed; unrelated modules stay unloaded, and unavailable
-policy is neither guessed nor silently omitted.
+policy is neither guessed nor silently omitted. Rechecks reuse available full
+text; context loss still requires delivery of missing rules.
 
 **Model cases:** None.
 
@@ -304,11 +312,12 @@ policy is neither guessed nor silently omitted.
 
 **Evidence and gaps:** No model case. The routing harness exercises semantic
 matches, HTTP/MCP matches and dependencies, scope changes, context loss, missing
-policy, and an isolated process change that must not load web merely because
-HTTP code exists elsewhere. Its deterministic tests verify the scoring,
-including excess web loads and missing or late required loads; they do not
-prove model selection behavior. The process-only scenario has not been run
-against a model.
+policy, routine reads/checks, and continued-session reuse. An isolated process
+change must not load web merely because HTTP code exists elsewhere or load
+agent/supply-chain modules for speculative connections. Deterministic tests
+reject excess and redundant loads, missing or late required loads, and reuse
+without prior delivery; they do not prove model selection behavior. The
+process-only, routine-tools and same-context scenarios have not been model-run.
 
 ## Operating Mode
 
@@ -1388,7 +1397,11 @@ required signing configuration, but not every artificial-fixture boundary.
 **Normative source:** `baseline/modules/aiscb-supply-chain.md`, published in
 `secure-coding-baseline.md`, rule group `aiscb-DEPS-001`.
 
-**Applies when:** Adding, executing, updating, locking, or deploying a package.
+**Applies when:** Adding, updating, locking or deploying packages, CI actions,
+container images, external scripts, build tools, installers or external
+downloads; or executing packages or external tools not established by the
+project. Routine source reads and unchanged established test, build or loader
+commands alone do not trigger the module.
 
 **Requirement:** Prefer existing dependencies. Verify a new or updated
 package's exact name, selected version, authoritative source, and known
@@ -1410,7 +1423,8 @@ reviewable and locked, and unreviewed install scripts do not run.
 **Evidence and gaps:** Partial. The case covers an unverifiable package and
 invented API. Selected-version vulnerability checks, executable external
 references, lockfiles, transitive review, install scripts, and scanning are not
-covered.
+covered. The routing harness rejects supply-chain loading for routine commands
+and unrelated process changes; these exclusions have not been model-run.
 
 ## Web
 

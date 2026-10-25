@@ -141,11 +141,11 @@ The crypto example shows Claude Code with `aiscb-0.1.14` in the baseline session
 
 ## Structure and context budget
 
-The assistant always reads the [core](baseline/aiscb-core.md): secure design and coding rules, how to scope work and handle security decisions, and what to test, review, and report. It loads modules as the task requires, for example `web` and `authentication` for a browser login, with `cryptography` loaded as an authentication dependency. The [catalog](baseline/catalog.json) lists when each module applies. An organization can add rules through an overlay, but cannot relax the baseline.
+The assistant always reads the [core](baseline/aiscb-core.md): secure design and coding rules, how to scope work and handle security decisions, and what to test, review, and report. It selects modules for concrete changes and affected interfaces, for example `web` and `authentication` for a browser login, with `cryptography` loaded as an authentication dependency. Routine source reads and unchanged established test or loader commands alone do not trigger modules; new external dependencies and tools still require verification. Rechecks reuse full module text still in context. The [catalog](baseline/catalog.json) lists when each module applies. An organization can add rules through an overlay, but cannot relax the baseline.
 
 | Component | Covers | Bytes | Tokens (OpenAI `o200k_base`)[^tokens] |
 | --- | --- | ---: | ---: |
-| aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review, including when a Security note is required | 10,051 | 1,941 |
+| aiscb core (always loaded) | Secure design and coding rules, task scope and module selection, security decisions, tests, and review, including when a Security note is required | 10,467 | 2,010 |
 | `aiscb:web` | Protect browser content, transport and cross-site boundaries | 1,945 | 415 |
 | `aiscb:authentication` | Protect login, account flows, sessions and authentication mechanisms | 2,688 | 529 |
 | `aiscb:cryptography` | Use sound cryptography and verify signed webhooks | 1,058 | 226 |
@@ -153,17 +153,17 @@ The assistant always reads the [core](baseline/aiscb-core.md): secure design and
 | `aiscb:deployment-environments` | Restrict CI and container privileges; separate development from production | 1,659 | 309 |
 | `aiscb:llm-applications` | Validate model output and contain generated-code execution | 1,252 | 245 |
 | `aiscb:llm-agents` | Check permissions for agent actions; limit tools, delegation, and retries | 2,033 | 398 |
-| `aiscb:supply-chain` | Verify packages and downloads before use; pin external build tools | 1,173 | 222 |
+| `aiscb:supply-chain` | Verify packages and downloads before use; pin external build tools | 1,356 | 253 |
 | `aiscb:data-handling` | Parse untrusted data, protect logs and responses, restrict outbound requests and resource use | 2,795 | 532 |
 | `aiscb:llm-retrieval-memory` | Check access before retrieval and control what enters persistent memory | 1,666 | 324 |
 | `aiscb:mcp-clients-servers` | Authorize MCP requests and control local server starts and credentials | 2,236 | 413 |
-| Complete baseline | The core and every module in one file | 30,467 | 5,904 |
+| Complete baseline | The core and every module in one file | 31,066 | 6,004 |
 
 [^tokens]: Measured with OpenAI's `o200k_base`, which GPT-4o, GPT-4.1, and GPT-5 models use. Other tokenizers count the same text differently. Unmeasured estimates: Claude up to 4.6 about 15–30% more tokens; Claude with the newer tokenizer introduced in Opus 4.7 about 15–75% more. The text itself does not change.
 
 Counts cover rule text only; the catalog, loading instructions, and overlays add context. `authentication` loads `cryptography` and `data-handling`; `cryptography` loads `secrets-initialization`; `llm-agents` and `llm-retrieval-memory` also load `llm-applications`; `mcp-clients-servers` also loads `data-handling`. Shared dependencies load once.
 
-The core takes about 1.0% of a 200,000-token context window, or 0.19% of a 1-million-token window. It is intended to remain available throughout the session; its placement, retention after compaction, and inclusion in subsequent requests depend on the client. Where supported, prompt caching can reduce the input cost of unchanged instruction text; eligibility, retention, and pricing depend on the client and provider. Loading it only when a task looks security-related would drop it from the tasks that need it most; [Why the core stays loaded](docs/why-the-core-stays-loaded.md) walks through the alternatives. If you do not want the baseline in every session, install it per project rather than per user.
+The core takes about 1.0% of a 200,000-token context window, or 0.20% of a 1-million-token window. It is intended to remain available throughout the session; its placement, retention after compaction, and inclusion in subsequent requests depend on the client. Where supported, prompt caching can reduce the input cost of unchanged instruction text; eligibility, retention, and pricing depend on the client and provider. Loading it only when a task looks security-related would drop it from the tasks that need it most; [Why the core stays loaded](docs/why-the-core-stays-loaded.md) walks through the alternatives. If you do not want the baseline in every session, install it per project rather than per user.
 
 ## What changes in practice
 
@@ -289,7 +289,7 @@ The [LLM and agentic alignment review](docs/owasp-llm-agentic-review.md) compare
 
 Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under `baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.20/` is generated from those sources with `make build-full-baseline`. See [Structure and context budget](#structure-and-context-budget) for current token measurements.
 
-The provisional budgets are roughly 1,500 tokens for the core and 4,100 for the complete baseline. The expanded rules currently exceed them by 441 and 1,804 tokens respectively; these are targets, not enforced limits. Adapter discovery and overlay text add to the actual session context.
+The provisional budgets are roughly 1,500 tokens for the core and 4,100 for the complete baseline. The expanded rules currently exceed them by 510 and 1,904 tokens respectively; these are targets, not enforced limits. Adapter discovery and overlay text add to the actual session context.
 
 [`specs/requirements.md`](specs/requirements.md) maps rule groups to tests. Behavior changes follow the workflow in [`specs/README.md`](specs/README.md); editorial and repository-only changes need no change specification.
 

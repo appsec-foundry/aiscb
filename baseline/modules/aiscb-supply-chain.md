@@ -1,6 +1,6 @@
 # Software Supply Chain Module
 
-`module-id: aiscb:supply-chain`. Load when adding, updating, executing, locking, or deploying packages, CI actions, container images, scripts, build tools, installers, or external downloads.
+`module-id: aiscb:supply-chain`. Load when adding, updating, locking, or deploying packages, CI actions, container images, external scripts, build tools, installers, or external downloads; or executing packages or external tools not established by the project. Routine source reads and unchanged established test, build, or loader commands alone do not trigger this module.
 
 ## Software Supply Chain
 

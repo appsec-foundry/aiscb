@@ -23,8 +23,8 @@
       "aiscb-TESTS-001",
       "aiscb-REPORT-001"
     ],
-    "size": 10051,
-    "sha256": "75ae74458bcff85f8223bde8ab0ca1356c6ade0d8f118785c9c8934539cbb9e2"
+    "size": 10467,
+    "sha256": "6a17844808ca2c66a8b67f8bc75f58dcdcf933c63bfd5a818096ed75e7f7b9c0"
   },
   "modules": [
     {
@@ -117,14 +117,14 @@
       "publisher": "aiscb",
       "version": "0.1.20",
       "file": "modules/aiscb-supply-chain.md",
-      "trigger": "Adding, updating, executing, locking, or deploying packages, CI actions, container images, scripts, build tools, installers, or external downloads",
+      "trigger": "Adding, updating, locking, or deploying packages, CI actions, container images, external scripts, build tools, installers, or external downloads; or executing packages or external tools not established by the project. Routine source reads and unchanged established test, build, or loader commands alone do not trigger this module",
       "paths": [],
       "requires": [],
       "rules": [
         "aiscb-DEPS-001"
       ],
-      "size": 1173,
-      "sha256": "eddc9c355361a27bd4bfbe070607b6a5fc5f20e25f734d5287e5363ffd1bc0a4"
+      "size": 1356,
+      "sha256": "966a97f7c74cc848925202dc925edbfe156d21fadd8e29fc8a4126d2b3d32c7d"
     },
     {
       "id": "aiscb:deployment-environments",
