@@ -87,9 +87,9 @@ uninstall:
 install:
 	python3 scripts/install.py $(ARGS)
 
-## install-dev refresh your user installation from this working tree after check;
-##             keeps its tools and mode; ARGS=--dry-run previews
-install-dev: check
+## install-dev refresh your user installation from this working tree after
+##             rebuilding source hashes; keeps its tools and mode; ARGS=--dry-run previews
+install-dev: build-full-baseline
 	python3 scripts/install.py --refresh-installed --user $(ARGS)
 
 ## install-claude, install-codex, install-copilot  one tool only
