@@ -67,7 +67,7 @@ KNOWN_HOOK_DIGESTS = (
     "238dcc65b98b93f404310caacf16e163f1ea0387debcd77b47446e4160f3ed5a",
     "45fcef85aedc66f2d5e06157b11fb9294ae5e7506581c5448d9a02ffa33ebe46",
     "14721199a7ae1054da1f2bb12f269c6f369f0155a7eb7e4caaf8178c4e258151",
-    "da9f1d65abc65bd4b792a80d58dc508b92908b7b4f3796d269d8da457ec0c8fb",
+    "af2c4b13698fe84ca78332fef51849f8b42d08a8c5ef3c753d4e0165bea05df6",
 )
 COPILOT_VERSION_HOOK_NAME = "aiscb-baseline-version.json"
 PREVIOUS_COPILOT_VERSION_HOOK_NAME = "aisec-baseline-version.json"
@@ -2061,32 +2061,6 @@ def fetch_verified_bundle(
     return files
 
 
-def development_build(root: Path) -> bool:
-    """Whether the modular installation under root records a development build."""
-    storage = root / ".aiscb"
-    try:
-        paths = (storage / "installation.json", storage / "development.json")
-        if any(path.is_symlink() for path in paths):
-            return False
-        record, marker = (
-            json.loads(read_limited(path, MAX_HOOK_CONFIG_BYTES),
-                       object_pairs_hook=_unique_json_object)
-            for path in paths
-        )
-    except (OSError, UnicodeDecodeError, ValueError):
-        return False
-    return (
-        isinstance(record, dict) and isinstance(marker, dict)
-        and set(marker) == {"digest", "commit", "modified"}
-        and isinstance(marker["digest"], str)
-        and re.fullmatch(r"[0-9a-f]{64}", marker["digest"]) is not None
-        and marker["digest"] == record.get("digest")
-        and isinstance(marker["commit"], str)
-        and re.fullmatch(r"[0-9a-f]{7,40}|unknown", marker["commit"]) is not None
-        and type(marker["modified"]) is bool
-    )
-
-
 def release_update(
     *,
     output: Callable[[str], None] = print,
@@ -2094,7 +2068,6 @@ def release_update(
     fetch_json: Callable[[str], object] = _read_json_url,
     verify: Callable[[bytes, bytes], None] = verify_manifest_signature,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
-    development: bool | None = None,
 ) -> int:
     """Fetch the signed release bundle and hand over to its own guided setup.
 
@@ -2117,10 +2090,7 @@ def release_update(
     except (OSError, ValueError, json.JSONDecodeError):
         output("The release lookup failed.")
         return 1
-    if development is None:
-        development = development_build(Path.home())
-    # A development build may carry unpublished bytes under the published version.
-    if version < current.version or (version == current.version and not development):
+    if version <= current.version:
         output(f"{current.baseline_id} is current.")
         return 0
     output(f"Release {OFFICIAL_NAME}-{version} is published; verifying its bundle...")

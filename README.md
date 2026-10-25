@@ -202,7 +202,7 @@ make help                                          # list available commands
 
 Modular setup uses the reviewed local sources without fetching replacements. Signed release updates remain a separate `--update` operation.
 
-`make install-dev` tests unreleased changes in your existing user installation and keeps its tools and mode. It marks the build as unpublished with its commit, in the installed instructions and in a Claude Code session-start notice. Once that version is published, the notice points to it and `--update` replaces the build with the signed release. A regular install removes the mark; `make uninstall ARGS=--user` also removes the notice.
+`make install-dev` tests unreleased changes in your existing user installation and keeps its tools and mode. It names the build after the checkout's release as the next patch's development version, such as `aiscb-0.1.21-dev` based on `aiscb-0.1.20`, with its commit, in the installed instructions and in a Claude Code session-start notice. The next release number is still set when it is published; any later release is announced and installed by `--update` as usual. A regular install removes the mark; `make uninstall ARGS=--user` also removes the notice.
 
 See the [integration guide](docs/agent-integration-verification.md) for client setup, including Visual Studio personal instructions.
 

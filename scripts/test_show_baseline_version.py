@@ -577,10 +577,10 @@ def check_development_build(failures: list[str]) -> None:
         return files
 
     code, out, _ = call(layout(marker))
-    if code != 0 or f"active: {VALID_ID} (development build 47f3b23+changes)" not in out:
-        failures.append(f"a development build must be named: {out[:160]!r}")
+    if code != 0 or f"active: aiscb-0.1.21-dev (47f3b23+changes, based on {VALID_ID}) " not in out:
+        failures.append(f"a development build must rank after its release: {out[:160]!r}")
     _code, out, _ = call(layout({**marker, "modified": False}))
-    if f"active: {VALID_ID} (development build 47f3b23) " not in out:
+    if f"active: aiscb-0.1.21-dev (47f3b23, based on {VALID_ID}) " not in out:
         failures.append(f"a clean development build has no change mark: {out[:160]!r}")
     for label, value in (
         ("another installation's digest", {**marker, "digest": "b" * 64}),
@@ -591,16 +591,17 @@ def check_development_build(failures: list[str]) -> None:
         ("a symlinked marker", ("symlink", "elsewhere.json")),
     ):
         code, out, _ = call(layout(value))
-        if code != 0 or "development build" in out:
+        if code != 0 or f"active: {VALID_ID} " not in out or "-dev" in out:
             failures.append(f"{label}: must be ignored, got {code} {out[:160]!r}")
 
     checked = 1_789_027_200
     _code, out, _ = call(layout(marker, {"latest": VALID_ID, "checked": checked}))
-    if "release 0.1.20 published" not in out or "#update" not in out:
-        failures.append(f"the published release must replace a development build: {out[:200]!r}")
-    _code, out, _ = call(layout(marker, {"latest": "aiscb-0.1.9", "checked": checked}))
     if "no newer release known" not in out:
-        failures.append(f"an older release must not be offered: {out[:200]!r}")
+        failures.append(f"its own release must not be offered over a development build: "
+                        f"{out[:200]!r}")
+    _code, out, _ = call(layout(marker, {"latest": "aiscb-0.1.21", "checked": checked}))
+    if "update 0.1.21 available" not in out:
+        failures.append(f"the next release must be offered: {out[:200]!r}")
 
 
 def main() -> int:

@@ -128,8 +128,14 @@ def baseline_id(path: Path) -> str:
     return matches[0].group("id")
 
 
-def development_label(helper_dir: Path) -> str | None:
-    """Name a development build recorded for this modular installation, if any."""
+def development_label(installed: str, helper_dir: Path) -> str | None:
+    """Name a development build recorded for this modular installation, if any.
+
+    It ranks after its release as the next patch's -dev, below any later release.
+    """
+    match = RELEASE_RE.fullmatch(installed)
+    if match is None or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", match.group("version")):
+        return None
     try:
         marker = read_provider_json(helper_dir / "development.json")
         record = read_provider_json(helper_dir / "installation.json")
@@ -142,7 +148,9 @@ def development_label(helper_dir: Path) -> str | None:
             or not isinstance(commit, str) or not COMMIT_RE.fullmatch(commit)
             or type(modified) is not bool):
         return None
-    return f"development build {commit}{'+changes' if modified else ''}"
+    major, minor, patch = match.group("version").split(".")
+    following = f"{match.group('name')}-{major}.{minor}.{int(patch) + 1}-dev"
+    return f"{following} ({commit}{'+changes' if modified else ''}, based on {installed})"
 
 
 def session_context(part: int) -> dict:
@@ -235,8 +243,7 @@ def refresh_in_background(checked: object, installer: Path) -> None:
     )
 
 
-def update_note(installed: str, helper_dir: Path, home: Path, *, claude: bool = False,
-                development: bool = False) -> str:
+def update_note(installed: str, helper_dir: Path, home: Path, *, claude: bool = False) -> str:
     """Describe the cached release check without claiming a check that never ran.
 
     A newer-release note is a pointer, never a command: it lands in an agent's
@@ -273,11 +280,6 @@ def update_note(installed: str, helper_dir: Path, home: Path, *, claude: bool = 
     if published[1] > current[1]:
         return (
             f"update {latest[len(published[0]) + 1:]} available{date}{stale}: "
-            f"{update_guide(home, Path.cwd(), claude=claude)}"
-        )
-    if development and published[1] == current[1]:
-        return (
-            f"release {latest[len(published[0]) + 1:]} published{date}{stale}: "
             f"{update_guide(home, Path.cwd(), claude=claude)}"
         )
     if checked_on:
@@ -335,14 +337,11 @@ def main(argv: list[str] | None = None) -> int:
         print("Could not read the installed AI Secure Coding Baseline ID.", file=sys.stderr)
         return 1
     helper_dir = Path(__file__).resolve().parent
-    development = development_label(helper_dir)
-    message = f"AI Secure Coding Baseline active: {installed}"
-    if development:
-        message += f" ({development})"
+    message = ("AI Secure Coding Baseline active: "
+               f"{development_label(installed, helper_dir) or installed}")
     try:
         note = update_note(installed, helper_dir, Path.home(),
-                           claude=bool(os.environ.get("CLAUDE_PROJECT_DIR")),
-                           development=development is not None)
+                           claude=bool(os.environ.get("CLAUDE_PROJECT_DIR")))
     except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError):
         note = "update status not checked"
     if note:

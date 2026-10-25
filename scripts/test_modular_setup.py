@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -151,20 +152,21 @@ class ModularSetupTests(unittest.TestCase):
         _, points = policy_setup.layout(install, self.home, self.project, True)
         carrier = Path(points["claude"])
         marker = self.home / install_policy.DEVELOPMENT
+        release = build_baseline.BASELINE_ID
         result = self.cli("--refresh-installed", "--user", "--development", "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("(development build ", result.stdout)
+        self.assertIn("-dev (development build ", result.stdout)
         self.assertFalse(marker.exists())
 
         result = self.cli("--refresh-installed", "--user", "--development")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.command(carrier)
-        self.assertRegex(carrier.read_text(), r"Release: aiscb-[0-9.]+ \(development build "
-                         r"(?:[0-9a-f]{7,40}|unknown)(?: with uncommitted changes)?; "
-                         r"not a published release\)\.")
+        self.assertRegex(carrier.read_text(), r"Release: aiscb-[0-9]+\.[0-9]+\.[0-9]+-dev "
+                         r"\(development build (?:[0-9a-f]{7,40}|unknown)"
+                         r"(?: with uncommitted changes)?, based on "
+                         + re.escape(release) + r"; not a published release\)\.")
         record = json.loads((self.home / ".aiscb/installation.json").read_text())
         self.assertEqual(json.loads(marker.read_text())["digest"], record["digest"])
-        self.assertTrue(install.development_build(self.home))
         hooks = json.loads(settings.read_text())["hooks"]["SessionStart"]
         self.assertEqual(hooks[0], unrelated)
         self.assertEqual(len(hooks), 2)
@@ -172,17 +174,18 @@ class ModularSetupTests(unittest.TestCase):
         self.assertEqual(Path(helper), self.home / ".aiscb" / install.VERSION_HOOK_NAME)
         banner = subprocess.run([sys.executable, helper], env=self.env, capture_output=True,
                                 text=True, timeout=10)
-        self.assertRegex(banner.stdout, r"active: aiscb-[0-9.]+ \(development build ")
+        self.assertRegex(banner.stdout, r"active: aiscb-[0-9]+\.[0-9]+\.[0-9]+-dev \(.*, based on "
+                         + re.escape(release) + r"\)")
         self.assertEqual(self.cli("--status", "--user").returncode, 0)
 
         result = self.cli("--refresh-installed", "--user")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("development build", carrier.read_text())
         self.assertFalse(marker.exists())
-        self.assertFalse(install.development_build(self.home))
         banner = subprocess.run([sys.executable, helper], env=self.env, capture_output=True,
                                 text=True, timeout=10)
-        self.assertNotIn("development build", banner.stdout)
+        self.assertIn(f"active: {release} ", banner.stdout)
+        self.assertNotIn("-dev", banner.stdout)
         self.assertEqual(self.cli("--uninstall", "--user").returncode, 0)
         self.assertEqual(json.loads(settings.read_text()), {"hooks": {"SessionStart": [unrelated]}})
 
@@ -214,7 +217,14 @@ class ModularSetupTests(unittest.TestCase):
                             {"commit": "47f3b23", "modified": True, "extra": 1}):
             with self.subTest(development=development), self.assertRaises(ValueError):
                 install_policy.release_label("aiscb-0.1.20", development)
+        clean = {"commit": "47f3b23", "modified": False}
+        for release in ("aiscb-0.1.20-rc.1", "aiscb-0.1.20+acme", "aiscb-0.1"):
+            with self.subTest(release=release), self.assertRaises(ValueError):
+                install_policy.release_label(release, clean)
         self.assertEqual(install_policy.release_label("aiscb-0.1.20", None), "aiscb-0.1.20")
+        self.assertEqual(install_policy.release_label("aiscb-0.1.20", {**clean, "modified": True}),
+                         "aiscb-0.1.21-dev (development build 47f3b23 with uncommitted changes, "
+                         "based on aiscb-0.1.20; not a published release)")
 
     def test_refresh_refuses_missing_modified_or_expanded_installation(self):
         self.assertNotEqual(self.cli("--refresh-installed").returncode, 0)

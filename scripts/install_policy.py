@@ -20,6 +20,8 @@ START = "<!-- aiscb managed policy -->"
 END = "<!-- /aiscb managed policy -->"
 DEVELOPMENT = ".aiscb/development.json"
 COMMIT = re.compile(r"[0-9a-f]{7,40}|unknown")
+RELEASE = re.compile(r"(?P<name>[a-z][a-z0-9-]*)-(?P<major>0|[1-9][0-9]*)\."
+                     r"(?P<minor>0|[1-9][0-9]*)\.(?P<patch>0|[1-9][0-9]*)")
 
 
 def entry_path(root, name):
@@ -153,7 +155,11 @@ def atomic(path, raw):
 
 
 def release_label(release, development):
-    """Name the release, marking a build installed from a checkout as unpublished."""
+    """Name the release; a checkout build ranks after it as the next patch's -dev.
+
+    The next release number is approved only when it is published, so -dev marks
+    a lower bound that still sorts before it, whether it becomes a patch or minor.
+    """
     if development is None:
         return release
     if (not isinstance(development, dict) or set(development) != {"commit", "modified"}
@@ -161,8 +167,13 @@ def release_label(release, development):
             or not COMMIT.fullmatch(development["commit"])
             or type(development["modified"]) is not bool):
         raise ValueError("invalid development build")
+    match = RELEASE.fullmatch(release)
+    if match is None:
+        raise ValueError("a development build needs a release baseline ID")
+    following = f"{match['name']}-{match['major']}.{match['minor']}.{int(match['patch']) + 1}-dev"
     changes = " with uncommitted changes" if development["modified"] else ""
-    return f"{release} (development build {development['commit']}{changes}; not a published release)"
+    return (f"{following} (development build {development['commit']}{changes}, "
+            f"based on {release}; not a published release)")
 
 
 def install(tools, root, *, modular=True, bundle=None, expected=None,
