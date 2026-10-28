@@ -144,6 +144,26 @@ This verifies release installation and initial instruction delivery on those
 CLI versions. Semantic module selection, IDE surfaces and Kiro CLI loading
 were not retested for this release.
 
+### Release 0.1.21 (2026-10-28)
+
+The signed bundle was downloaded from the public `aiscb-bundle-0.1.21-1`
+release. Its trusted signature, exact sizes and hashes matched the staged
+bundle. Changed manifests and installers were refused. The downloaded
+installer installed all four project adapters while preserving unrelated
+instructions. Module loading included authentication dependencies and refused
+unknown and corrupted modules.
+
+Fresh CLI loading was verified with Claude Code 2.1.312, Codex CLI 0.164.0
+and Copilot CLI 1.0.101. All twelve combinations passed: project/user scope,
+launched from the project root/subdirectory. Captured API requests contained
+the exact 0.1.21 core and module catalog, without module bodies. The probe used
+the downloaded installer, isolated homes, a loopback API fixture and artificial
+credentials; it made no real model calls or changes to actual user settings.
+
+This verifies release installation and initial instruction delivery on those
+CLI versions. Semantic module selection, IDE surfaces and Kiro CLI loading
+were not retested for this release.
+
 ### Kiro project installation (2026-09-24)
 
 Tested with Kiro CLI 2.24.0 on Linux and no global Kiro steering. A project

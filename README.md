@@ -13,8 +13,6 @@ Install aiscb to give your AI coding assistant a consistent set of security rule
 
 Current baseline: `aiscb-0.1.21`.
 
-Release preparation is in progress. The Quick start still installs the published `aiscb-0.1.20` bundle until signed 0.1.21 assets are available.
-
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
 The [Quick start](#quick-start) installs this modular setup. See [Modular installation](#modular-installation) for project setup, migration and the option to load all rules at once.
@@ -38,8 +36,8 @@ Use the guided installer to install or update aiscb. The complete command verifi
 curl --proto '=https' \
   --fail --silent --show-error \
   --output aiscb-setup.sh \
-  https://raw.githubusercontent.com/appsec-foundry/aiscb/5917ae20351287bdd93e701fd95b8f2251e10cb2/setup.sh &&
-echo 'ad9c089bb5efa6a7a0423cf0c67ecd4a67d7a2cbf5f1a35173836c908aa901ea  aiscb-setup.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/aiscb/1507649374f3df7de759aef25129dd3bb097a3c1/setup.sh &&
+echo '8c9b7956ead3ad64d5c84bb43e35abaf9bb661a35597a4f93ef82c71c160e744  aiscb-setup.sh' |
   sha256sum --check &&
 bash aiscb-setup.sh
 ```
