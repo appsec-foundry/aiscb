@@ -3,7 +3,7 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
-## Unreleased — 0.1.21 preparation
+## [0.1.21](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.21) (2026-10-28)
 
 - Application-security rules now follow the affected application behavior;
   standalone administration, operations and documentation stay outside that scope.
@@ -18,7 +18,7 @@ shows its publication date. Later installer updates are listed separately.
   It preserves the installed tools and mode, marks the build as unpublished,
   and identifies it at Claude Code session start.
 
-**Updating after publication:** Run `python3 ~/.aiscb/install.py --update`
+**Updating:** Run `python3 ~/.aiscb/install.py --update`
 and start a new session. Installations from 0.1.17 and earlier need the
 [Quick start](README.md#quick-start) once.
 
