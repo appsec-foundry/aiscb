@@ -33,7 +33,7 @@ REGISTRY_FILE = ".config/aiscb/installations.json"
 sys.path.insert(0, str(HELPER.parent))
 import show_baseline_version as hook  # noqa: E402
 
-VALID_ID = "aiscb-0.1.20"
+VALID_ID = "aiscb-0.1.21"
 VALID = f"# AI Secure Coding Baseline\n\n`baseline-id: {VALID_ID}`\n\nRules follow.\n"
 
 # The installer may place the baseline beside the helper or one level above it.
@@ -49,7 +49,7 @@ READ_FAILURES = [
     ("ID not at line start", {BASELINE: f"see `baseline-id: {VALID_ID}`\n"}),
     ("malformed version", {BASELINE: "`baseline-id: aiscb-1.2`\n"}),
     ("leading zero in the version", {BASELINE: "`baseline-id: aiscb-0.01.0`\n"}),
-    ("invalid UTF-8", {BASELINE: b"`baseline-id: aiscb-0.1.20`\n\xff\xfe\n"}),
+    ("invalid UTF-8", {BASELINE: b"`baseline-id: aiscb-0.1.21`\n\xff\xfe\n"}),
     ("one byte over the size limit",
      {BASELINE: VALID + "x" * (MAX_BASELINE_BYTES - len(VALID) + 1)}),
     ("a symlinked baseline", {BASELINE: ("symlink", "elsewhere.md"),
@@ -577,10 +577,10 @@ def check_development_build(failures: list[str]) -> None:
         return files
 
     code, out, _ = call(layout(marker))
-    if code != 0 or f"active: aiscb-0.1.21-dev (47f3b23+changes, based on {VALID_ID}) " not in out:
+    if code != 0 or f"active: aiscb-0.1.22-dev (47f3b23+changes, based on {VALID_ID}) " not in out:
         failures.append(f"a development build must rank after its release: {out[:160]!r}")
     _code, out, _ = call(layout({**marker, "modified": False}))
-    if f"active: aiscb-0.1.21-dev (47f3b23, based on {VALID_ID}) " not in out:
+    if f"active: aiscb-0.1.22-dev (47f3b23, based on {VALID_ID}) " not in out:
         failures.append(f"a clean development build has no change mark: {out[:160]!r}")
     for label, value in (
         ("another installation's digest", {**marker, "digest": "b" * 64}),
@@ -599,8 +599,8 @@ def check_development_build(failures: list[str]) -> None:
     if "no newer release known" not in out:
         failures.append(f"its own release must not be offered over a development build: "
                         f"{out[:200]!r}")
-    _code, out, _ = call(layout(marker, {"latest": "aiscb-0.1.21", "checked": checked}))
-    if "update 0.1.21 available" not in out:
+    _code, out, _ = call(layout(marker, {"latest": "aiscb-0.1.22", "checked": checked}))
+    if "update 0.1.22 available" not in out:
         failures.append(f"the next release must be offered: {out[:200]!r}")
 
 

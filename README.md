@@ -11,7 +11,9 @@
 
 Install aiscb to give your AI coding assistant a consistent set of security rules. A core stays active throughout the session; additional modules load when needed. Organizations can add their own rules through an overlay.
 
-Current baseline: `aiscb-0.1.20`.
+Current baseline: `aiscb-0.1.21`.
+
+Release preparation is in progress. The Quick start still installs the published `aiscb-0.1.20` bundle until signed 0.1.21 assets are available.
 
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
@@ -202,7 +204,7 @@ make help                                          # list available commands
 
 Modular setup uses the reviewed local sources without fetching replacements. Signed release updates remain a separate `--update` operation.
 
-`make install-dev` tests unreleased changes in your existing user installation and keeps its tools and mode. It names the build after the checkout's release as the next patch's development version, such as `aiscb-0.1.21-dev` based on `aiscb-0.1.20`, with its commit, in the installed instructions and in a Claude Code session-start notice. The next release number is still set when it is published; any later release is announced and installed by `--update` as usual. A regular install removes the mark; `make uninstall ARGS=--user` also removes the notice.
+`make install-dev` tests unreleased changes in your existing user installation and keeps its tools and mode. It names the build after the checkout's release as the next patch's development version, such as `aiscb-0.1.22-dev` based on `aiscb-0.1.21`, with its commit, in the installed instructions and in a Claude Code session-start notice. The next release number is still set when it is published; any later release is announced and installed by `--update` as usual. A regular install removes the mark; `make uninstall ARGS=--user` also removes the notice.
 
 See the [integration guide](docs/agent-integration-verification.md) for client setup, including Visual Studio personal instructions.
 
@@ -259,7 +261,7 @@ Support varies between CLI, IDE, cloud agent, review, and completion features. C
 
 ### Verify it loaded
 
-Start a fresh session after installing 0.1.20. Ask `aiscb?`; the answer should include `aiscb-0.1.20`, its source, installation mode, available modules, loaded modules, and any overlays. In a fresh modular session, no module bodies should be loaded. Catalog entries are availability information, not loaded modules. Status must not read files.
+Start a fresh session after installing 0.1.21. Ask `aiscb?`; the answer should include `aiscb-0.1.21`, its source, installation mode, available modules, loaded modules, and any overlays. In a fresh modular session, no module bodies should be loaded. Catalog entries are availability information, not loaded modules. Status must not read files.
 
 The answer reports what the assistant sees in context; it does not prove that all rules are followed. Check the client's loaded instructions too, as described in the [verification guide](docs/agent-integration-verification.md).
 
@@ -287,7 +289,7 @@ The [LLM and agentic alignment review](docs/owasp-llm-agentic-review.md) compare
 
 ## Development
 
-Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under `baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.20/` is generated from those sources with `make build-full-baseline`. See [Structure and context budget](#structure-and-context-budget) for current token measurements.
+Normative rule text lives in `baseline/aiscb-core.md` and the cataloged files under `baseline/modules/`; the complete file under `dist/dev/aiscb-0.1.21/` is generated from those sources with `make build-full-baseline`. See [Structure and context budget](#structure-and-context-budget) for current token measurements.
 
 The provisional budgets are roughly 1,500 tokens for the core and 4,100 for the complete baseline. The expanded rules currently exceed them by 510 and 1,904 tokens respectively; these are targets, not enforced limits. Adapter discovery and overlay text add to the actual session context.
 
