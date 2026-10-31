@@ -263,6 +263,14 @@ Start a fresh session after installing 0.1.21. Ask `aiscb?`; the answer should i
 
 The answer reports what the assistant sees in context; it does not prove that all rules are followed. Check the client's loaded instructions too, as described in the [verification guide](docs/agent-integration-verification.md).
 
+## Implementation and review contexts
+
+Inspired by Matt Pocock's [Fixing the PR Bottleneck](https://www.youtube.com/watch?v=LlgiOCmFG_w), we separate writing code from independently reviewing it. We call these the **implementation context** and **review context**: two agents with separate conversations, using the same AISCB rules.
+
+**AISCB stays active during implementation.** Security decisions need to be made while designing and writing code. A later review cannot undo a leaked secret, and fixing the design afterwards can be costly. The optional reviewer checks the result and reports problems for the implementing agent to fix.
+
+The [review skill](docs/security-review.md) is experimental and is not installed by default. It adds time and token costs; whether it improves security still needs testing. See the [analysis](docs/security-review-analysis.md) for the reasoning and planned comparison.
+
 ## Adapting it
 
 For organization rules, keep the official baseline and add a separately versioned overlay, such as `acme-sec-1.0.0`. An overlay may add or narrow rules; it cannot disable baseline controls. See the [organization guide](docs/adapting-in-an-organization.md) for setup, examples, and how explicit exceptions for an individual task work.
