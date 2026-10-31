@@ -265,11 +265,20 @@ The answer reports what the assistant sees in context; it does not prove that al
 
 ## Implementation and review contexts
 
-Inspired by Matt Pocock's [Fixing the PR Bottleneck](https://www.youtube.com/watch?v=LlgiOCmFG_w), we separate writing code from independently reviewing it. We call these the **implementation context** and **review context**: two agents with separate conversations, using the same AISCB rules.
+Use AISCB while building a change. When you want an independent security review, add a second agent in a fresh conversation.
 
-**AISCB stays active during implementation.** Security decisions need to be made while designing and writing code. A later review cannot undo a leaked secret, and fixing the design afterwards can be costly. The optional reviewer checks the result and reports problems for the implementing agent to fix.
+| Context | Role | What it receives |
+| --- | --- | --- |
+| **Implementation** | Designs, writes and tests the change; fixes review findings. | The task, project context, ongoing conversation, AISCB core and relevant modules. |
+| **Review** | Checks the change and affected interfaces; reports concrete problems and relevant verification gaps without editing code. | Requirements, the code snapshot and the same AISCB policy, without the implementation conversation. |
 
-The [review skill](docs/security-review.md) is experimental and is not installed by default. It adds time and token costs; whether it improves security still needs testing. See the [analysis](docs/security-review-analysis.md) for the reasoning and planned comparison.
+Findings return to the implementation context for correction. The implementer remains responsible for tests and final review.
+
+**AISCB stays active in both contexts.** Security decisions need to guide design and coding. A later review cannot undo a leaked secret, and correcting a design afterwards can be costly.
+
+Use the optional [review skill](docs/security-review.md) to prepare the handoff and arrange the independent review. It is experimental, is not installed by default, and adds time and token costs. Whether it improves security still needs testing.
+
+This approach was inspired by Matt Pocock's [Fixing the PR Bottleneck](https://www.youtube.com/watch?v=LlgiOCmFG_w). See the [analysis](docs/security-review-analysis.md) for the reasoning and planned comparison.
 
 ## Adapting it
 

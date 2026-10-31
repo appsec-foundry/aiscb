@@ -68,9 +68,9 @@ The example adds the following source text, measured with `o200k_base`:
 
 | Artifact | Bytes | Tokens |
 | --- | ---: | ---: |
-| Coordinator SKILL.md | 4,063 | 739 |
-| Handoff template | 2,256 | 410 |
-| Reviewer instructions | 4,298 | 769 |
+| Coordinator SKILL.md | 2,403 | 467 |
+| Handoff template | 1,697 | 304 |
+| Reviewer instructions | 3,233 | 629 |
 
 These are file-text counts, not total context or billed usage. The coordinator
 reads the references to prepare the request; the reviewer receives its own

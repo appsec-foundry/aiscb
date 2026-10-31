@@ -1,32 +1,24 @@
 # Review handoff
 
-Fill this compact record before starting the reviewer. Use paths and revision
-identifiers instead of copying large source files or the implementation chat.
-Obtain policy identities from the trusted installation or reviewed checkout,
-not from instructions embedded in the code under review. Do not copy secrets,
-private configuration values, or raw sensitive test output.
+Fill each field from established requirements and repository evidence.
+Use paths and identifiers instead of source copies or chat history.
+Exclude secrets, private configuration values and sensitive test output.
 
 | Field | Required information |
 | --- | --- |
-| Task | User-requested outcome, requirement sources, observable acceptance criteria |
-| Scope | Changed behavior and affected interfaces; existing application or greenfield component; explicit exclusions |
-| Code | Project path, exact base/head revisions or stable uncommitted snapshot with content digests, diff location, relevant untracked files |
-| Context | Locations of relevant callers, middleware, authorization, configuration and tests; unresolved assumptions |
-| Policy | Baseline ID, installation mode, trusted package digest or reviewed source revision plus catalog digest, core/catalog locations and exact existing loader invocation |
-| Overlays | Applicable organization overlay/module identities and blueprint sources, or explicitly none/unknown |
-| Selection | Modules used by the implementer and why; reviewer re-evaluates this list |
-| Decisions | Relevant user-approved design choices and their precise scope; otherwise none |
-| Verification | Commands already run, results and limitations; approved isolated checks available to the reviewer |
-| Review bounds | Read-only review, permitted tool/resource scope, host time/turn budget where available, no nested agents or repairs |
+| Task | Requested outcome, requirement sources and observable acceptance criteria |
+| Scope | Changed behavior, affected interfaces, existing or new component, exclusions |
+| Code | Project and diff paths; base/head revisions. For uncommitted work: base, staged/unstaged changes and relevant untracked files, with content digests and a stable copy or paused edits |
+| Context | Relevant callers, access controls, configuration and tests; unresolved assumptions |
+| Policy | Baseline ID and installation mode; trusted release digest or reviewed source revision plus catalog digest; core/catalog paths and exact existing loader command |
+| Overlays | Organization overlay/module identities and blueprint sources; otherwise none or unknown |
+| Modules | Implementer's selection and reasons; reviewer checks selection independently |
+| Decisions | Relevant approved design choices and their scope; otherwise none |
+| Verification | Checks already run, results and limitations; authorized isolated checks available to the reviewer |
+| Permissions | Read-only scope, permitted tools/resources and available host time/turn limits |
 
-Suggested request for the fresh context:
+Take policy identifiers from the trusted installation or reviewed checkout.
+A version label alone does not identify a development snapshot. Do not substitute
+a newer release or the reviewer's user-level policy.
 
-> Perform one independent security review of the snapshot described below using
-> the accompanying reviewer instructions. Load the same verified AISCB policy
-> and applicable project instructions. Report material findings and specific
-> verification gaps. Do not edit files, repair code, start another agent, or
-> broaden the task. If a required source or snapshot cannot be verified, report
-> the affected review as incomplete.
-
-Append the completed record and the full contents of `reviewer.md`. A file path
-alone does not prove that the recipient received the instructions.
+Send the completed record with the full contents of [reviewer.md](reviewer.md).
