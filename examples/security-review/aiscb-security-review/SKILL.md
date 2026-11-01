@@ -5,45 +5,56 @@ description: Arrange a requested independent security review of an implementatio
 
 # Independent AISCB security review
 
-Keep AISCB active during implementation. The reviewer reports problems;
-the implementer makes corrections and remains responsible for tests and final
+You are the implementer and prepare the review. One reviewer in a fresh context
+reports findings. You make corrections and stay responsible for tests and final
 review. This workflow adds no application security requirements.
+
+| Status | Meaning |
+| --- | --- |
+| **prepared** | Handoff is ready; the user must start the reviewer |
+| **incomplete** | Review was interrupted or required coverage is missing |
+| **completed** | Reviewer covered the handoff scope; this is no security guarantee |
 
 ## 1. Prepare the handoff
 
-Fill [handoff.md](references/handoff.md) from the authorized task and repository
-evidence. Reuse established requirements and decisions; ask only when missing
-information prevents the review. Do not invent acceptance criteria.
-
-Use a stable code snapshot and the implementer's existing policy source.
-Pause edits if needed. Do not create commits, install policy or change user
-settings to prepare the review.
+- [ ] Fill [handoff.md](references/handoff.md) from the authorized task and
+      repository evidence.
+- [ ] Reuse established requirements and decisions. Do not invent acceptance
+      criteria.
+- [ ] Ask the user only if missing information prevents the review.
+- [ ] Keep the code stable: use a snapshot or pause edits.
+- [ ] Use your existing policy source.
+- [ ] Do not create commits, install policy or change user settings for the review.
 
 ## 2. Start one reviewer
 
-Give the complete [reviewer instructions](references/reviewer.md) and completed
-handoff to one fresh context. Exclude the implementation conversation and this
-coordinator workflow.
+| Situation | Action |
+| --- | --- |
+| The user asked you to start the review, and the host can start an agent without this conversation | Start one separate agent |
+| Otherwise | Give the user the handoff and [reviewer.md](references/reviewer.md) for a new session with the same code and policy. Status: **prepared**. Continue with step 3 when the result returns |
 
-- Use a separate agent only when authorized and able to start without inherited
-  conversation. Otherwise return the handoff and instructions for a new
-  user-started session with access to the same code and policy. Mark it **prepared**.
-- Request only scoped read access and the policy loader. Use host-enforced
-  read-only access where available; instructions alone do not enforce it.
-  Do not grant general write, shell, network, credential or delegation access.
-- Start at most one pass. No nested agents, automatic retries or repair loops.
-  Apply available host time/turn limits and cancellation. Mark interruption
-  **incomplete**.
+For either path:
+
+- [ ] Give the reviewer the full reviewer instructions and completed handoff.
+- [ ] Withhold this conversation and this workflow.
+- [ ] Allow scoped read access, the handoff's policy loader command and the
+      isolated checks named in the handoff.
+- [ ] Deny all other write, shell, network, credential and delegation access.
+- [ ] Enforce access through the host. If it cannot, continue and record
+      **not enforced** in the handoff. Instructions alone enforce nothing.
+- [ ] Run one pass: no nested agents, automatic retries or repair loops.
+- [ ] Apply available host time/turn limits and cancellation. Interrupted means
+      **incomplete**.
 
 Self-review is not an independent review. Claim a fresh context, enforced
 permissions or successful policy loading only when verified.
 
-## 3. Return the result
+## 3. Handle the result
 
-Return the reviewer's concise report, preserving unresolved findings and
-relevant limitations. An incomplete review is not a completed review with no
-findings; an empty finding list is not a security guarantee.
-
-Corrections stay within the original authorization and approval requirements.
-A requested re-review covers the new snapshot, previous findings and affected
-regressions. Apply AISCB's reporting rules to the final delivery.
+- [ ] Show the user the status, unresolved findings, open checks and limitations.
+- [ ] Never present **incomplete** as "no findings" or an empty finding list as a
+      security guarantee.
+- [ ] Keep corrections within the original authorization and approval requirements.
+- [ ] Re-review only on request: use the new snapshot, fill **Previous review** in
+      the handoff and repeat step 2.
+- [ ] Apply AISCB's reporting rules to the final delivery.

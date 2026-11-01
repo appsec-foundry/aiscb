@@ -320,6 +320,35 @@ review quality. A client acceptance run must separately demonstrate fresh
 context, matching policy, module loading and permission behavior. A paid pilot
 must demonstrate any claimed security benefit.
 
+### Example validation
+
+Local static validation checked the skill frontmatter, resolved the relative
+links of the example and its documentation, and matched all 48 rule groups in
+this analysis against the sources. Recomputed core, module and complete baseline
+measurements match the README. No normative source changed.
+
+The current example text was checked suite by suite in a restricted sandbox:
+22 of the 23 `make check` suites passed. In `tests/test_routing.py`, 29 of 35
+tests failed because its oracle could not start `bwrap` inside the sandbox, so
+this suite needs an unrestricted run. No run called a model.
+
+The example adds the following source text, measured with `o200k_base`:
+
+| Artifact | Bytes | Tokens |
+| --- | ---: | ---: |
+| Coordinator SKILL.md | 2,952 | 636 |
+| Handoff template | 1,784 | 334 |
+| Reviewer instructions | 3,680 | 760 |
+
+These are file-text counts, not total context or billed usage. The coordinator
+reads the references to prepare the request; the reviewer receives its own
+instructions and the completed handoff, plus policy and code. Filled-in fields,
+client wrappers, skill discovery and repeated model requests add overhead.
+
+The example has no client-specific launcher, automatic installer integration,
+repair loop or four-arm experiment runner. Static skill validation cannot
+establish independence, finding quality or model compliance.
+
 ## Next decisions
 
 Select the first actual client and model, review invocation point, supported
