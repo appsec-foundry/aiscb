@@ -30,17 +30,26 @@ The [Quick start](#quick-start) installs this modular setup. See [Modular instal
 
 ## Quick start
 
-Use the guided installer to install or update aiscb. The complete command verifies a pinned setup script and bundle before running them, and keeps existing instruction files:
+Use the guided installer to install or update aiscb. The command is pinned to one commit, verifies the bundle before running it, and keeps existing instruction files:
+
+```bash
+curl -fsS https://raw.githubusercontent.com/appsec-foundry/aiscb/b02a7e35585c26cc9a68f2a3852e4d5187f9c422/setup.sh | bash
+```
+
+<details>
+<summary>Check the setup script before running it</summary>
 
 ```bash
 curl --proto '=https' \
   --fail --silent --show-error \
   --output aiscb-setup.sh \
-  https://raw.githubusercontent.com/appsec-foundry/aiscb/1507649374f3df7de759aef25129dd3bb097a3c1/setup.sh &&
-echo '8c9b7956ead3ad64d5c84bb43e35abaf9bb661a35597a4f93ef82c71c160e744  aiscb-setup.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/aiscb/b02a7e35585c26cc9a68f2a3852e4d5187f9c422/setup.sh &&
+echo '411523c50b0140feec0bc0accdd272078ef06a53fc2902a817dd1dd2c5aa2c43  aiscb-setup.sh' |
   sha256sum --check &&
 bash aiscb-setup.sh
 ```
+
+</details>
 
 Choose a project directory to use the baseline in selected projects, or your user account to use it across projects, then the tools you use. A project installation does not disable an existing user installation. The installer preserves unrelated instructions and can migrate an existing complete installation after verifying it. Restart the assistant and [verify it loaded](#verify-it-loaded).
 
