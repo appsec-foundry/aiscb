@@ -85,12 +85,16 @@ verifies modular assembly, and also holds this file to its own contract:
 embed generated rules. `CLAUDE.md` imports AGENTS and core exactly once.
 `.github/copilot-instructions.md` points to the same workflow and loader.
 
-The remote quick start is a two-level verified distribution path. `README.md`
-pins and hashes `setup.sh`; remote `setup.sh` pins one versioned bundle and
-checks the size and SHA-256 of `secure-coding-baseline.md`,
-`scripts/install.py`, and `scripts/show_baseline_version.py` before executing
-anything from it. Remote setup must install that checked bundle without
-substituting content fetched from `main` or a release at runtime.
+The remote quick start is a two-level pinned distribution path. `README.md`
+pins `setup.sh` to one commit: its default one-line command pipes that commit's
+script to Bash, and an expandable alternative also checks the script's SHA-256
+before running it. Remote `setup.sh` pins one versioned bundle and checks the
+size and SHA-256 of `secure-coding-baseline.md`, `scripts/install.py`, and
+`scripts/show_baseline_version.py` before executing anything from it. It starts
+work only on its last line, so a truncated download executes nothing, and hands
+guided setup the terminal when its stdin is the pipe. Remote setup must install
+that checked bundle without substituting content fetched from `main` or a
+release at runtime.
 
 An installed copy updates itself only through the signed bundle manifest.
 `bundle.json` pins the size and SHA-256 of the three bundled files;
@@ -108,22 +112,24 @@ filenames, an exact-byte manifest and signature. They are release assets, not
 tracked source files. Never overwrite or reuse a published release/bundle.
 `make check` validates sources and development behavior without a private key;
 `make check-release BUNDLE_DIR=...` must additionally verify the staged signature
-and content before publication. Sign only with the maintainer's key. Preserve
+and content before publication. The manifest does not cover `setup.sh`, so
+`make sign-bundle` also writes `setup.sh.sig` and the release gate requires it.
+Sign only with the maintainer's key. Preserve
 the existing published bootstrap pins until approved replacement assets exist;
 do not make a development checkout masquerade as a published bundle.
 [`docs/releasing.md`](docs/releasing.md) spells the sequence out with its
 commands, the key setup, and the rotation; signing needs the maintainer's key,
 so an assistant prepares a release up to that step and reports it.
 
-Every published baseline release must update the complete Quick start command
-block in `README.md`, even though its command structure stays the same. It must
-name the bootstrap commit for that release and the exact SHA-256 of `setup.sh`
-in that commit; `scripts/test_install.py` enforces the hash match. Do not publish
-a release while the README command still installs the previous bundle. Because
-the bootstrap commit is only known after it is created, commit `setup.sh` first
-and update the command block in a follow-up documentation commit. Do not publish
-or merge the intermediate state where the README hash and bootstrap commit do
-not yet form a working pair.
+Every published baseline release must update both Quick start commands in
+`README.md`, even though their structure stays the same. They must name the
+bootstrap commit for that release, and the expandable command the exact SHA-256
+of `setup.sh` in that commit; `scripts/test_install.py` enforces the hash match.
+Do not publish a release while the README command still installs the previous
+bundle. Because the bootstrap commit is only known after it is created, commit
+`setup.sh` first and update the commands in a follow-up documentation commit. Do
+not publish or merge the intermediate state where the README hash and bootstrap
+commit do not yet form a working pair.
 
 The model targets are a different matter: they run the cases against real
 models. `make test` is 144 agent runs and hours of tokens, `make test-all`

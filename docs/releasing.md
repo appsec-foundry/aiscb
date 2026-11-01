@@ -11,7 +11,8 @@ not tracked copies of the rules. Never publish development output as a release.
   `dist/aiscb-X.Y.Z/bundle-N/`. The directory must not exist.
 - Files inside a bundle retain stable names: `secure-coding-baseline.md`,
   `scripts/install.py`, `scripts/show_baseline_version.py`, `bundle.json`,
-  and generated `setup.sh`. Signing adds `bundle.json.sig`.
+  and generated `setup.sh`. Signing adds `bundle.json.sig` and `setup.sh.sig`,
+  because the manifest does not cover the script that runs first.
 
 The staged installer embeds the reviewed core, catalog, modules and Python
 loader/setup sources as data. Its existing manifest entry and bootstrap hash
@@ -36,7 +37,8 @@ It does not declare the working tree published or signed.
 
 `make check-release BUNDLE_DIR=dist/aiscb-X.Y.Z/bundle-N` is mandatory before
 publication. It verifies the staged manifest, exact bytes, trusted signature,
-versioned directory and matching bootstrap hashes. Missing signatures fail.
+versioned directory, matching bootstrap hashes and the bootstrap signature.
+Missing signatures fail.
 Never replace this with development checks or skip verification to make a release.
 
 ## Prepare and publish
@@ -91,6 +93,7 @@ Never replace this with development checks or skip verification to make a releas
    | `scripts/show_baseline_version.py` | `show_baseline_version.py` |
    | `bundle.json` | `bundle.json` |
    | `bundle.json.sig` | `bundle.json.sig` |
+   | `setup.sh.sig` | `setup.sh.sig` |
 
    The signed manifest keeps the logical `scripts/` paths; the downloader maps
    them to asset basenames. Do not use upload overwrite options. Keep source
@@ -98,10 +101,27 @@ Never replace this with development checks or skip verification to make a releas
    must be named `aiscb-X.Y.Z-bundle-N.tar.gz`; it is not the updater input.
 7. Prepare the new Quick start from the staged `setup.sh`. After the assets are
    available, put these exact bytes into the tracked root `setup.sh`, commit it,
-   then update the **complete** README Quick start block with that commit and
-   its exact SHA-256 in a follow-up documentation commit. Keep the old working
-   Quick start until the new assets can actually be downloaded. Never publish
-   or merge a mismatched bootstrap URL/hash pair.
+   then update **both** README Quick start commands with that commit and the
+   expandable one with its exact SHA-256 in a follow-up documentation commit.
+   Keep the old working Quick start until the new assets can actually be
+   downloaded. Never publish or merge a mismatched bootstrap URL/hash pair.
+
+   The first bundle published with `setup.sh.sig` replaces the hash check in the
+   expandable command with this signature check and adapts the matching check
+   in `scripts/test_install.py`. Take `SIGNER_LINE` from `ALLOWED_SIGNERS`. The
+   key stays valid across releases, so tell readers to compare it with a copy
+   obtained outside this repository:
+
+   ```bash
+   curl -fsS -o aiscb-setup.sh \
+     https://raw.githubusercontent.com/appsec-foundry/aiscb/COMMIT/setup.sh
+   curl -fsSL -o aiscb-setup.sh.sig \
+     https://github.com/appsec-foundry/aiscb/releases/download/aiscb-bundle-X.Y.Z-N/setup.sh.sig
+   echo 'SIGNER_LINE' > aiscb-signers
+   ssh-keygen -Y verify -f aiscb-signers -I aiscb-release -n aiscb-bundle \
+     -s aiscb-setup.sh.sig < aiscb-setup.sh &&
+   bash aiscb-setup.sh
+   ```
 8. Verify the real download path in a clean environment: expected version,
    signature, hash/size checks, refused tampering, installation and new-session
    loading. Publish the release as stable only after validation; the updater

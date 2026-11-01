@@ -2,9 +2,11 @@
 """Write, sign, and verify the bundle manifest an installed copy updates from.
 
 The manifest pins the size and SHA-256 of every bundled file; the signature
-binds it to a release key whose public half ships in install.py. Signing needs
-the maintainer's private key and happens in an explicit staged bundle directory
-before publication. Generated files are release assets, not committed sources.
+binds it to a release key whose public half ships in install.py. The manifest
+does not cover setup.sh, which runs first, so a release signs it separately.
+Signing needs the maintainer's private key and happens in an explicit staged
+bundle directory before publication. Generated files are release assets, not
+committed sources.
 """
 
 import argparse
@@ -17,6 +19,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
 
 MAX_PUBLIC_KEY_BYTES = 4 * 1024
+BOOTSTRAP_NAME = "setup.sh"
+BOOTSTRAP_SIGNATURE_NAME = f"{BOOTSTRAP_NAME}.sig"
 
 
 def bundle_files(repo: Path) -> dict[str, bytes]:
@@ -41,6 +45,23 @@ def write_manifest(repo: Path) -> Path:
     return manifest
 
 
+def sign_file(path: Path, private_key: Path) -> Path:
+    signature = path.with_name(f"{path.name}.sig")
+    signature.unlink(missing_ok=True)
+    subprocess.run(
+        [
+            "ssh-keygen", "-Y", "sign",
+            "-f", str(private_key),
+            "-n", install.SIGNATURE_NAMESPACE,
+            str(path),
+        ],
+        check=True,
+        timeout=install.SSH_KEYGEN_TIMEOUT,
+    )
+    install.verify_manifest_signature(path.read_bytes(), signature.read_bytes())
+    return signature
+
+
 def sign_manifest(repo: Path, private_key: Path) -> Path:
     line = public_key_line(private_key)
     if line not in install.ALLOWED_SIGNERS:
@@ -48,20 +69,12 @@ def sign_manifest(repo: Path, private_key: Path) -> Path:
             "install.py does not carry this key; add the line below to "
             f"ALLOWED_SIGNERS first, then sign again:\n  {line!r}"
         )
-    manifest = write_manifest(repo)
-    signature = repo / install.SIGNATURE_NAME
-    signature.unlink(missing_ok=True)
-    subprocess.run(
-        [
-            "ssh-keygen", "-Y", "sign",
-            "-f", str(private_key),
-            "-n", install.SIGNATURE_NAMESPACE,
-            str(manifest),
-        ],
-        check=True,
-        timeout=install.SSH_KEYGEN_TIMEOUT,
-    )
-    install.verify_manifest_signature(manifest.read_bytes(), signature.read_bytes())
+    return sign_file(write_manifest(repo), private_key)
+
+
+def sign_release(repo: Path, private_key: Path) -> Path:
+    signature = sign_manifest(repo, private_key)
+    sign_file(repo / BOOTSTRAP_NAME, private_key)
     return signature
 
 
@@ -83,12 +96,16 @@ def verify_release(repo: Path) -> None:
     parsed = install.parse_manifest((repo / install.MANIFEST_NAME).read_bytes())
     if repo.parent.name != parsed.baseline_id or not re.fullmatch(r"bundle-[1-9][0-9]*", repo.name):
         raise ValueError("release directory must be dist/aiscb-VERSION/bundle-N")
-    bootstrap = (repo / "setup.sh").read_text()
+    bootstrap = (repo / BOOTSTRAP_NAME).read_text()
     revision = repo.name.removeprefix("bundle-")
     if f"/releases/download/aiscb-bundle-{parsed.version}-{revision}" not in bootstrap:
         raise ValueError("bootstrap release mismatch")
     if any(digest not in bootstrap for _, digest in parsed.files.values()):
         raise ValueError("bootstrap hashes do not match signed bundle")
+    install.verify_manifest_signature(
+        (repo / BOOTSTRAP_NAME).read_bytes(),
+        install.read_limited(repo / BOOTSTRAP_SIGNATURE_NAME, install.MAX_SIGNATURE_BYTES),
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -113,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.write:
             print(f"wrote {write_manifest(repo)}")
         elif args.sign is not None:
-            print(f"wrote {sign_manifest(repo, args.sign)}")
+            print(f"wrote {sign_release(repo, args.sign)}")
         else:
             verify_release(repo)
             print("bundle manifest verified")

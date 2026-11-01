@@ -3,6 +3,7 @@
 
 import json
 import os
+import pty
 import shutil
 import subprocess
 import sys
@@ -146,7 +147,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("--max-filesize", script)
         self.assertEqual(subprocess.run(["sh", "-n", str(target / "setup.sh")]).returncode, 0)
 
-    def test_asset_bootstrap_executes_only_checked_files(self):
+    def staged_bootstrap(self):
+        """A staged setup.sh whose downloads are answered from the staged files."""
         self.source_copy()
         target = build_release.stage(build.VERSION, "1", self.root)
         commands = self.root / "bin"
@@ -154,6 +156,8 @@ class RepositoryTests(unittest.TestCase):
         curl = commands / "curl"
         curl.write_text(f"#!{sys.executable}\n"
                         "import os, pathlib, sys\n"
+                        "if 'AISCB_TEST_CURL_RAN' in os.environ:\n"
+                        "    pathlib.Path(os.environ['AISCB_TEST_CURL_RAN']).touch()\n"
                         "args=sys.argv[1:]\n"
                         "name=args[-1].rsplit('/', 1)[-1]\n"
                         "root=pathlib.Path(os.environ['AISCB_TEST_BUNDLE'])\n"
@@ -163,8 +167,11 @@ class RepositoryTests(unittest.TestCase):
                         "if os.environ.get('AISCB_TEST_LARGE') == name: data += b'x' * 600000\n"
                         "pathlib.Path(args[args.index('--output')+1]).write_bytes(data)\n")
         curl.chmod(0o755)
-        env = {**os.environ, "PATH": str(commands) + os.pathsep + os.environ["PATH"],
-               "AISCB_TEST_BUNDLE": str(target)}
+        return target, {**os.environ, "PATH": str(commands) + os.pathsep + os.environ["PATH"],
+                        "AISCB_TEST_BUNDLE": str(target)}
+
+    def test_asset_bootstrap_executes_only_checked_files(self):
+        target, env = self.staged_bootstrap()
         for mode, expected in (({}, 0), ({"AISCB_TEST_TAMPER": "install.py"}, 2),
                                ({"AISCB_TEST_LARGE": "install.py"}, 2)):
             result = subprocess.run(["sh", str(target / "setup.sh"), "--help"],
@@ -175,6 +182,56 @@ class RepositoryTests(unittest.TestCase):
             else:
                 self.assertIn("usage: install.py", result.stdout)
 
+    def test_piped_bootstrap_passes_arguments_to_checked_installer(self):
+        target, env = self.staged_bootstrap()
+        result = subprocess.run(["sh", "-s", "--", "--help"], input=(target / "setup.sh").read_text(),
+                                env=env, capture_output=True, text=True, start_new_session=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("usage: install.py", result.stdout)
+
+    def test_truncated_piped_bootstrap_executes_nothing(self):
+        target, env = self.staged_bootstrap()
+        ran = self.root / "curl-ran"
+        env["AISCB_TEST_CURL_RAN"] = str(ran)
+        script = (target / "setup.sh").read_bytes()
+        last_line = script.rindex(b'main "$@"')
+        line_ends = [offset + 1 for offset in range(last_line) if script[offset] == ord("\n")]
+        for cut in sorted({*line_ends, *(end - 5 for end in line_ends)}):
+            subprocess.run(["sh"], input=script[:cut], env=env, capture_output=True,
+                           start_new_session=True)
+            self.assertFalse(ran.exists(), f"a download cut at byte {cut} started work")
+        subprocess.run(["sh"], input=script, env=env, capture_output=True, start_new_session=True)
+        self.assertTrue(ran.exists(), "the complete script must reach the download")
+
+    def test_piped_guided_setup_reads_the_terminal(self):
+        target, env = self.staged_bootstrap()
+        python = self.root / "bin/python3"
+        python.write_text('#!/bin/sh\nif [ -t 0 ]; then echo stdin-is-terminal; else echo stdin-is-pipe; fi\n')
+        python.chmod(0o755)
+        pid, terminal = pty.fork()
+        if pid == 0:
+            try:
+                os.execve("/bin/sh", ["sh", "-c", 'cat "$1" | sh', "sh", str(target / "setup.sh")], env)
+            finally:
+                os._exit(127)
+        output = b""
+        try:
+            while chunk := os.read(terminal, 4096):
+                output += chunk
+        except OSError:  # Linux reports a closed terminal as EIO.
+            pass
+        os.close(terminal)
+        status = os.waitpid(pid, 0)[1]
+        self.assertEqual(os.waitstatus_to_exitcode(status), 0, output)
+        self.assertIn(b"stdin-is-terminal", output)
+
+    def test_piped_guided_setup_without_terminal_fails_closed(self):
+        target, env = self.staged_bootstrap()
+        result = subprocess.run(["sh"], input=(target / "setup.sh").read_text(), env=env,
+                                capture_output=True, text=True, start_new_session=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the guided setup needs a terminal", result.stderr)
+
     def test_release_gate_requires_actual_signature(self):
         self.source_copy()
         target = build_release.stage(build.VERSION, "1", self.root)
@@ -182,7 +239,7 @@ class RepositoryTests(unittest.TestCase):
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
         signer = bundle_manifest.public_key_line(key)
         with patch.object(install, "ALLOWED_SIGNERS", (signer,)):
-            bundle_manifest.sign_manifest(target, key)
+            bundle_manifest.sign_release(target, key)
             bundle_manifest.verify_release(target)
             baseline = target / install.BASELINE
             baseline.write_bytes(baseline.read_bytes() + b"tamper")
@@ -214,7 +271,7 @@ class RepositoryTests(unittest.TestCase):
 
     def test_release_gate_checks_directory_and_bootstrap(self):
         target, key = self.signed_bundle()
-        bundle_manifest.sign_manifest(target, key)
+        bundle_manifest.sign_release(target, key)
         bundle_manifest.verify_release(target)
         renamed = target.with_name("staging")
         shutil.copytree(target, renamed)
@@ -228,6 +285,18 @@ class RepositoryTests(unittest.TestCase):
         digest = json.loads((target / "bundle.json").read_text())["files"][install.BASELINE]["sha256"]
         setup.write_text(original.replace(digest, "0" * 64))
         with self.assertRaisesRegex(ValueError, "bootstrap hashes"):
+            bundle_manifest.verify_release(target)
+        # Correct release and hashes do not vouch for the rest of the script.
+        setup.write_text(original + "echo changed\n")
+        with self.assertRaisesRegex(ValueError, "not from a trusted release key"):
+            bundle_manifest.verify_release(target)
+        setup.write_text(original)
+        signature = target / bundle_manifest.BOOTSTRAP_SIGNATURE_NAME
+        signature.unlink()
+        with self.assertRaises(FileNotFoundError):
+            bundle_manifest.verify_release(target)
+        shutil.copyfile(target / install.SIGNATURE_NAME, signature)
+        with self.assertRaisesRegex(ValueError, "not from a trusted release key"):
             bundle_manifest.verify_release(target)
 
     def test_manifest_command_line_writes_signs_and_verifies(self):

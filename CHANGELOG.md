@@ -3,6 +3,12 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
+## Unreleased
+
+- The Quick start is now one command. It stays pinned to one commit, and the
+  setup script still verifies the bundle before running it. The longer command
+  that also checks the setup script's hash remains available below it.
+
 ## [0.1.21](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.21) (2026-10-28)
 
 - Application-security rules now follow the affected application behavior;

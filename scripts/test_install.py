@@ -2200,15 +2200,19 @@ bootstrap_refs = re.findall(
 # The published 0.1.15 script predates the checkout's modular dispatch.
 expected_bootstrap = (
     (published_fixture / "setup.sh").read_bytes()
-    if bootstrap_refs == ["6deb1bd83c627a54c31570899a4dd1dc40f690c1"]
+    if set(bootstrap_refs) == {"6deb1bd83c627a54c31570899a4dd1dc40f690c1"}
     else setup_script.read_bytes()
 )
 setup_digest = hashlib.sha256(expected_bootstrap).hexdigest()
-check("the quick start pins an immutable commit and the exact documented bootstrap",
-      len(bootstrap_refs) == 1
+check("both quick start commands pin one immutable commit, and one checks the bootstrap hash",
+      len(bootstrap_refs) == 2
+      and len(set(bootstrap_refs)) == 1
+      and quick_start.count("raw.githubusercontent.com") == 2
+      and "curl -fsS https://raw.githubusercontent.com/appsec-foundry/aiscb/"
+      f"{bootstrap_refs[0]}/setup.sh | bash" in normalized_quick_start
       and f"echo '{setup_digest} aiscb-setup.sh' | sha256sum --check"
       in normalized_quick_start)
-if len(bootstrap_refs) == 1:
+if len(set(bootstrap_refs)) == 1:
     pinned_setup = subprocess.run(
         ["git", "show", f"{bootstrap_refs[0]}:setup.sh"], cwd=install.REPO,
         capture_output=True,
