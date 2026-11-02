@@ -53,6 +53,8 @@ bash aiscb-setup.sh
 
 Choose a project directory to use the baseline in selected projects, or your user account to use it across projects, then the tools you use. A project installation does not disable an existing user installation. The installer preserves unrelated instructions and can migrate an existing complete installation after verifying it. Restart the assistant and [verify it loaded](#verify-it-loaded).
 
+Automatic Claude Rules selection is available in the [checkout installer](#modular-installation), but is not yet included in the pinned release above. Existing installations keep their instruction location until explicitly migrated.
+
 Requires Bash, `curl`, `sha256sum`, and Python 3.10+. Modular loading requires permission to execute the supplied Python loader. Claude Code users can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
 
 ## Update
@@ -217,7 +219,7 @@ See the [integration guide](docs/agent-integration-verification.md) for client s
 
 ### Modular installation
 
-Modular loading is the default. The Quick start covers Claude Code, Codex, Copilot, and Kiro. Run:
+Modular loading is the default. From a reviewed checkout, name the tools you use:
 
 ```bash
 python3 scripts/install.py claude codex copilot kiro --into /path/to/project
@@ -229,7 +231,24 @@ Use an existing project root for `--into`; the installer uses that exact directo
 
 Name only the tools you use, or omit the names for all four. Codex and Kiro share the project `AGENTS.md`; for your user account, Kiro reads `~/.kiro/steering/AGENTS.md`. The assistant must be allowed to run the supplied Python 3.10+ loader. The installer preserves unrelated instructions. Restart the assistant and [verify it loaded](#verify-it-loaded); file status alone does not prove client loading or module selection.
 
-New Claude-only modular installations prefer `.claude/rules/aiscb.md` for a project or `~/.claude/rules/aiscb.md` for your account. The installer selects and prints the entry point automatically; existing installations keep theirs, and new multi-tool installations use `CLAUDE.md`. Rules contain the core, discovery and loader instructions without a path filter; modules still load on demand. See [Claude entry selection](docs/local-policy-installation.md#claude-entry-selection) for explicit selection and migration.
+For Claude alone, let the installer choose the instruction location:
+
+```bash
+python3 scripts/install.py claude --into /path/to/project
+python3 scripts/install.py claude --user
+```
+
+Suitable new Claude-only installations use `.claude/rules/aiscb.md` for a project or `~/.claude/rules/aiscb.md` for your account. Existing installations keep their location; new multi-tool installations use `CLAUDE.md` for Claude. Setup prints its choice. Rules keep the core active and load modules on demand, just like the existing integration.
+
+To move an existing managed Claude installation, close affected sessions and choose the destination explicitly:
+
+```bash
+python3 scripts/install.py claude --user --claude-entry rules --migrate
+# Or select a project instead of --user:
+python3 scripts/install.py claude --into /path/to/project --claude-entry rules --migrate
+```
+
+Use `--claude-entry claude-md --migrate` to move back. The installer preserves unrelated instructions and rejects a Rules choice that would duplicate a detected baseline copy. Updates, status and uninstall retain the recorded location. See [Claude entry selection](docs/local-policy-installation.md#claude-entry-selection) for adding other tools and checking custom configurations.
 
 Modular loading needs verification in the clients you use before rollout; installer tests do not establish that a model selects the right modules. If command execution is unavailable, use `--complete`, provided the client's instruction limit can hold the entire baseline. Only the core, module discovery and loader instructions enter the initial context; module bodies stay on disk until selected. `--modular` remains an explicit spelling of the default.
 
