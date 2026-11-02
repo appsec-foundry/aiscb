@@ -318,7 +318,7 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
             return 0
     if args.interactive:
         output("aiscb setup: core and discovery first; modules load only when needed.")
-        scope = input_fn("Install for [u]ser or [p]roject? [u] ").strip().lower() or "u"
+        scope = input_fn("Install for [u]ser or [p]roject? [p] ").strip().lower() or "p"
         if scope not in {"u", "p"}:
             raise ValueError("choose u or p")
         args.user = scope == "u"

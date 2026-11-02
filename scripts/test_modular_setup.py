@@ -467,11 +467,20 @@ class ModularSetupTests(unittest.TestCase):
         args = argparse.Namespace(into=self.project, user=False, tools=[], interactive=True,
                                   status=False, uninstall=False, complete=False,
                                   organization=None, organization_sha256=None, migrate=False)
-        answers = iter(("p", "", "claude codex copilot"))
+        answers = iter(("", "", "claude codex copilot"))
         self.assertEqual(policy_setup.run(install, args, home=self.home,
                          input_fn=lambda _: next(answers), output=lambda _: None), 0)
         for rel in install_policy.ENTRY_POINTS.values():
             self.command(self.project / rel)
+        self.assertFalse(args.user)
+        self.assertFalse((self.home / ".aiscb").exists())
+
+    def test_interactive_user_scope_requires_explicit_selection(self):
+        code, _ = self.run_setup(("u", "claude"), interactive=True)
+        self.assertEqual(code, 0)
+        self.command(self.home / ".claude/rules/aiscb.md")
+        self.assertTrue((self.home / ".aiscb/installation.json").is_file())
+        self.assertEqual(list(self.project.iterdir()), [])
 
     def test_claude_rules_default_lifecycle_and_custom_config(self):
         for user in (False, True):

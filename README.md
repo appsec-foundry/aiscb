@@ -53,7 +53,7 @@ bash aiscb-setup.sh
 
 Choose a project directory to use the baseline in selected projects, or your user account to use it across projects, then the tools you use. A project installation does not disable an existing user installation. The installer preserves unrelated instructions and can migrate an existing complete installation after verifying it. Restart the assistant and [verify it loaded](#verify-it-loaded).
 
-Automatic Claude Rules selection is available in the [checkout installer](#modular-installation), but is not yet included in the pinned release above. Existing installations keep their instruction location until explicitly migrated.
+The [checkout installer](#modular-installation) defaults to project scope in guided setup and selects Claude Rules automatically where suitable. These changes are not yet included in the pinned release above. Existing installations keep their instruction location until explicitly migrated.
 
 Requires Bash, `curl`, `sha256sum`, and Python 3.10+. Modular loading requires permission to execute the supplied Python loader. Claude Code users can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
 
@@ -200,7 +200,7 @@ From a reviewed checkout, install its version with:
 make setup ARGS=--offline
 ```
 
-Choose a user installation or a project. For a project, enter the intended project root explicitly; the default is the current directory, even inside a Git subdirectory. Existing unrelated instructions are preserved. Modular setup refuses changed managed blocks; keep your own project instructions outside them. Restart the assistant and [verify it loaded](#verify-it-loaded).
+Guided setup defaults to a project installation; select `u` explicitly for use across projects. Enter the intended project root; the directory defaults to the current one, even inside a Git subdirectory. Existing unrelated instructions are preserved. Modular setup refuses changed managed blocks; keep your own project instructions outside them. Restart the assistant and [verify it loaded](#verify-it-loaded).
 
 Other commands:
 

@@ -18,7 +18,8 @@ Complete mode avoids that runtime command but still needs client loading tests.
 
 ## Install
 
-Choose project scope for selected projects or user scope for use across projects.
+Guided setup defaults to project scope; press Enter for a project or select `u`
+explicitly for use across projects.
 A project installation does not disable an existing user installation.
 Run these commands from the reviewed baseline checkout:
 
