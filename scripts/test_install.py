@@ -2192,7 +2192,7 @@ published_fixture = install.REPO / "tests/fixtures/published-bootstrap"
 published_setup = (published_fixture / "setup.sh").read_text(encoding="utf-8")
 readme = (install.REPO / "README.md").read_text(encoding="utf-8")
 quick_start = readme.split("## Quick start", 1)[1].split("\n## ", 1)[0]
-normalized_quick_start = " ".join(quick_start.split())
+normalized_quick_start = " ".join(quick_start.replace("\\\n", "").split())
 bootstrap_refs = re.findall(
     r"https://raw\.githubusercontent\.com/appsec-foundry/aiscb/([a-f0-9]{40})/setup\.sh",
     quick_start,
@@ -2203,22 +2203,32 @@ expected_bootstrap = (
     if set(bootstrap_refs) == {"6deb1bd83c627a54c31570899a4dd1dc40f690c1"}
     else setup_script.read_bytes()
 )
+bootstrap_release = re.search(r'source_root="https://github.com/appsec-foundry/aiscb/releases/download/([^"/]+)"',
+                              setup_content).group(1)
 setup_digest = hashlib.sha256(expected_bootstrap).hexdigest()
-check("both quick start commands pin one immutable commit, and one checks the bootstrap hash",
+check("both quick start commands pin one immutable commit, and one checks its hash and signature",
       len(bootstrap_refs) == 2
       and len(set(bootstrap_refs)) == 1
       and quick_start.count("raw.githubusercontent.com") == 2
+      and f"echo '{setup_digest} aiscb-setup.sh' | sha256sum --check"
+      in normalized_quick_start
       and "curl -fsS https://raw.githubusercontent.com/appsec-foundry/aiscb/"
       f"{bootstrap_refs[0]}/setup.sh | bash" in normalized_quick_start
-      and f"echo '{setup_digest} aiscb-setup.sh' | sha256sum --check"
-      in normalized_quick_start)
+      and f"https://github.com/appsec-foundry/aiscb/releases/download/{bootstrap_release}/setup.sh.sig"
+      in quick_start
+      and any(f"printf '%s\\n' '{signer}' > aiscb-signers &&" in normalized_quick_start
+              for signer in install.ALLOWED_SIGNERS)
+      and "ssh-keygen -Y verify -f aiscb-signers -I aiscb-release -n aiscb-bundle "
+      "-s aiscb-setup.sh.sig < aiscb-setup.sh && bash aiscb-setup.sh"
+      in normalized_quick_start
+      and "obtained independently" in quick_start)
 if len(set(bootstrap_refs)) == 1:
     pinned_setup = subprocess.run(
         ["git", "show", f"{bootstrap_refs[0]}:setup.sh"], cwd=install.REPO,
         capture_output=True,
     )
-    # Shallow checkouts need not contain the bootstrap commit. The hash check
-    # above still applies; release acceptance also checks the actual download.
+    # Shallow checkouts need not contain the bootstrap commit. Release acceptance
+    # also verifies the signature and bytes of the actual download.
     if pinned_setup.returncode == 0:
         check("the locally available pinned commit contains the documented bootstrap",
               pinned_setup.stdout == expected_bootstrap)

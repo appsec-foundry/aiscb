@@ -106,15 +106,16 @@ Never replace this with development checks or skip verification to make a releas
    Keep the old working Quick start until the new assets can actually be
    downloaded. Never publish or merge a mismatched bootstrap URL/hash pair.
 
-   The first bundle published with `setup.sh.sig` replaces the hash check in the
-   expandable command with this signature check and adapts the matching check
+   The first bundle published with `setup.sh.sig` adds this signature check to the
+   hash check in the expandable command and adapts the matching check
    in `scripts/test_install.py`. Take `SIGNER_LINE` from `ALLOWED_SIGNERS`. The
    key stays valid across releases, so tell readers to compare it with a copy
    obtained outside this repository:
 
    ```bash
    curl -fsS -o aiscb-setup.sh \
-     https://raw.githubusercontent.com/appsec-foundry/aiscb/COMMIT/setup.sh
+     https://raw.githubusercontent.com/appsec-foundry/aiscb/COMMIT/setup.sh &&
+   echo 'SETUP_SHA256  aiscb-setup.sh' | sha256sum --check &&
    curl -fsSL -o aiscb-setup.sh.sig \
      https://github.com/appsec-foundry/aiscb/releases/download/aiscb-bundle-X.Y.Z-N/setup.sh.sig
    echo 'SIGNER_LINE' > aiscb-signers
@@ -137,7 +138,8 @@ publication or make a multi-step GitHub release atomic.
 Historical releases keep their Git-tree files and tags unchanged. The published
 0.1.15 bootstrap, manifest and signature remain archived in
 `tests/fixtures/published-bootstrap/` as immutable compatibility fixtures.
-The current README pins the 0.1.21 bundle 1 asset bootstrap.
+The current README pins the 0.1.22 bundle 1 asset bootstrap and offers verification
+of its release signature.
 
 The updater prefers the same release's assets and falls back to legacy Git-tree
 files when an asset is absent. Both paths still require the signed manifest before

@@ -3,12 +3,12 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
-## 0.1.22 (unreleased)
+## [0.1.22](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.22) (2026-11-02)
 
 - Added an optional skill for an independent security review. It is experimental
   and is not installed by default.
-- Quick start now uses one pinned command. The alternative with an explicit
-  script hash check remains available.
+- Quick start now uses one pinned command. The alternative checks the script hash
+  and release signature before running it.
 - Guided setup now defaults to a project installation. Choose user scope
   explicitly to apply the baseline across projects.
 - Claude can use its own Rules file. Existing installations can be moved there

@@ -13,8 +13,6 @@ Install aiscb to give your AI coding assistant a consistent set of security rule
 
 Current baseline: `aiscb-0.1.22`.
 
-Release 0.1.22 is being prepared. The pinned Quick start still installs 0.1.21.
-
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
 The [Quick start](#quick-start) installs this modular setup. See [Modular installation](#modular-installation) for project setup, migration and the option to load all rules at once.
@@ -35,19 +33,28 @@ The [Quick start](#quick-start) installs this modular setup. See [Modular instal
 Use the guided installer to install or update aiscb. The command is pinned to one commit, verifies the bundle before running it, and keeps existing instruction files:
 
 ```bash
-curl -fsS https://raw.githubusercontent.com/appsec-foundry/aiscb/b02a7e35585c26cc9a68f2a3852e4d5187f9c422/setup.sh | bash
+curl -fsS https://raw.githubusercontent.com/appsec-foundry/aiscb/ea28766ca7f138c0c51974ab5cf19d10dce548f0/setup.sh | bash
 ```
 
 <details>
-<summary>Check the setup script before running it</summary>
+<summary>Verify the setup script signature before running it</summary>
+
+Compare the signing key below with a copy obtained independently before trusting it.
 
 ```bash
 curl --proto '=https' \
   --fail --silent --show-error \
   --output aiscb-setup.sh \
-  https://raw.githubusercontent.com/appsec-foundry/aiscb/b02a7e35585c26cc9a68f2a3852e4d5187f9c422/setup.sh &&
-echo '411523c50b0140feec0bc0accdd272078ef06a53fc2902a817dd1dd2c5aa2c43  aiscb-setup.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/aiscb/ea28766ca7f138c0c51974ab5cf19d10dce548f0/setup.sh &&
+echo 'bf0f81005e8952088d12ad65ff3ebb0fc4e5b800547c7b599efee564b8142f32  aiscb-setup.sh' |
   sha256sum --check &&
+curl --proto '=https' --proto-redir '=https' \
+  --fail --silent --show-error --location \
+  --output aiscb-setup.sh.sig \
+  https://github.com/appsec-foundry/aiscb/releases/download/aiscb-bundle-0.1.22-1/setup.sh.sig &&
+printf '%s\n' 'aiscb-release ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILd3kACJfPJk7lcPr79sDqWlq3o552E1+KhaPNmnsboD' > aiscb-signers &&
+ssh-keygen -Y verify -f aiscb-signers -I aiscb-release -n aiscb-bundle \
+  -s aiscb-setup.sh.sig < aiscb-setup.sh &&
 bash aiscb-setup.sh
 ```
 
@@ -55,9 +62,9 @@ bash aiscb-setup.sh
 
 Choose a project directory to use the baseline in selected projects, or your user account to use it across projects, then the tools you use. A project installation does not disable an existing user installation. The installer preserves unrelated instructions and can migrate an existing complete installation after verifying it. Restart the assistant and [verify it loaded](#verify-it-loaded).
 
-The [checkout installer](#modular-installation) defaults to project scope in guided setup and selects Claude Rules automatically where suitable. For Claude user installations it offers a session banner, off by default. These changes are not yet included in the pinned release above. Existing installations keep their instruction location until explicitly migrated.
+The installer defaults to project scope in guided setup and selects Claude Rules automatically where suitable. For Claude user installations it offers a session banner, off by default. Existing installations keep their instruction location until explicitly migrated.
 
-Requires Bash, `curl`, `sha256sum`, and Python 3.10+. Modular loading requires permission to execute the supplied Python loader. Claude Code users can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
+Requires Bash, `curl`, `sha256sum`, and Python 3.10+. The signature-checking alternative also requires `ssh-keygen`. Modular loading requires permission to execute the supplied Python loader. Claude Code users can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
 
 ## Update
 
