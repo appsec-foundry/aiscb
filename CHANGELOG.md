@@ -5,9 +5,14 @@ shows its publication date. Later installer updates are listed separately.
 
 ## Unreleased
 
-- The Quick start is now one command. It stays pinned to one commit, and the
-  setup script still verifies the bundle before running it. The longer command
-  that also checks the setup script's hash remains available below it.
+- Quick start now uses one pinned command. The alternative with an explicit
+  script hash check remains available.
+- Guided setup now defaults to a project installation. Choose user scope
+  explicitly to apply the baseline across projects.
+- Claude can use its own Rules file. Existing installations can be moved there
+  while keeping other instructions.
+- Claude user setup offers a session banner showing the installed version.
+  It is off by default.
 
 ## [0.1.21](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.21) (2026-10-28)
 

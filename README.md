@@ -280,12 +280,14 @@ Start normally to restore the baseline. The switch does not disable project inst
 
 ### Coding-agent compatibility
 
-| Client | Project instruction file |
-| --- | --- |
-| Claude Code | `.claude/rules/aiscb.md` for suitable new Claude-only installs; otherwise `CLAUDE.md` |
-| Codex | `AGENTS.md` |
-| GitHub Copilot | `.github/copilot-instructions.md` |
-| Kiro | `AGENTS.md` |
+| Client | Project instruction file | User instruction file |
+| --- | --- | --- |
+| Claude Code | `.claude/rules/aiscb.md` for suitable new Claude-only installs; otherwise `CLAUDE.md` | `~/.claude/rules/aiscb.md` or `~/.claude/CLAUDE.md` |
+| Codex | `AGENTS.md` | `~/.codex/AGENTS.md` |
+| GitHub Copilot | `.github/copilot-instructions.md` | `~/.copilot/instructions/secure-coding.instructions.md` |
+| Kiro | `AGENTS.md` | `~/.kiro/steering/AGENTS.md` |
+
+User paths above use the default configuration directories. The installer also respects configured Claude, Codex and Copilot home directories. Codex and Kiro share one baseline block in a project's `AGENTS.md`.
 
 Support varies between CLI, IDE, cloud agent, review, and completion features. Check the [integration guide](docs/agent-integration-verification.md) for the surface you use, instruction limits, and loading checks.
 
