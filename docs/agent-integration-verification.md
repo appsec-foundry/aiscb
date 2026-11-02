@@ -82,7 +82,7 @@ isolated homes and no real credentials or model calls.
 This verifies loading of the complete release on those two CLI versions. It
 does not verify model compliance, modular selection, or Copilot/IDE loading.
 
-### Release preparation 0.1.22 (2026-11-02)
+### Release 0.1.22 acceptance (2026-11-02)
 
 `python3 scripts/probe_modular_clients.py --tools claude codex copilot` passed
 all twelve combinations of project/user installation and project-root/subdirectory
@@ -91,6 +91,14 @@ Each captured request contained exactly one 0.1.22 core, the module catalog,
 and no module bodies. The checks used isolated profiles and a loopback API
 fixture without real model calls. They establish initial CLI context delivery,
 not model compliance, semantic module selection, Kiro or IDE behavior.
+
+The signed assets were downloaded from the public `aiscb-bundle-0.1.22-1`
+release and matched the staged bytes. Manifest and bootstrap signatures passed;
+modified content was rejected. The downloaded installer passed the same twelve
+CLI loading checks. Both README commands were executed against the public
+download path in isolated profiles: the one-line command installed project
+Rules by default, and the expanded command verified the script hash and signature
+before installing user Rules with the session banner left off on Enter.
 
 ### Claude Rules entry evidence (2026-11-02)
 
