@@ -2,7 +2,7 @@
 # Generated bootstrap: exact release assets, checked before executing any code.
 # A piped shell runs this while it downloads, so only the last line starts work.
 set -eu
-source_root="https://github.com/appsec-foundry/aiscb/releases/download/aiscb-bundle-0.1.21-1"
+source_root="https://github.com/appsec-foundry/aiscb/releases/download/aiscb-bundle-0.1.22-1"
 cleanup() { if [ -d "$setup_tmp" ]; then rm -r -- "$setup_tmp"; fi; }
 download() {
     bundle_path=$1
@@ -29,8 +29,8 @@ main() {
     setup_tmp=$(mktemp -d "${TMPDIR:-/tmp}/aiscb-setup.XXXXXX")
     trap cleanup 0 1 2 3 15
     mkdir -p "$setup_tmp/scripts"
-    download secure-coding-baseline.md "696c044f9393856e069448365e7f950371206c16a63f057b18396f0fe592c5ef" 262144
-    download scripts/install.py "c2e01640898e10cd4846f15b10c6d60aa5a260ffaaee2871362bfbddbf9bfb84" 524288
+    download secure-coding-baseline.md "fa5f8d95de83d67e9406556d82d72cd166cec8b9ba2e3b325ff1ef3b76f23994" 262144
+    download scripts/install.py "6a6f3c02f56a9170f35a697b5feaf365cd7d8c7aa5b5f786966b1cd8b7ecc274" 524288
     download scripts/show_baseline_version.py "af2c4b13698fe84ca78332fef51849f8b42d08a8c5ef3c753d4e0165bea05df6" 262144
     # Behind a pipe, stdin is this script; guided setup needs the terminal.
     if [ ! -t 0 ] && (: </dev/tty) 2>/dev/null; then
