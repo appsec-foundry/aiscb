@@ -66,6 +66,14 @@ the default VS Code personal instruction file when its CLI home differs.
 User snapshots and their record live under `~/.aiscb/`. Use `--status --user` or
 `--uninstall --user` for this scope. The installed updater is `~/.aiscb/install.py`.
 
+When Claude is included in a user installation, guided setup offers
+`Show baseline version at Claude session start? [y/N]`. Enter leaves the banner
+off; `y` adds the version-display SessionStart hook while preserving other Claude
+settings and hooks. Existing banner configurations are retained on updates and
+migrations. Direct installation does not enable a banner automatically, and
+project setup does not offer one. User uninstall removes the matching managed
+banner hook and preserves unrelated hooks.
+
 Start a fresh session from the project root. [Verify it loaded](../README.md#verify-it-loaded)
 with `aiscb?`, then exercise a task requiring modules. Selecting `aiscb:llm-agents` must return both
 `aiscb:llm-applications` and `aiscb:llm-agents` before affected work. The loader

@@ -476,11 +476,65 @@ class ModularSetupTests(unittest.TestCase):
         self.assertFalse((self.home / ".aiscb").exists())
 
     def test_interactive_user_scope_requires_explicit_selection(self):
-        code, _ = self.run_setup(("u", "claude"), interactive=True)
+        code, _ = self.run_setup(("u", "claude", ""), interactive=True)
         self.assertEqual(code, 0)
         self.command(self.home / ".claude/rules/aiscb.md")
         self.assertTrue((self.home / ".aiscb/installation.json").is_file())
         self.assertEqual(list(self.project.iterdir()), [])
+        self.assertFalse((self.home / ".claude/settings.json").exists())
+
+    def test_interactive_banner_default_and_decline_preserve_settings(self):
+        settings = self.home / ".claude/settings.json"
+        settings.parent.mkdir()
+        raw = b'{"hooks": {"SessionStart": [{"hooks": [{"command": "true", "type": "command"}]}]}}\n'
+        settings.write_bytes(raw)
+        for answer in ("", "n", "no"):
+            self.assertEqual(self.run_setup(("u", "claude", answer), interactive=True)[0], 0)
+            self.assertEqual(settings.read_bytes(), raw)
+
+    def test_interactive_banner_opt_in_refresh_migration_and_uninstall(self):
+        settings = self.home / ".claude/settings.json"
+        settings.parent.mkdir()
+        unrelated = {"matcher": "startup", "hooks": [{"type": "command", "command": "true"}]}
+        settings.write_text(json.dumps({"hooks": {"SessionStart": [unrelated]}}))
+        self.assertEqual(self.run_setup(("u", "claude", "y"), interactive=True)[0], 0)
+        hooks = json.loads(settings.read_text())["hooks"]["SessionStart"]
+        self.assertEqual(hooks[0], unrelated)
+        self.assertEqual(len(hooks), 2)
+        helper = self.home / ".aiscb" / install.VERSION_HOOK_NAME
+        result = subprocess.run([sys.executable, str(helper), "--output", "json"],
+                                env=self.env, capture_output=True, text=True, check=True)
+        self.assertIn("active: " + build_baseline.BASELINE_ID, json.loads(result.stdout)["systemMessage"])
+        self.command(self.home / ".claude/rules/aiscb.md")
+        # No further banner question for an existing banner; never duplicate it.
+        self.assertEqual(self.run_setup(("u", "claude"), interactive=True)[0], 0)
+        for args in (("--refresh-installed", "--user"),
+                     ("claude", "--user", "--claude-entry", "claude-md", "--migrate"),
+                     ("claude", "--user", "--claude-entry", "rules", "--migrate")):
+            result = self.cli(*args)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(settings.read_text())["hooks"]["SessionStart"], hooks)
+        self.assertEqual(self.cli("--uninstall", "--user").returncode, 0)
+        self.assertEqual(json.loads(settings.read_text()), {"hooks": {"SessionStart": [unrelated]}})
+
+    def test_interactive_banner_refuses_unsafe_settings_before_install(self):
+        settings = self.home / ".claude/settings.json"
+        settings.parent.mkdir()
+        for value in ('not json', '{"hooks": []}', '{"hooks": {"SessionStart": {}}}',
+                      '{"disableAllHooks": true}'):
+            settings.write_text(value)
+            with self.assertRaises(ValueError):
+                self.run_setup(("u", "claude", "yes"), interactive=True)
+            self.assertEqual(settings.read_text(), value)
+            self.assertFalse((self.home / ".aiscb").exists())
+        settings.unlink()
+        outside = self.base / "outside-settings.json"
+        outside.write_text('{}')
+        settings.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            self.run_setup(("u", "claude", "y"), interactive=True)
+        self.assertEqual(outside.read_text(), '{}')
+        self.assertFalse((self.home / ".aiscb").exists())
 
     def test_claude_rules_default_lifecycle_and_custom_config(self):
         for user in (False, True):

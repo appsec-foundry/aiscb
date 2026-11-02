@@ -53,7 +53,7 @@ bash aiscb-setup.sh
 
 Choose a project directory to use the baseline in selected projects, or your user account to use it across projects, then the tools you use. A project installation does not disable an existing user installation. The installer preserves unrelated instructions and can migrate an existing complete installation after verifying it. Restart the assistant and [verify it loaded](#verify-it-loaded).
 
-The [checkout installer](#modular-installation) defaults to project scope in guided setup and selects Claude Rules automatically where suitable. These changes are not yet included in the pinned release above. Existing installations keep their instruction location until explicitly migrated.
+The [checkout installer](#modular-installation) defaults to project scope in guided setup and selects Claude Rules automatically where suitable. For Claude user installations it offers a session banner, off by default. These changes are not yet included in the pinned release above. Existing installations keep their instruction location until explicitly migrated.
 
 Requires Bash, `curl`, `sha256sum`, and Python 3.10+. Modular loading requires permission to execute the supplied Python loader. Claude Code users can also use the [appsec-advisor](https://github.com/appsec-foundry/appsec-advisor) plugin.
 
@@ -201,6 +201,8 @@ make setup ARGS=--offline
 ```
 
 Guided setup defaults to a project installation; select `u` explicitly for use across projects. Enter the intended project root; the directory defaults to the current one, even inside a Git subdirectory. Existing unrelated instructions are preserved. Modular setup refuses changed managed blocks; keep your own project instructions outside them. Restart the assistant and [verify it loaded](#verify-it-loaded).
+
+For a Claude user installation, setup asks `Show baseline version at Claude session start? [y/N]`. Press Enter to leave it off or answer `y` to enable it. Existing banner settings are retained. Project installations do not add a banner.
 
 Other commands:
 

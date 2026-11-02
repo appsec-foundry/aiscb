@@ -34,6 +34,36 @@ def startup_notice(legacy, home):
             "SessionStart", legacy._claude_version_hook(helper, False))
 
 
+def offer_startup_notice(legacy, home, prepared, input_fn, output):
+    """Plan the optional Claude banner; no answer leaves settings untouched."""
+    path, event, entry = startup_notice(legacy, home)
+    try:
+        config = (json.loads(prepared[path], object_pairs_hook=loader.pairs)
+                  if path in prepared else legacy._read_hook_config(path)[0])
+        hooks = config.get("hooks", {})
+        entries = hooks.get(event, []) if isinstance(hooks, dict) else None
+    except (OSError, UnicodeDecodeError, ValueError):
+        config, entries = None, None
+    if isinstance(entries, list) and legacy.VERSION_HOOK_NAME in json.dumps(entries):
+        output("Existing Claude session banner configuration retained.")
+        return {}
+    answer = input_fn("Show baseline version at Claude session start? [y/N] ").strip().lower()
+    if answer not in {"y", "yes"}:
+        return {}
+    # Preflight before activating any instructions; never write through a link
+    # or replace malformed settings when adding this optional command.
+    policy.entry_path(home, str(path))
+    if not isinstance(config, dict) or not isinstance(entries, list):
+        raise ValueError("cannot safely merge the Claude session banner settings")
+    if config.get("disableAllHooks") is True:
+        raise ValueError("Claude hooks are disabled; enable them before selecting the session banner")
+    config.setdefault("hooks", {})[event] = [*entries, entry]
+    raw = (json.dumps(config, indent=2, ensure_ascii=False) + "\n").encode()
+    if len(raw) > legacy.MAX_HOOK_CONFIG_BYTES:
+        raise ValueError("Claude session banner settings exceed the size limit")
+    return {path: raw}
+
+
 def layout(legacy, home, root, user, *, recorded=True):
     if not user:
         storage, points = root, dict(policy.ENTRY_POINTS)
@@ -404,6 +434,10 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
         if "claude" in tools and contains_policy(value) and path in claude_rules:
             raise ValueError(f"additional modular policy in automatic instructions: {path}")
     updater_edits = user_updater(legacy, home) if args.user else {}
+    notice_edits = {}
+    if args.interactive and args.user and "claude" in tools:
+        notice_edits = offer_startup_notice(legacy, home, prepared, input_fn, output)
+        prepared.update(notice_edits)
     if args.user and "copilot" in tools:
         for key in ("copilot", "copilot-vscode"):
             if key not in tools:
@@ -418,6 +452,8 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
         output(message)
     if "claude" in tools:
         output("Claude instruction entry: " + str(policy.entry_path(storage, points["claude"])))
+    if notice_edits:
+        output("Claude session banner enabled.")
     if migrated:
         output("Migrated managed instructions; the old complete source remains on disk, "
                "outside the configured instruction entry points.")
