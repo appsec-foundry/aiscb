@@ -329,13 +329,13 @@ def check_installed_script(failures: list[str]) -> None:
         installed = root / HELPER.name
         installed.write_bytes(HELPER.read_bytes())
         (root / BASELINE).write_bytes(build_baseline.validate()[2])
-        check_script_at(installed, failures)
+        check_script_at(installed, failures, build_baseline.BASELINE_ID)
 
 
-def check_script_at(installed: Path, failures: list[str]) -> None:
-    for argv, check in (([], lambda text: VALID_ID in text),
+def check_script_at(installed: Path, failures: list[str], expected_id: str) -> None:
+    for argv, check in (([], lambda text: expected_id in text),
                         (["--output", "json"],
-                         lambda text: VALID_ID in json.loads(text)["systemMessage"])):
+                         lambda text: expected_id in json.loads(text)["systemMessage"])):
         proc = subprocess.run([sys.executable, str(installed), *argv],
                               capture_output=True, text=True, timeout=20)
         if proc.returncode != 0:

@@ -3,8 +3,10 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
-## Unreleased
+## 0.1.22 (unreleased)
 
+- Added an optional skill for an independent security review. It is experimental
+  and is not installed by default.
 - Quick start now uses one pinned command. The alternative with an explicit
   script hash check remains available.
 - Guided setup now defaults to a project installation. Choose user scope

@@ -82,6 +82,16 @@ isolated homes and no real credentials or model calls.
 This verifies loading of the complete release on those two CLI versions. It
 does not verify model compliance, modular selection, or Copilot/IDE loading.
 
+### Release preparation 0.1.22 (2026-11-02)
+
+`python3 scripts/probe_modular_clients.py --tools claude codex copilot` passed
+all twelve combinations of project/user installation and project-root/subdirectory
+launch with Claude Code 2.1.316, Codex CLI 0.166.0 and Copilot CLI 1.0.101.
+Each captured request contained exactly one 0.1.22 core, the module catalog,
+and no module bodies. The checks used isolated profiles and a loopback API
+fixture without real model calls. They establish initial CLI context delivery,
+not model compliance, semantic module selection, Kiro or IDE behavior.
+
 ### Claude Rules entry evidence (2026-11-02)
 
 Claude Code 2.1.316 passed twelve isolated loading checks:
