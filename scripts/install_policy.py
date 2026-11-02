@@ -24,6 +24,28 @@ RELEASE = re.compile(r"(?P<name>[a-z][a-z0-9-]*)-(?P<major>0|[1-9][0-9]*)\."
                      r"(?P<minor>0|[1-9][0-9]*)\.(?P<patch>0|[1-9][0-9]*)")
 
 
+def claude_entries(entry_points):
+    """Bound both supported locations to the configured Claude directory."""
+    current = Path(entry_points["claude"])
+    if current.name == "aiscb.md" and current.parent.name == "rules":
+        directory = current.parent.parent
+        classic = "CLAUDE.md" if directory == Path(".claude") else str(directory / "CLAUDE.md")
+        return classic, str(current)
+    directory = Path(".claude") if current == Path("CLAUDE.md") else current.parent
+    return str(current), str(directory / "rules/aiscb.md")
+
+
+def validate_rule(name, value, entry_points):
+    if name != claude_entries(entry_points)[1]:
+        return
+    if value.lstrip("\ufeff \t\r\n").startswith("---"):
+        raise ValueError("aiscb Claude rules must have no frontmatter: " + name)
+    if START in value and END in value:
+        outside = value[:value.index(START)] + value[value.index(END) + len(END):]
+        if any(marker in outside for marker in ("baseline-id:", "module-id:", "secure-coding-baseline.md")):
+            raise ValueError("additional baseline outside managed block in " + name)
+
+
 def entry_path(root, name):
     if Path(name).is_absolute():
         return loader.safe_path(Path(Path(name).anchor), str(Path(name)).lstrip("/"))
@@ -39,10 +61,12 @@ def installation_record(root, entry_points=None):
             or not loader.DIGEST.fullmatch(record["digest"])
             or type(record["modular"]) is not bool
             or not isinstance(record["entries"], dict) or not record["entries"]
-            or any(rel not in entry_points.values() or not isinstance(digest, str)
+            or any(rel not in {*entry_points.values(), *claude_entries(entry_points)} or not isinstance(digest, str)
                    or not loader.DIGEST.fullmatch(digest)
                    for rel, digest in record["entries"].items())):
         raise ValueError("invalid local installation record")
+    if all(name in record["entries"] for name in claude_entries(entry_points)):
+        raise ValueError("multiple recorded Claude entry points")
     return record
 
 
@@ -177,7 +201,7 @@ def release_label(release, development):
 
 
 def install(tools, root, *, modular=True, bundle=None, expected=None,
-            entry_points=None, prepared=None, development=None):
+            entry_points=None, prepared=None, development=None, migrate_entry=False):
     entry_points = entry_points or ENTRY_POINTS
     prepared = prepared or {}
     if root == Path(root.anchor) or not root.is_dir():
@@ -198,8 +222,16 @@ def install(tools, root, *, modular=True, bundle=None, expected=None,
     storage = loader.safe_path(root, ".aiscb")
     record_path = loader.safe_path(root, ".aiscb/installation.json")
     previous = installation_record(root, entry_points) if record_path.exists() else {}
+    retired = None
     if previous:
         status(root, entry_points)
+        old_claude = next((name for name in claude_entries(entry_points)
+                           if name in previous["entries"]), None)
+        if old_claude and old_claude != entry_points["claude"]:
+            if not migrate_entry:
+                raise ValueError("changing the Claude entry requires --migrate")
+            retired = old_claude
+            tools = list(dict.fromkeys([*tools, "claude"]))
         # One record describes one release/format for every managed entry point.
         tools = list(dict.fromkeys([*tools, *(tool for tool, rel in entry_points.items()
                                              if rel in previous["entries"])]))
@@ -235,6 +267,15 @@ def install(tools, root, *, modular=True, bundle=None, expected=None,
         block = START + "\n" + initial + "\n" + END
         edits = dict(prepared)
         records = dict(previous.get("entries", {}))
+        if retired:
+            path = entry_path(root, retired)
+            old = loader.read(path).decode()
+            start, end = old.index(START), old.index(END) + len(END)
+            outside = old[:start] + old[end:]
+            if "baseline-id:" in outside or "module-id:" in outside or "secure-coding-baseline.md" in outside:
+                raise ValueError("additional baseline outside the migrated Claude block")
+            edits[path] = outside.encode()
+            del records[retired]
         written = set()
         for tool in tools:
             rel = entry_points[tool]
@@ -249,6 +290,7 @@ def install(tools, root, *, modular=True, bundle=None, expected=None,
                 path = entry_path(root, rel)
             old = (prepared[path].decode() if path in prepared else
                    loader.read(path).decode() if path.exists() else "")
+            validate_rule(rel, old, entry_points)
             if START in old or END in old:
                 if old.count(START) != 1 or old.count(END) != 1:
                     raise ValueError(f"invalid managed markers in {rel}")
@@ -278,10 +320,22 @@ def install(tools, root, *, modular=True, bundle=None, expected=None,
             finally:
                 if staging.exists():
                     shutil.rmtree(staging)
-        for path, content in edits.items():
-            atomic(path, content)
-        atomic(record_path, (json.dumps({"digest": fingerprint, "modular": modular,
-                                        "entries": records}, indent=2) + "\n").encode())
+        edits[record_path] = (json.dumps({"digest": fingerprint, "modular": modular,
+                                        "entries": records}, indent=2) + "\n").encode()
+        # A location change must not leave two active copies if a write fails.
+        backups = {path: loader.read(path) if path.exists() else None for path in edits} if retired else {}
+        changed = []
+        try:
+            for path, content in edits.items():
+                atomic(path, content)
+                changed.append(path)
+        except OSError:
+            for path in reversed(changed) if retired else []:
+                if backups[path] is None:
+                    path.unlink()
+                else:
+                    atomic(path, backups[path])
+            raise
         # A separate file keeps the record readable by installers without this marker.
         marker = loader.safe_path(root, DEVELOPMENT)
         if development is not None:
@@ -308,6 +362,7 @@ def status(root, entry_points=None):
     loader.load_package(root / ".aiscb/releases" / fingerprint, fingerprint)
     for rel, expected in record["entries"].items():
         text = loader.read(entry_path(root, rel)).decode()
+        validate_rule(rel, text, entry_points or ENTRY_POINTS)
         if text.count(START) != 1 or text.count(END) != 1:
             raise ValueError(f"missing managed block in {rel}")
         block = text[text.index(START):text.index(END) + len(END)]

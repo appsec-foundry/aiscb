@@ -229,6 +229,8 @@ Use an existing project root for `--into`; the installer uses that exact directo
 
 Name only the tools you use, or omit the names for all four. Codex and Kiro share the project `AGENTS.md`; for your user account, Kiro reads `~/.kiro/steering/AGENTS.md`. The assistant must be allowed to run the supplied Python 3.10+ loader. The installer preserves unrelated instructions. Restart the assistant and [verify it loaded](#verify-it-loaded); file status alone does not prove client loading or module selection.
 
+New Claude-only modular installations prefer `.claude/rules/aiscb.md` for a project or `~/.claude/rules/aiscb.md` for your account. The installer selects and prints the entry point automatically; existing installations keep theirs, and new multi-tool installations use `CLAUDE.md`. Rules contain the core, discovery and loader instructions without a path filter; modules still load on demand. See [Claude entry selection](docs/local-policy-installation.md#claude-entry-selection) for explicit selection and migration.
+
 Modular loading needs verification in the clients you use before rollout; installer tests do not establish that a model selects the right modules. If command execution is unavailable, use `--complete`, provided the client's instruction limit can hold the entire baseline. Only the core, module discovery and loader instructions enter the initial context; module bodies stay on disk until selected. `--modular` remains an explicit spelling of the default.
 
 Close affected sessions before migrating an existing complete installation:
@@ -259,7 +261,7 @@ Start normally to restore the baseline. The switch does not disable project inst
 
 | Client | Project instruction file |
 | --- | --- |
-| Claude Code | `CLAUDE.md` |
+| Claude Code | `.claude/rules/aiscb.md` for suitable new Claude-only installs; otherwise `CLAUDE.md` |
 | Codex | `AGENTS.md` |
 | GitHub Copilot | `.github/copilot-instructions.md` |
 | Kiro | `AGENTS.md` |

@@ -232,7 +232,7 @@ class ModularSetupTests(unittest.TestCase):
         for args in (("codex",), ("--migrate",), ("--complete",), ("--offline",),
                      ("--update",), ("--user", "--into", str(self.project))):
             self.assertNotEqual(self.cli("--refresh-installed", *args).returncode, 0)
-        carrier = self.project / "CLAUDE.md"
+        carrier = self.project / ".claude/rules/aiscb.md"
         carrier.write_text(carrier.read_text().replace("Apply", "Changed", 1) + "\n")
         carrier.write_text(carrier.read_text().replace("AI Secure Coding Baseline", "Modified policy", 1))
         before = carrier.read_bytes()
@@ -243,7 +243,7 @@ class ModularSetupTests(unittest.TestCase):
         from types import SimpleNamespace
 
         self.assertEqual(self.cli("claude", "--into", str(self.project)).returncode, 0)
-        carrier = self.project / "CLAUDE.md"
+        carrier = self.project / ".claude/rules/aiscb.md"
         before = carrier.read_bytes()
         older = install.parse_baseline(
             install.bundled_baseline().content.replace(build_baseline.BASELINE_ID.encode(), b"aiscb-0.0.1"),
@@ -472,6 +472,205 @@ class ModularSetupTests(unittest.TestCase):
                          input_fn=lambda _: next(answers), output=lambda _: None), 0)
         for rel in install_policy.ENTRY_POINTS.values():
             self.command(self.project / rel)
+
+    def test_claude_rules_default_lifecycle_and_custom_config(self):
+        for user in (False, True):
+            with self.subTest(user=user):
+                scope = ("--user",) if user else ()
+                root = self.home if user else self.project
+                if user:
+                    custom = self.home / "custom claude"
+                    self.env["CLAUDE_CONFIG_DIR"] = str(custom)
+                    rule = custom / "rules/aiscb.md"
+                else:
+                    rule = root / ".claude/rules/aiscb.md"
+                result = self.cli("claude", *scope)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.command(rule)
+                original = rule.read_bytes()
+                self.assertFalse(rule.read_text().startswith("---"))
+                self.assertFalse((rule.parent.parent / "CLAUDE.md").exists())
+                for action in (("claude",), ("--refresh-installed",), ("--status",)):
+                    result = self.cli(*action, *scope)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(rule.read_bytes(), original)
+                self.assertIn(str(rule), result.stdout)
+                rule.write_bytes(original + b"\nPersonal note.\n")
+                result = self.cli("--uninstall", *scope)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn(install_policy.START, rule.read_text())
+                self.assertIn("Personal note.", rule.read_text())
+
+    def test_claude_entry_migration_both_directions_preserves_prose(self):
+        for user in (False, True):
+            with self.subTest(user=user):
+                scope = ("--user",) if user else ()
+                root = self.home if user else self.project
+                classic = root / (".claude/CLAUDE.md" if user else "CLAUDE.md")
+                rule = root / ".claude/rules/aiscb.md"
+                classic.parent.mkdir(parents=True, exist_ok=True)
+                classic.write_text("Project instructions.\n")
+                result = self.cli("claude", *scope, "--claude-entry", "claude-md")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                before = classic.read_bytes()
+                self.assertEqual(self.cli("claude", *scope).returncode, 0)
+                self.assertEqual(classic.read_bytes(), before)
+                self.assertFalse(rule.exists())
+                denied = self.cli("claude", *scope, "--claude-entry", "rules")
+                self.assertNotEqual(denied.returncode, 0)
+                self.assertIn("--migrate", denied.stderr)
+                self.assertEqual(classic.read_bytes(), before)
+                for choice, target, retired in (("rules", rule, classic), ("claude-md", classic, rule)):
+                    result = self.cli("claude", *scope, "--claude-entry", choice, "--migrate")
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.command(target)
+                    self.assertNotIn(install_policy.START, retired.read_text())
+                    record = json.loads((root / ".aiscb/installation.json").read_text())
+                    self.assertEqual(len(record["entries"]), 1)
+                    self.assertEqual(self.cli("--status", *scope).returncode, 0)
+                self.assertIn("Project instructions.", classic.read_text())
+                self.assertEqual(self.cli("--uninstall", *scope).returncode, 0)
+
+    def test_rules_mixed_installation_requires_explicit_migration(self):
+        self.assertEqual(self.cli("claude").returncode, 0)
+        rule = self.project / ".claude/rules/aiscb.md"
+        before = rule.read_bytes()
+        rejected = self.cli("codex")
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("duplicate", rejected.stderr)
+        self.assertFalse((self.project / "AGENTS.md").exists())
+        self.assertEqual(rule.read_bytes(), before)
+        result = self.cli("codex", "--claude-entry", "claude-md", "--migrate")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.command(self.project / "CLAUDE.md")
+        self.command(self.project / "AGENTS.md")
+        self.assertNotIn(install_policy.START, rule.read_text())
+        denied = self.cli("claude", "--claude-entry", "rules", "--migrate")
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertNotIn(install_policy.START, rule.read_text())
+
+    def test_rules_detect_existing_modular_agents_and_other_rules(self):
+        self.assertEqual(self.cli("codex").returncode, 0)
+        result = self.cli("claude")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.project / "CLAUDE.md").exists())
+        self.assertFalse((self.project / ".claude/rules/aiscb.md").exists())
+        directory = self.project / ".claude/rules/nested"
+        directory.mkdir(parents=True)
+        (directory / "extra.md").write_text((self.project / "CLAUDE.md").read_text())
+        result = self.cli("claude", "--claude-entry", "rules", "--migrate")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((directory.parent / "aiscb.md").exists())
+
+    def test_rules_frontmatter_drift_and_symlink_refuse_before_writes(self):
+        rule = self.project / ".claude/rules/aiscb.md"
+        rule.parent.mkdir(parents=True)
+        rule.write_text('---\npaths: ["src/**"]\n---\n')
+        result = self.cli("claude")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("frontmatter", result.stderr)
+        self.assertFalse((self.project / ".aiscb/installation.json").exists())
+        rule.write_text("")
+        self.assertEqual(self.cli("claude").returncode, 0)
+        original = rule.read_bytes()
+        for replacement in (b'---\npaths: ["src/**"]\n---\n' + original,
+                            original + build_baseline.SOURCE_ROOT.joinpath("aiscb-core.md").read_bytes(),
+                            original.replace(b"Secure Design", b"Modified Design")):
+            rule.write_bytes(replacement)
+            for action in (("claude",), ("--status",), ("--refresh-installed",),
+                           ("--uninstall",), ("claude", "--claude-entry", "claude-md", "--migrate")):
+                result = self.cli(*action)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(rule.read_bytes(), replacement)
+        rule.unlink()
+        outside = self.base / "outside.md"
+        outside.write_text("Unrelated file.\n")
+        rule.symlink_to(outside)
+        self.assertNotEqual(self.cli("claude").returncode, 0)
+        self.assertEqual(outside.read_text(), "Unrelated file.\n")
+
+    def test_entry_migration_rolls_back_on_write_failure(self):
+        self.assertEqual(self.cli("claude").returncode, 0)
+        rule = self.project / ".claude/rules/aiscb.md"
+        record = self.project / ".aiscb/installation.json"
+        before = rule.read_bytes(), record.read_bytes()
+        original = install_policy.atomic
+        def fail_record(path, raw):
+            if path == record:
+                raise OSError("simulated disk failure")
+            original(path, raw)
+        with patch.object(install_policy, "atomic", side_effect=fail_record):
+            with self.assertRaisesRegex(OSError, "disk failure"):
+                self.run_setup(into=self.project, tools=["claude"],
+                               claude_entry="claude-md", migrate=True)
+        self.assertEqual((rule.read_bytes(), record.read_bytes()), before)
+        self.assertFalse((self.project / "CLAUDE.md").exists())
+
+    def test_interactive_claude_uses_rules_without_extra_question(self):
+        code, messages = self.run_setup(("p", "", "claude"), into=self.project, interactive=True)
+        self.assertEqual(code, 0)
+        self.command(self.project / ".claude/rules/aiscb.md")
+        self.assertTrue(any("rules/aiscb.md" in line for line in messages))
+
+    def test_claude_entry_cli_rejects_unrelated_actions(self):
+        for args in (("--status",), ("--uninstall",), ("--refresh-installed",),
+                     ("--update",), ("--refresh-update-cache",), ("codex",)):
+            result = self.cli(*args, "--claude-entry", "rules")
+            self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.project / ".aiscb").exists())
+
+    def test_rules_installed_updater_preserves_location_and_complete_mode(self):
+        result = self.cli("claude", "--user", "--claude-entry", "rules", "--complete")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        updater = self.home / ".aiscb/install.py"
+        rule = self.home / ".claude/rules/aiscb.md"
+        original = rule.read_bytes()
+        result = self.cli("--refresh-installed", "--user", script=updater)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(rule.read_bytes(), original)
+        self.assertIn(b"[aiscb-MCPAUTH-001]", original)
+        result = self.cli("claude", "--user", script=updater)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.command(rule)
+        self.assertFalse((self.home / ".claude/CLAUDE.md").exists())
+
+    def test_rules_unrecorded_nested_copy_is_not_duplicated(self):
+        self.assertEqual(self.cli("claude").returncode, 0)
+        rule = self.project / ".claude/rules/aiscb.md"
+        original = rule.read_bytes()
+        duplicate = rule.parent / "nested/extra.md"
+        duplicate.parent.mkdir()
+        duplicate.write_bytes(original)
+        for args in (("claude",), ("claude", "--claude-entry", "claude-md", "--migrate")):
+            result = self.cli(*args)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("extra.md", result.stderr)
+            self.assertEqual(rule.read_bytes(), original)
+            self.assertFalse((self.project / "CLAUDE.md").exists())
+
+    def test_rules_parent_symlink_and_forged_record_are_rejected(self):
+        outside = self.base / "outside"
+        outside.mkdir()
+        directory = self.project / ".claude"
+        directory.mkdir()
+        rules = directory / "rules"
+        rules.symlink_to(outside, target_is_directory=True)
+        result = self.cli("claude")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertFalse((self.project / ".aiscb").exists())
+        rules.unlink()
+        self.assertEqual(self.cli("claude").returncode, 0)
+        path = self.project / ".aiscb/installation.json"
+        original = path.read_bytes()
+        record = json.loads(original)
+        for key in ("CLAUDE.md", "../outside/victim.md"):
+            forged = {**record, "entries": {**record["entries"], key: "0" * 64}}
+            path.write_text(json.dumps(forged))
+            for action in (("--status",), ("--uninstall",), ("claude",)):
+                self.assertNotEqual(self.cli(*action).returncode, 0)
+        path.write_bytes(original)
+        self.assertEqual(self.cli("--status").returncode, 0)
 
     def test_loader_missing_or_tampered_does_not_return_policy(self):
         self.assertEqual(self.cli("codex").returncode, 0)

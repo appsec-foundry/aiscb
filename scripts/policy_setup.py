@@ -34,9 +34,21 @@ def startup_notice(legacy, home):
             "SessionStart", legacy._claude_version_hook(helper, False))
 
 
-def layout(legacy, home, root, user):
+def layout(legacy, home, root, user, *, recorded=True):
     if not user:
-        return root, policy.ENTRY_POINTS
+        storage, points = root, dict(policy.ENTRY_POINTS)
+    else:
+        storage, points = home, user_points(legacy, home)
+    record_path = loader.safe_path(storage, ".aiscb/installation.json")
+    if recorded and record_path.exists():
+        record = policy.installation_record(storage, points)
+        for name in policy.claude_entries(points):
+            if name in record["entries"]:
+                points["claude"] = name
+    return storage, points
+
+
+def user_points(legacy, home):
     points = {
         "claude": str(legacy.tool_config_root("claude", home) / "CLAUDE.md"),
         "codex": str(legacy.tool_config_root("codex", home) / "AGENTS.md"),
@@ -48,7 +60,55 @@ def layout(legacy, home, root, user):
     shared = home / ".copilot/instructions" / legacy.VSCODE_INSTRUCTIONS_NAME
     if str(shared) != points["copilot"]:
         points["copilot-vscode"] = str(shared)
-    return home, points
+    return points
+
+
+def claude_instruction_paths(legacy, home, root, user):
+    """Known automatically loaded locations; never follow instruction imports."""
+    directory = legacy.tool_config_root("claude", home)
+    paths = {directory / "CLAUDE.md"}
+    paths.update(instruction_files(directory / "rules"))
+    if not user:
+        for parent in (root, *root.parents):
+            paths.update((parent / "AGENTS.md", parent / ".claude/AGENTS.md",
+                          parent / "CLAUDE.md", parent / "CLAUDE.local.md",
+                          parent / ".claude/CLAUDE.md"))
+            paths.update(instruction_files(parent / ".claude/rules"))
+    return paths
+
+
+def choose_claude_entry(legacy, args, home, root, storage, points, tools):
+    requested = getattr(args, "claude_entry", None)
+    record_path = loader.safe_path(storage, ".aiscb/installation.json")
+    record = policy.installation_record(storage, points) if record_path.exists() else None
+    installed = [tool for tool, rel in points.items()
+                 if record and rel in record["entries"]]
+    tools = list(dict.fromkeys([*tools, *installed]))
+    if "claude" not in tools:
+        if requested:
+            raise ValueError("--claude-entry requires Claude in the installation")
+        return points, tools, None
+    classic, rules = policy.claude_entries(points)
+    old = next((name for name in (classic, rules) if record and name in record["entries"]), None)
+    if requested:
+        chosen = rules if requested == "rules" else classic
+    elif old:
+        chosen = old
+    else:
+        # Keep existing legacy integrations on their migration path; native rules
+        # are the default only for a new, single-tool Claude installation.
+        targets = legacy.user_targets(home) if args.user else legacy.project_targets(root)
+        legacy_present = any(contains_policy(text(path)) for _, path in targets["claude"])
+        chosen = classic if legacy_present or set(tools) != {"claude"} else rules
+        excluded = {storage / name if not Path(name).is_absolute() else Path(name)
+                    for name in (classic, rules)}
+        if chosen == rules and any(contains_policy(text(path)) for path in
+                claude_instruction_paths(legacy, home, root, args.user) - excluded):
+            chosen = classic
+    if old and old != chosen and not args.migrate:
+        raise ValueError("changing the Claude entry requires --migrate (close affected sessions first)")
+    points = {**points, "claude": chosen}
+    return points, tools, old if old != chosen else None
 
 
 def text(path):
@@ -83,7 +143,7 @@ def instruction_files(directory):
 
 def inherited_conflicts(legacy, home, root, tools):
     """Inspect bounded known instruction locations, not arbitrary user files."""
-    _, user_points = layout(legacy, home, root, True)
+    _, user_points = layout(legacy, home, root, True, recorded=False)
     paths = {Path(user_points[t]) for t in tools}
     if "codex" in tools:
         paths.add(legacy.tool_config_root("codex", home) / "AGENTS.override.md")
@@ -278,6 +338,8 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
         output(policy.status(storage, points))
         record = policy.installation_record(storage, points)
         output("Installation mode: " + ("modular" if record["modular"] else "complete"))
+        for name in record["entries"]:
+            output("Instruction entry: " + str(policy.entry_path(storage, name)))
         return 0
     if args.uninstall:
         output(policy.uninstall(storage, points))
@@ -287,6 +349,7 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
             for line in report:
                 output(f"Startup notice: {line}")
         return 0
+    points, tools, retired = choose_claude_entry(legacy, args, home, root, storage, points, tools)
     if not args.user and not args.complete:
         conflicts = inherited_conflicts(legacy, home, root, tools)
         if conflicts:
@@ -305,22 +368,41 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
                 raise ValueError("migration not approved") from exc
             args.migrate = True
     prepared, migrated = migration(legacy, home, root, args.user, tools, points, args.migrate)
+    if "claude" in tools and points["claude"] == policy.claude_entries(points)[1]:
+        if not args.user and any(t in tools for t in ("codex", "kiro")):
+            raise ValueError("Claude rules would duplicate the project AGENTS.md baseline; "
+                             "use --claude-entry claude-md --migrate")
+        target = policy.entry_path(storage, points["claude"])
+        ignored = {target}
+        if retired:
+            ignored.add(policy.entry_path(storage, retired))
+        for path in sorted(claude_instruction_paths(legacy, home, root, args.user) - ignored):
+            value = prepared[path].decode() if path in prepared else text(path)
+            if contains_policy(value):
+                raise ValueError(f"Claude rules would duplicate baseline instructions in {path}; "
+                                 "use --claude-entry claude-md --migrate")
     extra = []
+    claude_rules = set()
     if "claude" in tools or "copilot" in tools:
         directory = (legacy.tool_config_root("claude", home) if args.user else root / ".claude")
-        extra.extend(instruction_files(directory / "rules"))
+        claude_rules.update(instruction_files(directory / "rules"))
+        extra.extend(claude_rules)
     if "copilot" in tools:
         directory = (legacy.tool_config_root("copilot", home) if args.user else root / ".github")
         extra.extend(instruction_files(directory / "instructions"))
     if "kiro" in tools:
         extra.extend(instruction_files((home if args.user else root) / ".kiro/steering"))
     entry_paths = {Path(points[t]) if args.user else root / points[t] for t in tools}
+    if retired:
+        entry_paths.add(policy.entry_path(storage, retired))
     for path in extra:
         if path in entry_paths:
             continue  # The managed-block verifier checks these before replacement.
         value = prepared[path].decode() if path in prepared else text(path)
         if complete_policy(value):
             raise ValueError(f"additional complete policy in automatic instructions: {path}")
+        if "claude" in tools and contains_policy(value) and path in claude_rules:
+            raise ValueError(f"additional modular policy in automatic instructions: {path}")
     updater_edits = user_updater(legacy, home) if args.user else {}
     if args.user and "copilot" in tools:
         for key in ("copilot", "copilot-vscode"):
@@ -332,8 +414,10 @@ def run(legacy, args, *, home=None, input_fn=input, output=print):
     for message in policy.install(tools, storage, modular=not args.complete,
                                   bundle=args.organization, expected=args.organization_sha256,
                                   entry_points=points, prepared=prepared,
-                                  development=development):
+                                  development=development, migrate_entry=bool(retired)):
         output(message)
+    if "claude" in tools:
+        output("Claude instruction entry: " + str(policy.entry_path(storage, points["claude"])))
     if migrated:
         output("Migrated managed instructions; the old complete source remains on disk, "
                "outside the configured instruction entry points.")

@@ -12,8 +12,8 @@ Build the adapters from one verified release. Put the baseline and short organiz
 
 | Client and scope | Entry point to generate | What to check |
 | --- | --- | --- |
-| Claude Code, project | `CLAUDE.md` or `.claude/CLAUDE.md` containing combined text, or a local `@path` import | Current versions conditionally load AGENTS.md too; keep explicit imports for older/restricted sessions. External imports can require approval. |
-| Claude Code, user or managed | `~/.claude/CLAUDE.md` or a [managed-policy `CLAUDE.md`](https://code.claude.com/docs/en/memory#deploy-organization-wide-claudemd) | Resolve the actual Claude configuration directory. Managed locations differ on macOS, Linux/WSL, and Windows. |
+| Claude Code, project | `.claude/rules/aiscb.md` without frontmatter for suitable new Claude-only installs; otherwise `CLAUDE.md` | Rules load alongside conditionally discovered `AGENTS.md`; check for duplicate baseline copies. Existing installations retain their entry. |
+| Claude Code, user or managed | `~/.claude/rules/aiscb.md`, `~/.claude/CLAUDE.md`, or a [managed-policy `CLAUDE.md`](https://code.claude.com/docs/en/memory#deploy-organization-wide-claudemd) | Resolve the actual Claude configuration directory. Managed locations differ on macOS, Linux/WSL, and Windows. Rules are not managed-policy enforcement. |
 | Codex, project | Combined text in root `AGENTS.md`; use a nested `AGENTS.md` only for work started in its directory chain | `AGENTS.override.md` can replace `AGENTS.md` in the same directory. Codex has no portable `@` file import. |
 | Codex, user | Combined text in `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) | `AGENTS.override.md` at that level replaces the normal file. Codex CLI and the IDE extension share configuration layers; verify the actual home and trusted project. |
 | Copilot, project | Combined text in `.github/copilot-instructions.md` | This is the broadest repository entry point across Copilot surfaces. A Markdown link to a policy file is a reference, not an automatic import. |
@@ -81,6 +81,29 @@ isolated homes and no real credentials or model calls.
 
 This verifies loading of the complete release on those two CLI versions. It
 does not verify model compliance, modular selection, or Copilot/IDE loading.
+
+### Claude Rules entry evidence (2026-11-02)
+
+Claude Code 2.1.316 passed twelve isolated loading checks:
+
+```bash
+python3 scripts/probe_modular_clients.py --tools claude --claude-entries auto claude-md
+python3 scripts/probe_modular_clients.py --tools claude --mixed
+```
+
+The first command tested automatic Rules selection and explicit `CLAUDE.md` in
+project/user scopes, each from the project root and a subdirectory. The second
+tested automatic selection with both Claude and Codex installed, on the same
+four scope/start-directory combinations. Each captured request contained exactly
+one complete core, the catalog, and no module bodies. Tests used a loopback API
+fixture, isolated homes and artificial credentials; no real model was called.
+This verifies initial CLI loading, not semantic module selection, IDE behavior,
+or loading under every custom instruction setting.
+
+Installer tests cover automatic selection, recorded-entry preservation, explicit
+migration in both directions, unrelated text, configuration-home overrides,
+refresh/status/uninstall, duplicate-copy rejection, frontmatter and content drift,
+symlinks, and rollback after a migration write failure.
 
 ### Current branch evidence (2026-09-19)
 

@@ -36,8 +36,8 @@ Generated modular instructions contain an absolute loader path. Rerun setup at
 each checkout location, including teammates' checkouts, additional worktrees,
 and moved projects; do not commit these instructions as a portable team setup.
 
-Supported entry points are `AGENTS.md` for Codex and Kiro, `CLAUDE.md` for
-Claude Code, and `.github/copilot-instructions.md` for Copilot. Specify one or
+Supported entry points are `AGENTS.md` for Codex and Kiro, `.claude/rules/aiscb.md`
+or `CLAUDE.md` for Claude Code, and `.github/copilot-instructions.md` for Copilot. Specify one or
 several of `codex claude copilot kiro`; Codex and Kiro share one managed block.
 The installer embeds core, optional overlay, discovery, and a named loader
 command directly into a managed block. Existing unrelated instructions are
@@ -57,7 +57,7 @@ refused; it cannot silently continue loading all modules after migration.
 Custom managed policies, additional configured instruction directories and IDE profile
 settings still need inspection; status verifies files, not the whole client context.
 
-User entries are `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
+User entries are `~/.claude/rules/aiscb.md` or `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
 `~/.copilot/instructions/secure-coding.instructions.md` with `applyTo: "**"`,
 and `~/.kiro/steering/AGENTS.md`.
 The existing tool configuration-home overrides are respected; Copilot also gets
@@ -79,7 +79,7 @@ Official instruction references:
 [Kiro](https://kiro.dev/docs/steering/).
 The direct loader avoids relying on differing skill-discovery behavior.
 
-For Claude, keep the explicit CLAUDE.md entry even though recent releases can
+For Claude, use the selected native entry even though recent releases can
 conditionally read AGENTS.md. For Copilot, select the exact CLI/IDE/cloud-agent
 surface and confirm it can run the loader; Chat, code review and inline
 completion are not interchangeable. For Kiro, approve shell execution of the
@@ -92,6 +92,50 @@ Adopt the [specification-first workflow](../examples/project-workflow.md) in
 project instructions when required. The example organization overlay includes
 it already; the official security core does not mandate an organization's
 project-management process. The installer preserves project workflow text.
+
+### Claude entry selection
+
+New Claude-only modular installations prefer an ordinary `aiscb.md` file under
+the project's `.claude/rules/` or the user's Claude configuration directory's
+`rules/`. The file contains core, optional overlay, discovery and the loader
+command, without YAML frontmatter or path filters. Modules remain in the verified
+snapshot. This changes installation layout, not the policy or its context budget.
+
+Guided setup makes the same automatic choice and prints the selected path.
+Existing recorded installations retain their entry during setup, signed updates,
+and `--refresh-installed`. New multi-tool installations and legacy migrations
+keep the `CLAUDE.md` route. Known additional baseline instructions make a new
+Rules route unsuitable; no client settings are changed to suppress instructions.
+
+To choose explicitly, or move an existing managed block, close affected sessions:
+
+```bash
+python3 scripts/install.py claude --user --claude-entry rules
+python3 scripts/install.py claude --into /path/to/project --claude-entry rules --migrate
+python3 scripts/install.py claude --into /path/to/project --claude-entry claude-md --migrate
+```
+
+Moving a recorded block requires `--migrate`; the installer verifies ownership
+and content before moving it and preserves unrelated text. Status and uninstall
+use the recorded location without requiring `--claude-entry`. Older installers
+that do not recognize this Rules location cannot manage it; migrate back with
+this installer before using an older one.
+
+Claude may load `AGENTS.md` alongside Rules. Adding Codex or Kiro to a project
+with a Rules installation therefore requires an explicit move back:
+
+```bash
+python3 scripts/install.py codex --into /path/to/project --claude-entry claude-md --migrate
+```
+
+The installer checks known instruction locations for additional baseline copies,
+including modular copies. It does not resolve arbitrary imports or inspect every
+client setting. Check actual loading when using custom instruction locations or
+Claude's option to load both `CLAUDE.md` and `AGENTS.md`. User-level installation
+cannot inventory every future project. Verify each intended project and surface.
+Rules with frontmatter, modified managed blocks, or unexpected symlinks are
+refused. Keep personal instructions outside the managed block and do not add
+frontmatter to `aiscb.md`.
 
 ## Add organization policy
 

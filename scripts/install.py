@@ -4409,8 +4409,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--organization-sha256",
                         help="organization manifest digest received through a trusted channel")
     parser.add_argument("--migrate", action="store_true",
-                        help="replace verified managed complete instructions; preserve other text")
+                        help="migrate verified complete instructions or change the Claude entry; preserve other text")
+    parser.add_argument("--claude-entry", choices=("rules", "claude-md"),
+                        help="Claude instruction location; default preserves existing installs and "
+                             "uses rules for suitable new Claude-only installations")
     args = parser.parse_args(argv)
+    if args.claude_entry and any((args.status, args.uninstall, args.update,
+            args.refresh_installed, args.refresh_update_cache, args.session_switch)):
+        parser.error("--claude-entry is only valid during installation or migration")
     if args.dry_run and not args.refresh_installed:
         parser.error("--dry-run requires --refresh-installed")
     if args.development and not (args.refresh_installed and args.user):
@@ -4436,7 +4442,7 @@ def main(argv: list[str] | None = None) -> int:
     modern_record = ((Path.home() if args.user else (args.into or Path.cwd())) /
                      ".aiscb/installation.json")
     modern_action = not (args.update or args.refresh_update_cache or args.session_switch)
-    if (args.complete and not modern_record.exists() and not args.organization
+    if (args.complete and not modern_record.exists() and not args.organization and not args.claude_entry
             and "kiro" not in args.tools):
         modern_action = False
     if args.status or args.uninstall:
