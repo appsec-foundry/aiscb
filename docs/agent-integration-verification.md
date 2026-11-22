@@ -100,6 +100,16 @@ download path in isolated profiles: the one-line command installed project
 Rules by default, and the expanded command verified the script hash and signature
 before installing user Rules with the session banner left off on Enter.
 
+### Release 0.1.23 preparation (2026-11-22)
+
+`python3 scripts/probe_modular_clients.py --tools claude codex copilot` passed
+all twelve combinations of project/user installation and project-root/subdirectory
+launch with Claude Code 2.1.330, Codex CLI 0.171.0 and Copilot CLI 1.0.101.
+Each captured request contained exactly one 0.1.23 core, the module catalog,
+and no module bodies. The checks used isolated profiles and a loopback API
+fixture without real model calls. They cover initial CLI context delivery,
+not model compliance, semantic module selection, Kiro or IDE behavior.
+
 ### Claude Rules entry evidence (2026-11-02)
 
 Claude Code 2.1.316 passed twelve isolated loading checks:

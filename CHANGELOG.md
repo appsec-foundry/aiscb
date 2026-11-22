@@ -3,6 +3,26 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
+## 0.1.23 (unreleased)
+
+- Assistants no longer announce routine secure defaults as baseline measures.
+  They mention aiscb only when it changes your requested approach, refuses
+  something, blocks the work or needs your decision.
+- For services that only listen on localhost, assistants no longer list TLS
+  steps you don't need yet. They bring up TLS when the work exposes the service
+  beyond the machine or plans to.
+- One-time codes and verification links must not appear in logs or anywhere
+  the requesting client can see them: its UI, the response body or returned URLs.
+- Demo accounts are only allowed for prototypes you explicitly call throwaway
+  and local-only. The Security note says once that they must not reach
+  production.
+- In the complete baseline file, the sentence about what is loaded at session
+  start now applies only to modular installations.
+
+**Updating:** Run `python3 ~/.aiscb/install.py --update` and start a new
+session. Installations from 0.1.17 and earlier need the
+[Quick start](README.md#quick-start) once.
+
 ## [0.1.22](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.22) (2026-11-02)
 
 - Added an optional skill for an independent security review. It is experimental
