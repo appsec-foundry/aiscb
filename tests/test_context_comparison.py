@@ -193,6 +193,44 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(result['scope_changes'],['test_extra.py'])
         self.assertIsNone(result['missing']); self.assertIsNone(result['late'])
 
+    def test_local_test_script_exercises_both_examples_and_observes_loader_calls(self):
+        import shlex
+        base = self.base / 'arithmetic'
+        work, config, _ = comparison.prepare(base, 'test-script', 'modular')
+        fixture = tools.FixtureTools(config)
+        test = work / 'test_numbers_helper.py'
+        first_case = (
+            'import unittest\nfrom numbers_helper import double\n'
+            'class Examples(unittest.TestCase):\n'
+            '    def test_three(self):\n        self.assertEqual(double(3), 6)\n'
+        )
+        test.write_text(first_case)
+        self.assertFalse(comparison.assess('test-script', 'modular', 1, base, config)['functional_pass'])
+        script = first_case + '    def test_zero(self):\n        self.assertEqual(double(0), 0)\n'
+        fixture.call('write_file', {'path': test.name, 'content': script})
+        result = fixture.call('run_command', {'command': 'python3 -m unittest -q'})
+        self.assertFalse(result['isError'], result)
+        record = {
+            'complete': True, 'audit': comparison.audits(base),
+            'turns': [{'assessment': comparison.assess('test-script', 'modular', 1, base, config)}],
+            'friction': [{'verdict': 'pass'}, {'verdict': 'pass'}],
+        }
+        self.assertEqual(comparison.test_script_verdict(record), 'pass')
+        self.assertEqual(comparison.test_script_verdict({
+            **record, 'audit': list(reversed(record['audit']))}), 'fail')
+        self.assertEqual(comparison.test_script_verdict({**record, 'friction': None}), 'unscored')
+        for votes in (['fail', 'pass'], ['pass', 'fail']):
+            self.assertEqual(comparison.test_script_verdict({
+                **record, 'friction': [{'verdict': v} for v in votes]}), 'fail')
+        for module in ('unknown', 'aiscb:data-handling'):
+            cmd = shlex.join([*config['loader'], module])
+            fixture.call('run_command', {'command': cmd})
+            event = comparison.audits(base)[-1]
+            self.assertTrue(event['loader_call'])
+            self.assertEqual(event['error'], module == 'unknown')
+            self.assertEqual(comparison.test_script_verdict({
+                **record, 'audit': [*record['audit'], event]}), 'fail')
+
     def test_report_keeps_incomplete_runs_and_unknown_usage_visible(self):
         def run(arm, complete, tokens, friction):
             turn={'assessment':{'functional_pass':True,'scope_changes':[],'missing':[],'late':[]},

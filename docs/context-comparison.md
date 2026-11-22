@@ -14,12 +14,12 @@ cost. Use judges only when answer wording is part of the question. Do not run th
 full matrix merely because it is available.
 
 The default is Claude Sonnet 4.6, three repeats and randomized order with seed
-2309: 54 task runs, 63 user turns, three preflight calls and up to 54 judge calls.
+2309: 63 task runs, 72 user turns, three preflight calls and up to 63 judge calls.
 This is an opt-in paid experiment. The source and catalog are snapshotted before
 preflight; the experiment does not change the installed user baseline. A separate
 smoke run must not be pooled into the comparison.
 
-Tasks cover a documentation typo, label normalization, an owner-bound order
+Tasks cover a local arithmetic test script, a documentation typo, label normalization, an owner-bound order
 endpoint, an existing session-store adapter, untrusted export filenames, and a
 documentation task subsequently expanded to an order endpoint in the same session.
 Each task states a concrete contract. This measures routing and workflow overhead
@@ -84,6 +84,13 @@ checks, inspect disputed traces and report unscored judgments. Retain incomplete
 runs in denominators. Three repeats provide exploratory evidence, not a claim of
 reliable behavior or statistical superiority. Module splitting, path triggers,
 compaction, large repositories and other clients need separate experiments.
+
+For the `test-script` case, the report records every modular loader call,
+including rejected calls. The requested tests must run and detect an incorrect
+result for each example. The judge checks visible assistant text, including
+intermediate messages, for unnecessary questions and warnings. A failed or incomplete
+modular test-script regression gives the experiment a nonzero exit. With
+`--no-judge`, the wording check stays unscored.
 
 ## Pilot stopped on 2026-09-23
 

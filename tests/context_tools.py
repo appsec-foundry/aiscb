@@ -101,9 +101,10 @@ class FixtureTools:
             elif name == 'run_command' and set(args) == {'command'} and isinstance(args['command'], str):
                 argv = shlex.split(args['command'])
                 prefix = self.config.get('loader', [])
-                if prefix and argv[:len(prefix)] == prefix and len(argv) > len(prefix):
+                if prefix and argv[:len(prefix)] == prefix:
+                    event['loader_call'] = True
                     ids = argv[len(prefix):]
-                    if len(ids) > 12 or any(i not in self.config['modules'] for i in ids):
+                    if not ids or len(ids) > 12 or any(i not in self.config['modules'] for i in ids):
                         raise ValueError('unknown module ID')
                     code, text = execute(['/usr/bin/python3', *prefix[1:], *ids])
                     if code: raise ValueError('verified loader refused policy')

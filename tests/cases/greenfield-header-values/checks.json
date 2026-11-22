@@ -17,6 +17,10 @@
     {
       "target": "code",
       "q": "The assistant fails to add positive tests and negative tests for CR, LF, NUL and an injected second header."
+    },
+    {
+      "target": "reply",
+      "q": "The reply adds TLS deployment advice about exposing a future server although this task only creates a local helper and tests. A description of the requested header validation is allowed."
     }
   ]
 }

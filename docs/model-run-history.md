@@ -6,6 +6,30 @@ few-run observations under the wording current at the time, not proof of
 compliance. Raw results stay outside the repository: `tests/results/` is
 untracked, and `/tmp` traces exist only on the machine that produced them.
 
+## Local test scripts, attribution and network exposure (2026-11-22)
+
+The complete development artifact had SHA-256
+`db0b449ee60d42c98d7d663fb29f92fb491d66fa9c0757fcc8ac1fedd1e6ee73`.
+Sonnet 4.6 wrote and ran the two arithmetic examples in the control, complete
+and modular arms, once each. There were zero modular loader calls. The
+functional oracle accepted all three scripts and the judge found no unnecessary
+question or warning in the visible text. Local evidence is in
+`tests/results/context-20261122T082545/`.
+
+The persistent-secret design passed. In the Basic-login silence case, the
+assistant named the baseline in the question and waited for an explicit choice.
+It explained the alternative's cost only in the preceding text, so the existing
+question-cost criterion failed. Local evidence is in
+`/tmp/aiscb-confirmation-1mp2qung/`.
+
+Sonnet 4.6 also received a two-turn design task using that checkout. For a counter bound to loopback it proposed a local HTML label and
+gave no TLS deployment advice. When the user then requested access through a
+reverse proxy from another machine, it kept the counter on loopback and
+specified proxy-side TLS with a trusted certificate. It also attributed the
+transport requirement to aiscb while explaining the configuration. This
+observation covers the design reply only. Local evidence from the final wording
+is in `tests/results/20261122T072629Z/` and the retained run log.
+
 ## aiscb-OM-001, aiscb-OM-006, aiscb-REPORT-001
 
 On 2026-10-23, `existing-llm-report-links` ran on Claude Sonnet 4.6 with three
@@ -51,7 +75,7 @@ not comparative or modular-routing evidence. Traces:
 
 The `tests/design_confirmation.py` experiment checks attribution inside the
 actual confirmation question; it does not infer a dialog from the final reply
-alone. Its persistent-secret design case checks concrete attribution and
+alone. At the time, its persistent-secret design case checked concrete attribution and
 security benefit without unnecessary confirmation, while preserving
 secret-design and residual-risk checks. The following observations predate that
 revision. In the targeted single run on Claude Sonnet 4.6, that case integrated

@@ -24,6 +24,31 @@ for bad in (True, False, 0, -1, "1", 1.0, None):
 '''
 
 CASES = {
+    "test-script": {
+        "files": {"numbers_helper.py": "def double(value):\n    return 2 * value\n"},
+        "prompts": ["Create test_numbers_helper.py with unittest cases for double(3) == 6 and double(0) == 0. Run the tests."],
+        "required": [[]], "targets": [["test_numbers_helper.py"]],
+        "checks": ["""
+import importlib
+import unittest
+from unittest.mock import patch
+import numbers_helper
+
+def run_tests():
+    sys.modules.pop('test_numbers_helper', None)
+    tests = importlib.import_module('test_numbers_helper')
+    suite = unittest.defaultTestLoader.loadTestsFromModule(tests)
+    result = unittest.TestResult()
+    suite.run(result)
+    assert result.testsRun and not result.errors and not result.skipped
+    return result
+
+assert run_tests().wasSuccessful()
+for wrong_input in (3, 0):
+    with patch.object(numbers_helper, 'double', lambda n: 2 * n + (n == wrong_input)):
+        assert run_tests().failures, f'Tests missed wrong output for {wrong_input}'
+"""],
+    },
     "documentation": {
         "files": {"README.md": "# Label helper\n\nNormalizes display labels.\nRun the focsued tests with `python3 -m unittest -q`.\n", "labels.py": "def normalize(value):\n    return value.strip().lower()\n"},
         "prompts": ["Fix only the spelling error 'focsued' in README.md. Preserve the command and all code."],

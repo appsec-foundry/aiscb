@@ -92,9 +92,9 @@ python3 tests/run.py --dry-run --requirements aiscb-OM-006 --repeats 1
 
 ## Complete versus modular context
 
-`make test-context` compares three arms on six local tasks, with actual loader
+`make test-context` compares three arms on seven local tasks, with actual loader
 calls, independent acceptance checks and CLI token usage. Its default matrix is
-54 task runs, 63 turns, three preflights and up to 54 judge calls. See the
+63 task runs, 72 turns, three preflights and up to 63 judge calls. See the
 [experiment guide](../docs/context-comparison.md) for isolation, prerequisites,
 metrics and interpretation. Use `make test-context ARGS=--dry-run` first.
 
@@ -192,9 +192,8 @@ tool call and question. A separate run removes that tool to check text fallback.
 The other runs simulate silence, timeout, an unsubmitted preselection, and
 explicit acceptance. The host never authorizes another tool.
 A sixth case checks a secure automated, persistent-secret design:
-baseline-caused measures need brief attribution and their security benefit,
-without unnecessary security confirmation,
-and the Security note stays reserved for qualifying residual risks.
+routine secure provisioning needs no attribution or confirmation. The Security
+note stays reserved for qualifying residual risks.
 Three browser HTTP Basic cases use the risk explicitly named in
 `aiscb-AUTH-001`: text fallback, an unanswered dialog, and an accepted choice.
 They separate risk recognition from the choice of confirmation mechanism.

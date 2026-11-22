@@ -23,8 +23,8 @@
       "aiscb-TESTS-001",
       "aiscb-REPORT-001"
     ],
-    "size": 10467,
-    "sha256": "1bdce5508139387cbd66815a76bd6d283dfebe6524b14a13cadc4fc07db8f9b5"
+    "size": 10398,
+    "sha256": "3f1d61ff352f240a8ed85ccad6b37d934f1b89a4fc626ff3acbd551522efddd7"
   },
   "modules": [
     {
@@ -39,8 +39,8 @@
         "aiscb-WEB-001",
         "aiscb-WEBTESTS-001"
       ],
-      "size": 1945,
-      "sha256": "e12a01b64ef7d6b0b62ec81c149589eec2893e8bd7fbeafce1f1ecdfb1ad90b1"
+      "size": 2031,
+      "sha256": "4058bf538de70a217fab2f5bc9b5c76429a5fff2dac563eef399d82fa2f073f8"
     },
     {
       "id": "aiscb:authentication",

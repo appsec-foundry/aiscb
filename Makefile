@@ -161,6 +161,6 @@ clean-results:
 help:
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## //'
 
-## test-context compare control, complete and modular policy on six local tasks
+## test-context compare control, complete and modular policy on seven local tasks
 test-context: check
 	python3 tests/context_comparison.py $(ARGS)

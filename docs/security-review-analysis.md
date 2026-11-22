@@ -67,7 +67,7 @@ scoping, decisions and completion behavior in the core. The
 even when no thematic module matches. These are existing design rationales,
 not proof of optimal context size.
 
-The README records 2,010 `o200k_base` tokens for the core and 6,004 for the
+At the reviewed revision the README recorded 2,010 `o200k_base` tokens for the core and 6,004 for the
 complete baseline. Modules range from 226 to 532 tokens. Discovery, loader text,
 overlays, dependencies and the rest of the conversation add context. Policy text
 size, peak context occupancy, repeated input including cache reads and billed

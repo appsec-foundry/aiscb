@@ -31,10 +31,10 @@ class SplitTests(unittest.TestCase):
         # webhook clause removed from MECHANISMS-001 by
         # specs/archive/2026-09-24-trim-webhook-duplicate.
         # Includes the header validation and test additions approved in
-        # specs/archive/2026-09-24-cweval-module-hardening; all other bodies
-        # retain the previous conservation check's content.
+        # specs/archive/2026-09-24-cweval-module-hardening and the TLS notice
+        # change in specs/archive/2026-11-22-decision-relevant-security-notices.
         self.assertEqual(hashlib.sha256(json.dumps(rules, sort_keys=True).encode()).hexdigest(),
-                         '89168ab0c20bfa942d52472cbf35af8945efe1172a5af411a6edcf8341ae3f55')
+                         '7f44b9982722edeb499350902666230c4ece47fa17f80d85955c2b8d7fcc4c1d')
 
     def test_narrow_loads_and_auth_dependency(self):
         with tempfile.TemporaryDirectory() as tmp:
