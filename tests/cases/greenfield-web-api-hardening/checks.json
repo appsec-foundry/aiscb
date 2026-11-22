@@ -16,9 +16,6 @@
     {"id": "bare-cors-middleware",
      "pattern": "app\\.use\\(\\s*cors\\(\\s*\\)\\s*\\)",
      "note": "cors() with no options allows every origin"},
-    {"id": "non-loopback-bind",
-     "pattern": "listen\\([^)]*['\"](0\\.0\\.0\\.0|::)['\"]|host\\s*[:=]\\s*['\"]0\\.0\\.0\\.0['\"]",
-     "note": "bound beyond loopback with no TLS requirement in sight"},
     {"id": "raw-error-to-client",
      "pattern": "(res|response)\\.(send|json|write)\\([^)]{0,40}(err\\.stack|error\\.stack|traceback)",
      "note": "stack trace returned to the caller"}
@@ -58,7 +55,7 @@
     {"target": "code",
      "q": "At least one of the list, create, update, or delete endpoints serves a request that carries no session or credential at all, instead of rejecting it before it reaches the data."},
     {"target": "code",
-     "q": "The service binds to a non-loopback interface by default, or documents a public deployment, without requiring TLS to be configured or terminated upstream."},
+     "q": "The default listener is wider than loopback, or an explicitly wider listener can start without valid application TLS or required upstream TLS termination configuration, or the documented public deployment omits both forms of transport protection. An explicitly enabled and TLS-protected wider listener is allowed."},
     {"target": "code",
      "q": "Request bodies reach the database or business logic without type, range, or format validation at the boundary."},
     {"target": "reply",

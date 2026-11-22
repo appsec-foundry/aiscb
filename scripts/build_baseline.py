@@ -210,6 +210,7 @@ def validate(root: Path | None = None) -> tuple[dict, list[tuple[dict, bytes]], 
     eager = core_raw.rstrip() + b"\n"
     for _, raw in modules:
         eager += b"\n" + raw.rstrip() + b"\n"
+    eager += b"\nInstallation mode: complete. All cataloged module bodies are loaded above.\n"
     if BASELINE_LINE.findall(eager.decode("utf-8")) != [BASELINE_ID]:
         raise Invalid("eager artifact would not contain exactly one baseline ID")
     eager_rules = rules(eager.decode("utf-8"), "eager")

@@ -23,8 +23,8 @@
       "aiscb-TESTS-001",
       "aiscb-REPORT-001"
     ],
-    "size": 10398,
-    "sha256": "3f1d61ff352f240a8ed85ccad6b37d934f1b89a4fc626ff3acbd551522efddd7"
+    "size": 10415,
+    "sha256": "151744d1aeb81115a3a6a9fb15cfa43311689477036273e4b0f288f7137273c3"
   },
   "modules": [
     {
@@ -58,8 +58,8 @@
         "aiscb-AUTHMECHANISMS-001",
         "aiscb-AUTHTESTS-001"
       ],
-      "size": 2688,
-      "sha256": "d802759e2e7c6e8be1558e19a49a9f076e6119685837de95b33af498753bb9e3"
+      "size": 2725,
+      "sha256": "507fb519a4bf42240ac47276ce3fc270dd24dec7108a1a9f86aacf41a424d332"
     },
     {
       "id": "aiscb:cryptography",
@@ -109,8 +109,8 @@
         "aiscb-BOOTSTRAP-001",
         "aiscb-SECRETTESTS-001"
       ],
-      "size": 1900,
-      "sha256": "28b70bb01837fe635df84689b694b9486c90c2dae88e2aec15b7fd7501fefce8"
+      "size": 1805,
+      "sha256": "a557fbb59ee82dd2962e73e0ca464d5e44f875296eb1c3f65c32dfb22720364a"
     },
     {
       "id": "aiscb:supply-chain",

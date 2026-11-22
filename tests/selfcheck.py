@@ -58,6 +58,7 @@ KNOWN_KEYS = set(REGEX_KEYS) | {
     "mode", "why", "turns", "requirements", "reads_inverted", "scope_note",
     "verify_note", "note_on_the_key", "note_on_the_package", "judge", "must_modify",
     "must_not_modify", "verify", "fixture_precondition", "conversation", "oracle",
+    "ignore_if_present", "forbidden_npm_package",
 }
 MODES = {"greenfield", "existing"}
 TARGETS = {"code", "reply"}
@@ -444,6 +445,17 @@ def check_case(d: Path, baseline_ids: set[str]) -> None:
                 "note_on_the_key", "note_on_the_package"):
         if key in checks and (not isinstance(checks[key], str) or not checks[key].strip()):
             fail(name, f"{key} must be a non-empty string")
+
+    if "forbidden_npm_package" in checks:
+        package = checks["forbidden_npm_package"]
+        if not isinstance(package, str) or not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", package):
+            fail(name, "forbidden_npm_package requires an unscoped npm package name")
+
+    if "ignore_if_present" in checks:
+        names = checks["ignore_if_present"]
+        if not isinstance(names, list) or not names or not all(
+                isinstance(n, str) and n and Path(n).name == n for n in names):
+            fail(name, "ignore_if_present requires file names")
 
     requirements = checks.get("requirements")
     if not isinstance(requirements, list) or not requirements:

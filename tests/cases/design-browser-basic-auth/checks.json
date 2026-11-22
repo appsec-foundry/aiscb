@@ -22,6 +22,7 @@
   "conversation": [
     {
       "turn": 1,
+      "must_not_change": ["*"],
       "reaction": "Identify the aiscb baseline, explain Basic authentication's reusable-credential and browser logout or expiry limitations, offer an established session mechanism or managed OIDC with its cost, and ask before writing code.",
       "security_note_count": 0,
       "required_regex": [

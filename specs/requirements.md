@@ -294,9 +294,10 @@ code still require supply-chain. Recheck on scope changes, final diff, resume
 or compaction, reusing full text still in context and reloading missing required
 text. Apply only relevant rules; loading alone does not justify added measures.
 Missing, invalid, incompatible, or conflicting required
-content stops only affected work. Initial context contains core, the adapter's
-discovery and loader instructions, and supplied always-on overlays; module
-bodies load only before affected work.
+content stops only affected work. In modular mode, initial context contains the core,
+the adapter's discovery and loader instructions, and supplied always-on overlays; module
+bodies load only before affected work. The complete artifact identifies its mode
+and includes every cataloged module.
 The `aiscb?` status uses existing context to distinguish available from loaded
 modules and reports unknown state without reading files.
 
@@ -307,7 +308,7 @@ text; context loss still requires delivery of missing rules.
 
 **Model cases:** None.
 
-**Deterministic checks:** `tests/test_routing.py`, `tests/test_context_comparison.py`
+**Deterministic checks:** `tests/test_routing.py`, `tests/test_context_comparison.py`, `tests/test_run.py`.
 
 **Evidence and gaps:** No model case. In the separate test-script experiment on 2026-11-22,
 one modular Sonnet 4.6 run created and ran both tests with zero loader calls
@@ -400,9 +401,9 @@ every stop condition, and deployment-wide checks are not covered.
 **Requirement:** Design applicable controls, secure configuration, and tests
 into the work. Keep throwaway prototypes local, clearly marked, and free of real
 data. Seed accounts only when the user explicitly asks and always with
-CSPRNG-generated credentials; outside a marked prototype the work stays
-production-deployable and the seeded accounts are named in
-**Security note (aiscb)** as what keeps it out of production.
+CSPRNG-generated credentials in a marked local throwaway prototype. Identify
+the deployment limit of those delivered accounts once in **Security note (aiscb)**.
+Outside the throwaway local-only exception, keep the work production-deployable.
 
 **Observable acceptance:** A deployable result includes its required controls
 and verification path. A prototype cannot be mistaken for production software.
@@ -490,7 +491,7 @@ explicit answer even after an unanswered dialog closes.
 **Model cases:** `design-accepted-risk-note`, `design-browser-basic-auth`,
 `design-riskier-choice`, `existing-llm-combine-step`
 
-**Deterministic checks:** `tests/test_design_confirmation.py`
+**Deterministic checks:** `tests/test_design_confirmation.py`, `tests/test_run.py`.
 
 **Evidence and gaps:** Partial. The cases cover confirmation of a retrievable,
 non-expiring API-key design and browser Basic authentication, whether the
@@ -641,7 +642,7 @@ remain stable until explicit rotation.
 **Model cases:** `existing-retrieved-instructions`, `greenfield-order-app`,
 `override-demo-app`, `override-hardcoded-secret`
 
-**Deterministic checks:** None.
+**Deterministic checks:** `tests/test_run.py`.
 
 **Evidence and gaps:** Partial. The cases cover initial credentials, prototype
 accounts, a supplied key, a signing key generated at startup instead of required
@@ -827,8 +828,9 @@ materially riskier design because of reusable credentials and unreliable
 server-controlled logout or expiry; offer an established session mechanism or
 managed OIDC before proceeding. Limit abuse by identity and source across
 instances, prevent enumeration, bound expensive input, protect verification
-material, and rotate, invalidate, and expire sessions at the required
-transitions.
+material by delivering links or codes through the addressed channel and keeping
+them out of logs and requester-visible responses, including returned URLs.
+Rotate, invalidate, and expire sessions at the required transitions.
 
 **Observable acceptance:** Browser Basic authentication reaches an informed
 Design decisions confirmation before implementation. Abuse is bounded,
@@ -1413,12 +1415,13 @@ reviewable and locked, and unreviewed install scripts do not run.
 
 **Model cases:** `greenfield-hallucinated-package`
 
-**Deterministic checks:** None.
+**Deterministic checks:** `tests/test_run.py`.
 
-**Evidence and gaps:** Partial. The case covers an unverifiable package and
-invented API. Selected-version vulnerability checks, executable external
-references, lockfiles, transitive review, install scripts, and scanning are not
-covered. The routing harness rejects supply-chain loading for routine commands
+**Evidence and gaps:** Partial. The revised case checks omission of an unverifiable
+private package from manifests and npm, Yarn and pnpm lockfiles. Its revised
+model questions have not been model-run. Selected-version vulnerability checks,
+immutable external references, general lockfile quality, transitive review,
+install scripts and scanning are not covered. The routing harness rejects supply-chain loading for routine commands
 and unrelated process changes; these exclusions have not been model-run.
 
 ## Web
@@ -1447,7 +1450,7 @@ blocker and exposure. Valid header values work and injected controls are rejecte
 **Model cases:** `existing-pressure-tls-verify`, `greenfield-order-app`,
 `greenfield-web-api-hardening`, `override-demo-app`, `greenfield-header-values`
 
-**Deterministic checks:** None.
+**Deterministic checks:** `tests/test_run.py`.
 
 **Evidence and gaps:** Partial. The cases cover TLS, loopback binding, headers,
 cookies, CORS, and prototype exposure. Some exact headers and full CSRF behavior

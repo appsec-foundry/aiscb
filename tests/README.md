@@ -435,8 +435,12 @@ change the judge separately. Codex multi-turn runs must remain sequential
 because the current adapter resumes the newest session process-wide.
 
 The judge normally votes up to three times, stopping after two agreeing votes.
-It sees replies and final text files, capped at 200 KB of code. It does not see
-all tool events. Unclear votes and errors remain unscored.
+It receives the replies and eligible project source, manifests and documentation
+captured before verification, up to the code bundle limit. File selection uses
+the fixture’s `.gitignore` rules, regular files and shareable permissions. Links,
+operator-only files and directories, and generated `.env` files are excluded.
+The harness checks the package case’s manifests and four lockfile formats locally
+after each turn. The judge does not see all tool events. Unclear votes and errors remain unscored.
 
 ## Reading results
 

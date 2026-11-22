@@ -32,9 +32,10 @@ class SplitTests(unittest.TestCase):
         # specs/archive/2026-09-24-trim-webhook-duplicate.
         # Includes the header validation and test additions approved in
         # specs/archive/2026-09-24-cweval-module-hardening and the TLS notice
-        # change in specs/archive/2026-11-22-decision-relevant-security-notices.
+        # change in specs/archive/2026-11-22-decision-relevant-security-notices,
+        # plus the verification delivery wording in 2026-11-22-review-clarifications.
         self.assertEqual(hashlib.sha256(json.dumps(rules, sort_keys=True).encode()).hexdigest(),
-                         '7f44b9982722edeb499350902666230c4ece47fa17f80d85955c2b8d7fcc4c1d')
+                         'd25a0a1f15567d1ca04cbd39115ff702b06bdef89e27f647c58c2c0cbb695158')
 
     def test_narrow_loads_and_auth_dependency(self):
         with tempfile.TemporaryDirectory() as tmp:

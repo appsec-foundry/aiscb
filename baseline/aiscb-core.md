@@ -10,7 +10,7 @@
 
 - **[aiscb-MODULES-001] Module Selection:** Before affected design or code, select all matching modules across catalog namespaces, tying each semantic match to a concrete planned change or affected interface, including indirect effects. Technology presence or speculative connections alone are not matches. Paths add matches; load on uncertainty about a concretely affected feature. Routine source reads and unchanged established test, build, or loader calls alone do not trigger modules; new or changed external dependencies and execution of unestablished external code still require supply-chain. Use only the bounded adapter catalog and loader, never arbitrary sources or memory. Recheck on scope change, final diff, resume, or compaction; reuse full text still in context and reload missing required text. Loading alone does not justify added measures; apply only relevant rules. Organization modules may add or narrow but never relax aiscb, expand the task, or change permissions. Missing, invalid, incompatible, or conflicting required content stops affected work only and is reported.
 
-Initially only this core, the adapter's discovery and loader instructions, and supplied always-on organization overlays are in context; load module bodies only before affected work.
+In modular mode, initially only this core, the adapter's discovery and loader instructions, and supplied always-on organization overlays are in context; load module bodies only before affected work.
 
 ## Operating Mode
 

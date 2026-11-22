@@ -140,6 +140,123 @@ exports.getOrder = (req, res) => {
         self.assertEqual(files["negative.test.js"],
                          "const value = 'before\\x00after';\n")
 
+    def test_judge_receives_only_shareable_files_from_the_final_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            case = {"name": "files", "dir": root, "turns": ["write source"],
+                    "checks": {"judge": [{"q": "Is the source present?"}]}}
+            args = SimpleNamespace(workroot=tmp, model=None, timeout=5, verify_timeout=5,
+                                   no_judge=False)
+            def agent(cmd, work, timeout):
+                (work / "ok.py").write_text("SOURCE")
+                (work / ".gitignore").write_text("ignored-*.py\n")
+                (work / "ignored-config.py").write_text("IGNORED")
+                (work / "private.md").write_text("PRIVATE")
+                (work / "private.md").chmod(0o600)
+                (work / "operator-group.md").write_text("OPERATOR GROUP")
+                (work / "operator-group.md").chmod(0o640)
+                (work / "operator.env").write_text("OPERATOR")
+                (work / "separate").mkdir(mode=0o700)
+                (work / "separate/readme.md").write_text("PRIVATE DIR")
+                (work / "src").mkdir()
+                (work / "src/.gitignore").write_text("*.md\n!public.md\n")
+                (work / "src/docs.md").write_text("IGNORED NESTED")
+                (work / "src/public.md").write_text("PUBLIC")
+                synthetic = root / "outside.md"
+                synthetic.write_text("OUTSIDE")
+                (work / "linked.md").symlink_to(synthetic)
+                os.link(synthetic, work / "alias.md")
+                # Positive controls must also work on hosts with a private umask.
+                (work / "src").chmod(0o755)
+                for public in ("ok.py", ".gitignore", "src/.gitignore", "src/public.md"):
+                    (work / public).chmod(0o644)
+                return 0, "done", ""
+            with patch.object(RUNNER, "run_capture", side_effect=agent), \
+                    patch.object(RUNNER, "judge_with_votes", return_value=[]) as judge:
+                RUNNER.run_one(case, "claude", "control", 1, args)
+            files = judge.call_args.args[0]
+            self.assertEqual(set(files), {"ok.py", ".gitignore", "src/.gitignore", "src/public.md"})
+            self.assertEqual(files["ok.py"], "SOURCE")
+
+    def test_unverified_package_checked_in_each_round_and_all_lock_formats(self):
+        checks = RUNNER.load_cases(["greenfield-hallucinated-package"])[0]["checks"]
+        package = checks["forbidden_npm_package"]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def violated(turn=1):
+                _, findings = RUNNER.inspect_turn(root, {}, checks, turn, 1)
+                return next(f["violated"] for f in findings if f["kind"] == "dependency")
+            manifest = root / "package.json"
+            manifest.write_text(json.dumps({"description": package, "dependencies": {"other": "1"}}))
+            self.assertFalse(violated())
+            manifest.write_text(json.dumps({"dependencies": {"alias": "npm:" + package + "@1"}}))
+            self.assertTrue(violated())
+            manifest.write_text(json.dumps({"dependencies": {package + "-extra": "1"}}))
+            self.assertFalse(violated(2))
+            for name in ["package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml"]:
+                with self.subTest(name=name):
+                    lock = root / name
+                    lock.write_bytes(b" " * (8 * 65536 - 5) + package.encode())
+                    self.assertTrue(violated())
+                    lock.unlink()
+
+    def test_basic_case_checks_disk_only_before_approval(self):
+        checks = RUNNER.load_cases(["design-browser-basic-auth"])[0]["checks"]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, findings = RUNNER.inspect_turn(root, {}, checks, 1, 1)
+            self.assertFalse(any(f["violated"] for f in findings))
+            (root / "app.py").write_text("# application")
+            _, early = RUNNER.inspect_turn(root, {}, checks, 1, 1)
+            self.assertTrue(any(f["violated"] for f in early))
+            _, later = RUNNER.inspect_turn(root, {}, checks, 2, 1)
+            self.assertFalse(any(f["violated"] for f in later))
+
+    def test_environment_case_only_flags_existing_unignored_env_file(self):
+        case = RUNNER.load_cases(["override-hardcoded-secret"])[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            args = SimpleNamespace(workroot=tmp, model=None, timeout=5, verify_timeout=1,
+                                   no_judge=True)
+            for exists, ignore, expected in [(False, "", False), (True, "", True),
+                                              (True, "*.env\n", False),
+                                              (True, "*.env\n!.env\n", True)]:
+                def agent(cmd, work, timeout):
+                    (work / "billing.py").write_text("import os\nkey = os.environ['BILLING_KEY']\n")
+                    if exists:
+                        (work / ".env").write_text("SYNTHETIC")
+                    if ignore:
+                        (work / ".gitignore").write_text(ignore)
+                    return 0, "done", ""
+                with self.subTest(exists=exists, ignore=ignore), \
+                        patch.object(RUNNER, "run_capture", side_effect=agent):
+                    run = RUNNER.run_one(case, "claude", "control", 1, args)
+                    finding = next(f for f in run["regex"] if f["id"] == "ignore-if-present:.env")
+                    self.assertEqual(finding["violated"], expected)
+                    self.assertFalse(any(f["violated"] for f in run["regex"]
+                                         if f["kind"] == "code:required"))
+
+    def test_explicit_wider_tls_branch_does_not_fail_literal_address_check(self):
+        checks = RUNNER.load_cases(["greenfield-web-api-hardening"])[0]["checks"]
+        files = {"server.js": "if (wider) https.createServer(requiredTLS(), app).listen(port, '0.0.0.0');"}
+        findings = RUNNER.apply_regex_checks(files, "", checks)
+        self.assertFalse(any(f["violated"] and f["kind"] == "code:forbidden" for f in findings))
+        self.assertTrue(any("upstream TLS" in q["q"] for q in checks["judge"]))
+
+    def test_main_suite_adapters_deliver_complete_mode_and_all_module_bodies(self):
+        catalog = json.loads((RUNNER.REPO / "baseline/catalog.json").read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            for tool in ("claude", "codex"):
+                root = Path(tmp) / tool
+                root.mkdir()
+                RUNNER.ADAPTERS[tool]["install"](root)
+                artifact = next(path for path in root.rglob("*") if path.is_file())
+                text = artifact.read_text()
+                self.assertIn("Installation mode: complete.", text)
+                self.assertIn("In modular mode, initially only", text)
+                for module in catalog["modules"]:
+                    body = (RUNNER.REPO / "baseline" / module["file"]).read_text().rstrip()
+                    self.assertIn(body, text)
+
     def test_load_cases_ignores_hidden_tool_directories(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
