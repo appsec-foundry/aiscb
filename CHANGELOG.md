@@ -3,7 +3,7 @@
 Changes to aiscb's rules, installation, and organization setup. Each release
 shows its publication date. Later installer updates are listed separately.
 
-## 0.1.23 (unreleased)
+## [0.1.23](https://github.com/appsec-foundry/aiscb/releases/tag/aiscb-0.1.23) (2026-11-22)
 
 - Assistants no longer announce routine secure defaults as baseline measures.
   They mention aiscb only when it changes your requested approach, refuses

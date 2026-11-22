@@ -138,7 +138,7 @@ publication or make a multi-step GitHub release atomic.
 Historical releases keep their Git-tree files and tags unchanged. The published
 0.1.15 bootstrap, manifest and signature remain archived in
 `tests/fixtures/published-bootstrap/` as immutable compatibility fixtures.
-The current README pins the 0.1.22 bundle 1 asset bootstrap and offers verification
+The current README pins the 0.1.23 bundle 1 asset bootstrap and offers verification
 of its release signature.
 
 The updater prefers the same release's assets and falls back to legacy Git-tree

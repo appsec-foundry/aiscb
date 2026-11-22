@@ -13,8 +13,6 @@ Install aiscb to give your AI coding assistant a consistent set of security rule
 
 Current baseline: `aiscb-0.1.23`.
 
-Release 0.1.23 is being prepared. The pinned Quick start still installs 0.1.22.
-
 See the [changelog](CHANGELOG.md) for changes and update notes.
 
 The [Quick start](#quick-start) installs this modular setup. See [Modular installation](#modular-installation) for project setup, migration and the option to load all rules at once.
@@ -35,7 +33,7 @@ The [Quick start](#quick-start) installs this modular setup. See [Modular instal
 Use the guided installer to install or update aiscb. The command is pinned to one commit, verifies the bundle before running it, and keeps existing instruction files:
 
 ```bash
-curl -fsS https://raw.githubusercontent.com/appsec-foundry/aiscb/ea28766ca7f138c0c51974ab5cf19d10dce548f0/setup.sh | bash
+curl -fsS https://raw.githubusercontent.com/appsec-foundry/aiscb/8a3d22fd3e438588d6f3f232784c00956d651a4d/setup.sh | bash
 ```
 
 <details>
@@ -47,13 +45,13 @@ Compare the signing key below with a copy obtained independently before trusting
 curl --proto '=https' \
   --fail --silent --show-error \
   --output aiscb-setup.sh \
-  https://raw.githubusercontent.com/appsec-foundry/aiscb/ea28766ca7f138c0c51974ab5cf19d10dce548f0/setup.sh &&
-echo 'bf0f81005e8952088d12ad65ff3ebb0fc4e5b800547c7b599efee564b8142f32  aiscb-setup.sh' |
+  https://raw.githubusercontent.com/appsec-foundry/aiscb/8a3d22fd3e438588d6f3f232784c00956d651a4d/setup.sh &&
+echo '671fbbe2dae2995d7393f993db087907442041b293934dfdeb7209d4b2df082f  aiscb-setup.sh' |
   sha256sum --check &&
 curl --proto '=https' --proto-redir '=https' \
   --fail --silent --show-error --location \
   --output aiscb-setup.sh.sig \
-  https://github.com/appsec-foundry/aiscb/releases/download/aiscb-bundle-0.1.22-1/setup.sh.sig &&
+  https://github.com/appsec-foundry/aiscb/releases/download/aiscb-bundle-0.1.23-1/setup.sh.sig &&
 printf '%s\n' 'aiscb-release ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILd3kACJfPJk7lcPr79sDqWlq3o552E1+KhaPNmnsboD' > aiscb-signers &&
 ssh-keygen -Y verify -f aiscb-signers -I aiscb-release -n aiscb-bundle \
   -s aiscb-setup.sh.sig < aiscb-setup.sh &&
